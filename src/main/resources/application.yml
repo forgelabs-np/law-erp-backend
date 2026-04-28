@@ -2,7 +2,7 @@
 spring:
   application:
     name: NepalCRM
-  
+
   # Set which profile is active
   profiles:
     active: dev
