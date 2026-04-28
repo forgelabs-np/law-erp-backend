@@ -1,0 +1,45 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  datasource:
+    url: jdbc:postgresql://aws-1-ap-south-1.pooler.supabase.com:6543/postgres
+    username: postgres.fpqmxvcdglizgdymrelw
+    password: "@Ashishthapa46"
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      pool-name: NepalCRM-HikariPool
+
+  jpa:
+    database: POSTGRESQL
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+#    properties:
+#      hibernate:
+#        format_sql: true
+
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USER:noreply@nepalcrm.com}
+    password: ${MAIL_PASS:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+jwt:
+  secret: YnBPN15lvxCkxOAAe5duFQ4MYVLf6B2e8AIkND8L35kRO7ByvtLrJQ1YKtLYbR6me0FysLcvtq8UFKAWiQyKeT
+  access-expiry: 86400000
+  refresh-expiry: 604800000
+  token-expiry: 86400000
