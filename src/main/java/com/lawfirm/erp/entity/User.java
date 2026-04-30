@@ -1,30 +1,31 @@
 package com.lawfirm.erp.entity;
 
-import com.lawfirm.erp.enums.RolePermissionMapping;
+import com.lawfirm.erp.entity.base.ActiveAuditableEntity;
 import jakarta.persistence.*;
-import lombok.Data;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
-import java.time.LocalDateTime;
-import java.util.Collection;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
-@Data
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collection;
+
 @Entity
 @Table(name = "users")
-@EntityListeners(AuditingEntityListener.class)
-public class User implements UserDetails {
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
+public class User extends ActiveAuditableEntity implements UserDetails {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @Column(unique = true, nullable = false, updatable = false)
-    private String userUuid;
 
     @Column(unique = true, nullable = false)
     private String username;
@@ -39,41 +40,34 @@ public class User implements UserDetails {
     private String fullName;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "tenant_id", nullable = false)
-    private Tenant tenant;
+    @JoinColumn(name = "tenant_type_id")
+    private TenantType tenantType;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "role_id", nullable = false)
     private Role role;
 
-    private Boolean isActive = true;
+    @Column(name = "is_email_verified")
     private Boolean isEmailVerified = false;
+
+    @Column(name = "is_mobile_verified")
     private Boolean isMobileVerified = false;
+
+    @Column(name = "is_blocked")
     private Boolean isBlocked = false;
+
+    @Column(name = "login_attempts")
     private Integer loginAttempts = 0;
+
+    @Column(name = "locked_until")
     private LocalDateTime lockedUntil;
 
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
 
-    @CreatedDate
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
-
-    @LastModifiedDate
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        userUuid = UUID.randomUUID().toString();
-    }
-
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return RolePermissionMapping.getPermissionsForRole(role.getName()).stream()
-                .map(permission -> new SimpleGrantedAuthority(permission.name()))
-                .collect(Collectors.toSet());
+        return new ArrayList<>();
     }
 
     @Override
@@ -86,5 +80,5 @@ public class User implements UserDetails {
     public boolean isCredentialsNonExpired() { return true; }
 
     @Override
-    public boolean isEnabled() { return isActive; }
+    public boolean isEnabled() { return isActive(); }
 }

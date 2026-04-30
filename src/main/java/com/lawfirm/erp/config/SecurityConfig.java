@@ -6,7 +6,6 @@ import com.lawfirm.erp.util.AuthEntryPoint;
 import com.lawfirm.erp.util.JwtAuthFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -41,10 +40,13 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/v1/auth/internal/login",
+                                "/api/v1/auth/login",
                                 "/api/v1/auth/client/login",
                                 "/api/v1/auth/register/solo",
+                                "/api/v1/auth/register/client",
                                 "/api/v1/auth/refresh",
+                                "/api/v1/super-admin/login",
+                                "/api/v1/super-admin/register",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html",
@@ -63,7 +65,7 @@ public class SecurityConfig {
 
         // Allow frontend origins
         configuration.setAllowedOrigins(Arrays.asList(
-                "http://localhost:3000",
+                "http://localhost:5173",
                 "http://127.0.0.1:3000",
                 "http://localhost:5173",
                 "http://127.0.0.1:5173"

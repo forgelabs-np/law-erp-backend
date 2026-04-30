@@ -1,5 +1,6 @@
 package com.lawfirm.erp.enums;
 
+@Deprecated
 public enum RoleType {
     SUPER_ADMIN("Super Administrator", "Full system access, manage all tenants"),
     TENANT_ADMIN("Tenant Administrator", "Manage firm/solo settings, users, billing"),
@@ -14,6 +15,11 @@ public enum RoleType {
         this.description = description;
     }
 
-    public String getDisplayName() { return displayName; }
-    public String getDescription() { return description; }
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public String getDescription() {
+        return description;
+    }
 }
