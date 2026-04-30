@@ -1,7 +1,5 @@
-// service/CustomUserDetailsService.java
 package com.lawfirm.erp.service;
 
-import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;

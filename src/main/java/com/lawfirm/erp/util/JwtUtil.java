@@ -46,14 +46,16 @@ public class JwtUtil {
     public String generateAccessToken(User user) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId());
-        claims.put("userUuid", user.getUserUuid());
+        claims.put("userUuid", user.getUuid());
         claims.put("email", user.getEmail());
         claims.put("mobileNo", user.getMobileNo());
         claims.put("fullName", user.getFullName());
-        claims.put("role", user.getRole().getName().name());
-        claims.put("tenantId", user.getTenant().getId());
-        claims.put("tenantSubdomain", user.getTenant().getSubdomain());
-        claims.put("tenantType", user.getTenant().getTenantType().name());
+        claims.put("role", user.getRole().getRoleName());
+
+        if (user.getTenantType() != null) {
+            claims.put("tenantTypeId", user.getTenantType().getId());
+            claims.put("tenantTypeCode", user.getTenantType().getCode());
+        }
 
         return Jwts.builder()
                 .setId(String.valueOf(user.getId()))
@@ -101,27 +103,45 @@ public class JwtUtil {
     }
 
     public Long extractUserId(String token) {
-        return Long.valueOf(extractClaim(token, Claims::getId));
-    }
+        try {
+            Claims claims = extractAllClaims(token);
 
-    public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
-    }
+            // First try to get userId from claims (refresh token has it here)
+            Long userId = claims.get("userId", Long.class);
+            if (userId != null) {
+                return userId;
+            }
 
-    public String extractRole(String token) {
-        return extractClaim(token, claims -> claims.get("role", String.class));
-    }
+            // Fallback: try to get from getId (access token has it here)
+            String id = claims.getId();
+            if (id != null && !id.isEmpty()) {
+                return Long.valueOf(id);
+            }
 
-    public String extractTenantSubdomain(String token) {
-        return extractClaim(token, claims -> claims.get("tenantSubdomain", String.class));
+            log.error("No userId found in token");
+            return null;
+        } catch (Exception e) {
+            log.error("Failed to extract userId: {}", e.getMessage());
+            return null;
+        }
     }
 
     public boolean isRefreshToken(String token) {
-        String type = extractClaim(token, claims -> claims.get("type", String.class));
-        return "refresh".equals(type);
+        try {
+            String type = extractClaim(token, claims -> claims.get("type", String.class));
+            return "refresh".equals(type);
+        } catch (Exception e) {
+            log.error("Failed to check refresh token type: {}", e.getMessage());
+            return false;
+        }
     }
 
     public boolean validateToken(String token) {
+        if (token == null || token.trim().isEmpty()) {
+            log.error("Token is null or empty");
+            return false;
+        }
+
         try {
             extractAllClaims(token);
             return true;
@@ -129,6 +149,8 @@ public class JwtUtil {
             log.error("Token expired: {}", e.getMessage());
         } catch (JwtException e) {
             log.error("Invalid token: {}", e.getMessage());
+        } catch (Exception e) {
+            log.error("Token validation failed: {}", e.getMessage());
         }
         return false;
     }

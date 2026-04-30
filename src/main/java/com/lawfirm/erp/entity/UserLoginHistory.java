@@ -1,21 +1,25 @@
-// entity/UserLoginHistory.java
 package com.lawfirm.erp.entity;
 
+import com.lawfirm.erp.entity.base.ActiveAuditableEntity;
 import com.lawfirm.erp.enums.LoginStatus;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 import java.time.LocalDateTime;
 
-@Data
 @Entity
+@Table(name = "user_login_history")
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "user_login_history")
-public class UserLoginHistory {
+public class UserLoginHistory extends ActiveAuditableEntity {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

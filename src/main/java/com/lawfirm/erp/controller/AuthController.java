@@ -4,6 +4,7 @@ import com.lawfirm.erp.dto.ApiRequest;
 import com.lawfirm.erp.dto.ApiResponse;
 import com.lawfirm.erp.dto.auth.request.LoginRequest;
 import com.lawfirm.erp.dto.auth.request.RefreshTokenRequest;
+import com.lawfirm.erp.dto.auth.request.RegisterClientRequest;
 import com.lawfirm.erp.dto.auth.request.RegisterSoloRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
 import com.lawfirm.erp.dto.auth.response.RegisterResponse;
@@ -56,6 +57,17 @@ public class AuthController {
                 authService.registerSolo(request.getData()),
                 Message.CREATE_SUCCESS,
                 "Solo Lawyer"
+        );
+    }
+
+    @PostMapping("/register/client")
+    @Operation(summary = "API to register client", description = "Register a new client")
+    public ResponseEntity<ApiResponse<RegisterResponse>> registerClient(
+            @Valid @RequestBody ApiRequest<RegisterClientRequest> request) {
+        return responseHandler.ok(
+                authService.registerClient(request.getData()),
+                Message.CREATE_SUCCESS,
+                "Client"
         );
     }
 

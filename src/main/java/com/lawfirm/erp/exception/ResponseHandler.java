@@ -41,4 +41,15 @@ public class ResponseHandler {
                 .message("")
                 .build());
     }
+
+    public <T> ResponseEntity<ApiResponse<T>> ok(T data, String message) {
+        ApiResponse<T> response = ApiResponse.<T>builder()
+                .success(true)
+                .responseCode(ApiStatus.SUCCESS.getCode())
+                .message(message)
+                .data(data)
+                .build();
+        return ResponseEntity.ok(response);
+    }
+
 }

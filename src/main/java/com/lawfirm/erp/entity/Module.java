@@ -1,4 +1,3 @@
-// entity/Role.java
 package com.lawfirm.erp.entity;
 
 import com.lawfirm.erp.entity.base.ActiveAuditableEntity;
@@ -10,27 +9,25 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "roles")
+@Table(name = "modules")
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class Role extends ActiveAuditableEntity {
+public class Module extends ActiveAuditableEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "role_name", unique = true, nullable = false)
-    private String roleName;
+    @Column(unique = true, nullable = false)
+    private String name;
 
-    @Column(name = "role_code", unique = true, nullable = false)
-    private String roleCode;
+    @Column(unique = true, nullable = false)
+    private String code;
 
-    @Column(name = "description", length = 500)
     private String description;
-
-    @Column(name = "is_system")
-    private Boolean isSystem = false;
+    private String icon;
+    private Integer displayOrder;
 }

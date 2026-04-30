@@ -4,8 +4,8 @@ spring:
       on-profile: dev
 
   datasource:
-    url: jdbc:postgresql://aws-1-ap-south-1.pooler.supabase.com:6543/postgres
-    username: postgres.fpqmxvcdglizgdymrelw
+    url: jdbc:postgresql://db.fpqmxvcdglizgdymrelw.supabase.co:5432/postgres
+    username: postgres
     password: "@Ashishthapa46"
     driver-class-name: org.postgresql.Driver
     hikari:
@@ -19,7 +19,7 @@ spring:
   jpa:
     database: POSTGRESQL
     database-platform: org.hibernate.dialect.PostgreSQLDialect
-    show-sql: true
+#    show-sql: true
     hibernate:
       ddl-auto: update
 #    properties:
@@ -43,3 +43,10 @@ jwt:
   access-expiry: 86400000
   refresh-expiry: 604800000
   token-expiry: 86400000
+
+security:
+  max-login-attempts: 5
+
+super-admin:
+  registration-secret: "cdae9adca9e7cb0ab2afb82e2a2a74b7"
+
