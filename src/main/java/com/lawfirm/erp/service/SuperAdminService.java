@@ -14,8 +14,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -78,25 +81,40 @@ public class SuperAdminService {
     }
 
     public LoginResponse loginSuperAdmin(LoginRequest request) {
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+        try {
+            User user = userRepository.findByUsername(request.getUsername())
+                    .orElseThrow(() -> new BadCredentialsException("Invalid username or password"));
 
-        if (!"SUPER_ADMIN".equals(user.getRole().getRoleName())) {
-            throw new RuntimeException("Access denied. Not a super admin.");
+            if (!"SUPER_ADMIN".equals(user.getRole().getRoleName())) {
+                throw new RuntimeException("Access denied. Not a super admin.");
+            }
+
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
+            );
+
+            User authenticatedUser = (User) authentication.getPrincipal();
+            String accessToken = jwtUtil.generateAccessToken(authenticatedUser);
+            String refreshToken = jwtUtil.generateRefreshToken(authenticatedUser);
+
+            return LoginResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken)
+                    .expiresIn(86400000L)
+                    .build();
+
+        } catch (BadCredentialsException e) {
+            log.error("Super admin login failed - bad credentials: {}", request.getUsername());
+            throw new BadCredentialsException("Invalid username or password");
+        } catch (DisabledException e) {
+            log.error("Super admin login failed - account disabled: {}", request.getUsername());
+            throw new DisabledException("Account is disabled. Please contact system administrator.");
+        } catch (LockedException e) {
+            log.error("Super admin login failed - account blocked: {}", request.getUsername());
+            throw new LockedException("Account is blocked. Please contact system administrator.");
+        } catch (AuthenticationException e) {
+            log.error("Super admin login failed - authentication error: {}", e.getMessage());
+            throw new BadCredentialsException("Invalid username or password");
         }
-
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
-        );
-
-        User authenticatedUser = (User) authentication.getPrincipal();
-        String accessToken = jwtUtil.generateAccessToken(authenticatedUser);
-        String refreshToken = jwtUtil.generateRefreshToken(authenticatedUser);
-
-        return LoginResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .expiresIn(86400000L)
-                .build();
     }
 }
