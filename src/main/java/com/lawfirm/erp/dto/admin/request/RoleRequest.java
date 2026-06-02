@@ -2,11 +2,11 @@ package com.lawfirm.erp.dto.admin.request;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
-import java.util.List;
+import java.util.UUID;
 
 @Data
 public class RoleRequest {
-    private Long id;
+    private UUID id;
 
     @NotBlank(message = "Role name is required")
     private String name;
@@ -15,5 +15,4 @@ public class RoleRequest {
     private String code;
 
     private String description;
-    private List<RoleFeatureRequest> features;
 }

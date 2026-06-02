@@ -1,0 +1,52 @@
+package com.lawfirm.erp.common.repository;
+
+import com.lawfirm.erp.entity.User;
+import com.lawfirm.erp.common.enums.UserType;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+public interface UserRepository extends JpaRepository<User, UUID> {
+
+    // This will work for ALL users (super admin has firm = SYSTEM)
+    @Query("SELECT u FROM User u WHERE u.username = :username")
+    Optional<User> findByUsername(@Param("username") String username);
+
+    // For firm-scoped users (lawyers, clients)
+    @Query("SELECT u FROM User u WHERE u.username = :username AND u.firm.id = :firmId")
+    Optional<User> findByUsernameAndFirmId(@Param("username") String username, @Param("firmId") UUID firmId);
+
+    @Query("SELECT u FROM User u WHERE u.mobileNo = :mobileNo AND u.firm.id = :firmId")
+    Optional<User> findByMobileNoAndFirmId(@Param("mobileNo") String mobileNo, @Param("firmId") UUID firmId);
+
+    @Query("SELECT u FROM User u WHERE u.email = :email AND u.firm.id = :firmId")
+    Optional<User> findByEmailAndFirmId(@Param("email") String email, @Param("firmId") UUID firmId);
+
+    @Query("SELECT u FROM User u WHERE u.username = :username AND u.userType = :userType")
+    Optional<User> findByUsernameAndUserType(@Param("username") String username, @Param("userType") UserType userType);
+
+    @Query("SELECT u FROM User u WHERE u.email = :email AND u.userType = :userType")
+    Optional<User> findByEmailAndUserType(@Param("email") String email, @Param("userType") UserType userType);
+
+    @Query("SELECT u FROM User u WHERE u.firm.id = :firmId")
+    List<User> findByFirmId(@Param("firmId") UUID firmId);
+
+    @Query("SELECT u FROM User u WHERE u.firm.id = :firmId AND u.userType = :userType")
+    List<User> findByFirmIdAndUserType(@Param("firmId") UUID firmId, @Param("userType") UserType userType);
+
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.username = :username AND u.firm.id = :firmId")
+    boolean existsByUsernameAndFirmId(@Param("username") String username, @Param("firmId") UUID firmId);
+
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.email = :email AND u.firm.id = :firmId")
+    boolean existsByEmailAndFirmId(@Param("email") String email, @Param("firmId") UUID firmId);
+
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.mobileNo = :mobileNo AND u.firm.id = :firmId")
+    boolean existsByMobileNoAndFirmId(@Param("mobileNo") String mobileNo, @Param("firmId") UUID firmId);
+
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.username = :username AND u.userType = :userType")
+    boolean existsByUsernameAndUserType(@Param("username") String username, @Param("userType") UserType userType);
+}
