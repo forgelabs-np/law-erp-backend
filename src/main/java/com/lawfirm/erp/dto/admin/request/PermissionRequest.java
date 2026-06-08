@@ -1,14 +1,21 @@
 package com.lawfirm.erp.dto.admin.request;
 
+import com.lawfirm.erp.common.enums.ModuleCode;
+import com.lawfirm.erp.common.enums.PermissionAction;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import java.util.UUID;
 
 @Data
 public class PermissionRequest {
-    private Long id;
+    private UUID id;
 
-    @NotBlank(message = "Permission name is required")
-    private String name;
+    @NotNull(message = "Module is required")
+    private ModuleCode module;
+
+    @NotNull(message = "Action is required")
+    private PermissionAction action;
 
     @NotBlank(message = "Permission code is required")
     private String code;
