@@ -15,4 +15,6 @@ public class RoleRequest {
     private String code;
 
     private String description;
+
+    private Boolean isActive;
 }

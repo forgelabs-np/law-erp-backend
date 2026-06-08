@@ -22,7 +22,7 @@ public class Role extends ActiveAuditableEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "firm_id")
-    private Firm firm;                    // NULL = system role
+    private Firm firm;
 
     @Column(nullable = false)
     private String roleName;

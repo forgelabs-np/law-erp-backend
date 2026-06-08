@@ -13,15 +13,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 
 @Slf4j
@@ -44,10 +43,13 @@ public class JwtUtil {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
+    // In generateAccessToken method - change HS256 to HS512
     public String generateAccessToken(User user) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId().toString());
-        claims.put("userUuid", user.getUuid().toString());
+        if (user.getUuid() != null) {
+            claims.put("userUuid", user.getUuid().toString());
+        }
         claims.put("email", user.getEmail());
         claims.put("fullName", user.getFullName());
         claims.put("roleCode", user.getRole().getRoleCode());
@@ -58,14 +60,17 @@ public class JwtUtil {
             claims.put("firmCode", user.getFirm().getLawFirmCode());
         }
 
-        return Jwts.builder()
-                .setId(user.getId().toString())
-                .setClaims(claims)
-                .setSubject(user.getUsername())
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + accessExpiry))
-                .signWith(key)
+        String token = Jwts.builder()
+                .id(user.getId().toString())
+                .claims(claims)
+                .subject(user.getUsername())
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + accessExpiry))
+                .signWith(key, Jwts.SIG.HS512)  // ✅ CHANGE TO HS512
                 .compact();
+
+        log.debug("Generated access token for user: {}", user.getUsername());
+        return token;
     }
 
     public String generateRefreshToken(User user) {
@@ -73,13 +78,29 @@ public class JwtUtil {
         claims.put("userId", user.getId().toString());
         claims.put("type", "refresh");
 
-        return Jwts.builder()
-                .setClaims(claims)
-                .setSubject(user.getUsername())
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + refreshExpiry))
-                .signWith(key)
+        String token = Jwts.builder()
+                .claims(claims)
+                .subject(user.getUsername())
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + refreshExpiry))
+                .signWith(key, Jwts.SIG.HS512)
                 .compact();
+
+        log.debug("Generated refresh token for user: {}", user.getUsername());
+        return token;
+    }
+
+    public Claims extractAllClaims(String token) {
+        try {
+            return Jwts.parser()
+                    .verifyWith(key)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+        } catch (Exception e) {
+            log.error("Failed to extract claims: {}", e.getMessage());
+            throw e;
+        }
     }
 
     public boolean isTokenExpired(String token) {
@@ -93,14 +114,6 @@ public class JwtUtil {
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
-    }
-
-    public Claims extractAllClaims(String token) {
-        return Jwts.parser()
-                .setSigningKey(key)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
     }
 
     public UUID extractUserId(String token) {
@@ -164,7 +177,10 @@ public class JwtUtil {
         }
 
         try {
-            extractAllClaims(token);
+            Jwts.parser()
+                    .verifyWith(key)
+                    .build()
+                    .parseSignedClaims(token);
             return true;
         } catch (ExpiredJwtException e) {
             log.error("Token expired: {}", e.getMessage());
@@ -179,12 +195,20 @@ public class JwtUtil {
     public Authentication getAuthentication(String token, HttpServletRequest request) {
         Claims claims = extractAllClaims(token);
 
+        String roleCode = claims.get("roleCode", String.class);
+
+        // Create authorities/roles for Spring Security
+        List<GrantedAuthority> authorities = new ArrayList<>();
+        if (roleCode != null) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_" + roleCode));
+        }
+
         AuthenticatedDetail authenticatedDetail = AuthenticatedDetail.builder()
                 .id(UUID.fromString(claims.get("userId", String.class)))
                 .username(claims.getSubject())
                 .email(claims.get("email", String.class))
                 .fullName(claims.get("fullName", String.class))
-                .role(claims.get("roleCode", String.class))
+                .role(roleCode)
                 .userType(claims.get("userType", String.class))
                 .firmId(claims.get("firmId", String.class))
                 .firmCode(claims.get("firmCode", String.class))
@@ -192,7 +216,7 @@ public class JwtUtil {
                 .build();
 
         UsernamePasswordAuthenticationToken authenticationToken =
-                new UsernamePasswordAuthenticationToken(authenticatedDetail, null, null);
+                new UsernamePasswordAuthenticationToken(authenticatedDetail, null, authorities);  // ← Add authorities here
         authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
         return authenticationToken;
     }

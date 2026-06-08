@@ -156,7 +156,7 @@ public class AuthService {
                 .build();
         firm = firmRepository.save(firm);
 
-        Role role = roleRepository.findByRoleCodeAndFirmId("FIRM_ADMIN", null)
+        Role role = roleRepository.findByRoleCode("FIRM_ADMIN")
                 .orElseThrow(() -> new RuntimeException("FIRM_ADMIN role not found"));
 
         User user = new User();
@@ -200,7 +200,7 @@ public class AuthService {
             firm = firmRepository.save(firm);
         }
 
-        Role clientRole = roleRepository.findByRoleCodeAndFirmId("CLIENT", null)
+        Role clientRole = roleRepository.findByRoleCode("CLIENT")
                 .orElseThrow(() -> new RuntimeException("CLIENT role not found"));
 
         User user = new User();

@@ -2,6 +2,7 @@ package com.lawfirm.erp.dto.admin.response;
 
 import lombok.Builder;
 import lombok.Data;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -15,6 +16,7 @@ public class RoleResponse {
     private String description;
     private Boolean isSystem;
     private Boolean isActive;
-    private List<FeaturePermissionResponse> permissions;
+    private List<PermissionResponse> permissions;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

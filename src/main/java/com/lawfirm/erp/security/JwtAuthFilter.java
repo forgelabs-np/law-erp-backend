@@ -1,6 +1,7 @@
 package com.lawfirm.erp.security;
 
 import com.lawfirm.erp.common.exception.UnauthorizedException;
+import com.lawfirm.erp.dto.auth.AuthenticatedDetail;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -37,6 +38,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
 
+            if (!jwtUtil.validateToken(token)) {
+                response.sendError(HttpStatus.UNAUTHORIZED.value(), "Invalid token");
+                return;
+            }
+
             if (jwtUtil.isTokenExpired(token)) {
                 response.sendError(HttpStatus.UNAUTHORIZED.value(), "Token is expired");
                 return;
@@ -60,12 +66,28 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             deviceId = deviceId != null ? deviceId + "_" + jwtUtil.extractUserId(token) : "UNKNOWN_";
             request = new HeaderWrapper(request, Map.of("deviceId", deviceId));
             SecurityContextHolder.getContext().setAuthentication(auth);
-        }
+// After getting auth, populate AuthenticatedUser
+            if (auth != null && auth.getPrincipal() instanceof AuthenticatedDetail) {
+                AuthenticatedDetail detail = (AuthenticatedDetail) auth.getPrincipal();
 
+                AuthenticatedUser authenticatedUser = new AuthenticatedUser();
+                authenticatedUser.setId(detail.getId());
+                authenticatedUser.setUsername(detail.getUsername());
+                authenticatedUser.setEmail(detail.getEmail());
+                authenticatedUser.setFullName(detail.getFullName());
+                authenticatedUser.setUserType(detail.getUserType());
+                authenticatedUser.setFirmCode(detail.getFirmCode());
+                if (detail.getFirmId() != null) {
+                    authenticatedUser.setFirmId(UUID.fromString(detail.getFirmId()));
+                }
+                // TODO: Load roles and permissions from DB/cache
+
+                request.setAttribute("authenticatedUser", authenticatedUser);
+            }
+        }
         try {
             filterChain.doFilter(request, response);
         } finally {
-            // Always clear ThreadLocal to prevent memory leaks
             FirmContextHolder.clear();
         }
     }

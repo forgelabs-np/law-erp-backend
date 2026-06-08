@@ -2,23 +2,24 @@ package com.lawfirm.erp.rbac.repository;
 
 import com.lawfirm.erp.rbac.entity.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+@Repository
 public interface RoleRepository extends JpaRepository<Role, UUID> {
-    Optional<Role> findByRoleCode(String roleCode);
 
-    Optional<Role> findByRoleCodeAndFirmId(String roleCode, UUID firmId);
+    Optional<Role> findByRoleCode(String roleCode);
 
     Optional<Role> findByRoleName(String roleName);
 
-    List<Role> findByFirmId(UUID firmId);
-
-    List<Role> findByFirmIsNull();
+    boolean existsByRoleName(String roleName);
 
     boolean existsByRoleCode(String roleCode);
 
-    boolean existsByRoleName(String roleName);
+    @Query("SELECT COUNT(ur) FROM UserRole ur WHERE ur.role.id = :roleId")
+    int countUsersByRoleId(@Param("roleId") UUID roleId);
 }
