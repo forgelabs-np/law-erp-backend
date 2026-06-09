@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.lawfirm.erp.rbac.mapper.RoleMapper">
+
+    <!-- Result Map for Role -->
+    <resultMap id="RoleResultMap" type="com.lawfirm.erp.dto.admin.response.RoleResponse">
+        <id property="id" column="id"/>
+        <result property="name" column="role_name"/>
+        <result property="code" column="role_code"/>
+        <result property="description" column="description"/>
+        <result property="isSystem" column="is_system"/>
+        <result property="isActive" column="is_active"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+
+        <!-- Collection of permissions -->
+        <collection property="permissions" ofType="com.lawfirm.erp.dto.admin.response.PermissionResponse"
+                    select="com.lawfirm.erp.rbac.mapper.PermissionMapper.findPermissionsByRoleId"
+                    column="id"/>
+    </resultMap>
+
+    <!-- Base SQL -->
+    <sql id="BaseRoleColumns">
+        r.id, r.role_name, r.role_code, r.description,
+        r.is_system, r.is_active,
+        r.created_at, r.updated_at
+    </sql>
+
+    <!-- Get all roles -->
+    <select id="findAllRoles" resultMap="RoleResultMap">
+        SELECT <include refid="BaseRoleColumns"/>
+        FROM roles r
+        WHERE r.is_deleted = 0
+        ORDER BY r.role_name ASC
+        <if test="limit != null and offset != null">
+            LIMIT #{limit} OFFSET #{offset}
+        </if>
+    </select>
+
+    <!-- Get active roles -->
+    <select id="findAllActiveRoles" resultMap="RoleResultMap">
+        SELECT <include refid="BaseRoleColumns"/>
+        FROM roles r
+        WHERE r.is_active = 1 AND r.is_deleted = 0
+        ORDER BY r.role_name ASC
+    </select>
+
+    <!-- Get system roles -->
+    <select id="findSystemRoles" resultMap="RoleResultMap">
+        SELECT <include refid="BaseRoleColumns"/>
+        FROM roles r
+        WHERE r.is_system = 1 AND r.is_deleted = 0
+        ORDER BY r.role_name ASC
+    </select>
+
+    <!-- Get custom roles (non-system) -->
+    <select id="findCustomRoles" resultMap="RoleResultMap">
+        SELECT <include refid="BaseRoleColumns"/>
+        FROM roles r
+        WHERE r.is_system = 0 AND r.is_deleted = 0
+        ORDER BY r.role_name ASC
+    </select>
+
+    <!-- Get role by ID -->
+    <select id="findRoleById" resultMap="RoleResultMap">
+        SELECT <include refid="BaseRoleColumns"/>
+        FROM roles r
+        WHERE r.id = #{roleId} AND r.is_deleted = 0
+    </select>
+
+    <!-- Get roles by user ID -->
+    <select id="findRolesByUserId" resultMap="RoleResultMap">
+        SELECT DISTINCT <include refid="BaseRoleColumns"/>
+        FROM roles r
+        INNER JOIN user_roles ur ON ur.role_id = r.id
+        WHERE ur.user_id = #{userId}
+        AND r.is_active = 1
+        AND r.is_deleted = 0
+    </select>
+
+    <!-- Get roles by firm ID -->
+    <select id="findRolesByFirmId" resultMap="RoleResultMap">
+        SELECT <include refid="BaseRoleColumns"/>
+        FROM roles r
+        WHERE r.firm_id = #{firmId}
+        AND r.is_deleted = 0
+        ORDER BY r.role_name ASC
+    </select>
+
+    <!-- Search roles with filters -->
+    <select id="searchRoles" resultMap="RoleResultMap">
+        SELECT <include refid="BaseRoleColumns"/>
+        FROM roles r
+        WHERE r.is_deleted = 0
+        <if test="search != null and search != ''">
+            AND (r.role_name LIKE CONCAT('%', #{search}, '%')
+            OR r.role_code LIKE CONCAT('%', #{search}, '%'))
+        </if>
+        <if test="activeOnly != null and activeOnly == true">
+            AND r.is_active = 1
+        </if>
+        <if test="systemOnly != null and systemOnly == true">
+            AND r.is_system = 1
+        </if>
+        <if test="excludeSystem != null and excludeSystem == true">
+            AND r.is_system = 0
+        </if>
+        ORDER BY r.role_name ASC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- Count roles -->
+    <select id="countRoles" resultType="long">
+        SELECT COUNT(*)
+        FROM roles r
+        WHERE r.is_deleted = 0
+        <if test="activeOnly != null and activeOnly == true">
+            AND r.is_active = 1
+        </if>
+        <if test="excludeSystem != null and excludeSystem == true">
+            AND r.is_system = 0
+        </if>
+    </select>
+
+    <!-- Get role permission statistics -->
+    <select id="getRoleStatistics" resultType="map">
+        SELECT
+            r.id, r.role_name,
+            COUNT(DISTINCT ur.user_id) as user_count,
+            COUNT(DISTINCT rp.permission_id) as permission_count
+        FROM roles r
+                 LEFT JOIN user_roles ur ON ur.role_id = r.id
+                 LEFT JOIN role_permissions rp ON rp.role_id = r.id
+        WHERE r.id = #{roleId} AND r.is_deleted = 0
+        GROUP BY r.id, r.role_name
+    </select>
+
+</mapper>
