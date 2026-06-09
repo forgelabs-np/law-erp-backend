@@ -7,6 +7,8 @@ import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.rbac.entity.Role;
+import com.lawfirm.erp.rbac.entity.Module;
+import com.lawfirm.erp.rbac.repository.ModuleRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
 import com.lawfirm.erp.tenant.entity.TenantType;
 import com.lawfirm.erp.tenant.repository.TenantTypeRepository;
@@ -24,6 +26,7 @@ public class DataInitializer implements CommandLineRunner {
     private final RoleRepository roleRepository;
     private final TenantTypeRepository tenantTypeRepository;
     private final FirmRepository firmRepository;
+    private final ModuleRepository moduleRepository;
 
     @Override
     @Transactional
@@ -33,6 +36,7 @@ public class DataInitializer implements CommandLineRunner {
         createSystemRoles();
         createTenantTypes();
         createSystemFirmForSuperAdmin();
+        createDefaultModules();
 
         log.info("System data initialization completed.");
     }
@@ -98,4 +102,35 @@ public class DataInitializer implements CommandLineRunner {
             log.info("Created system firm for SUPER_ADMIN");
         }
     }
+
+    private void createDefaultModules() {
+        Object[][] modules = {
+                {"CASE_MANAGEMENT", "Case Management", "Manage legal cases", 1, "FolderIcon", "/cases", true},
+                {"DOCUMENT_MANAGEMENT", "Document Management", "Manage case documents", 2, "FileIcon", "/documents", true},
+                {"CLIENT_MANAGEMENT", "Client Management", "Manage clients", 3, "UsersIcon", "/clients", true},
+                {"BILLING", "Billing & Invoices", "Manage billing and invoices", 4, "DollarSignIcon", "/billing", true},
+                {"CALENDAR", "Calendar", "Manage hearings and events", 5, "CalendarIcon", "/calendar", true},
+                {"EMPLOYEE", "Employee Management", "Manage firm employees", 6, "BriefcaseIcon", "/employees", true},
+                {"REPORTS", "Reports", "View analytics and reports", 7, "BarChartIcon", "/reports", true},
+                {"AUDIT", "Audit Logs", "View system audit logs", 8, "ShieldIcon", "/audit", true}
+        };
+
+        for (Object[] moduleData : modules) {
+            String code = (String) moduleData[0];
+            if (!moduleRepository.existsByCode(code)) {
+                Module module = new Module();
+                module.setCode(code);
+                module.setName((String) moduleData[1]);
+                module.setDescription((String) moduleData[2]);
+                module.setDisplayOrder((Integer) moduleData[3]);
+                module.setIcon((String) moduleData[4]);
+                module.setPath((String) moduleData[5]);
+                module.setIsSystem(true);
+                module.setActive(true);
+                moduleRepository.save(module);
+                log.info("Created default module: {}", code);
+            }
+        }
+    }
+
 }

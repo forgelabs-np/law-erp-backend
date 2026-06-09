@@ -4,8 +4,10 @@ import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.DuplicateResourceException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.dto.admin.request.RoleRequest;
+import com.lawfirm.erp.dto.admin.response.ModuleResponse;
 import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
+import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
@@ -46,7 +48,7 @@ public class RoleManagementService {
         }
 
         role = roleRepository.save(role);
-        return toResponse(role);
+        return convertToCompleteResponse(role);
     }
 
     private UUID getCurrentAdminId() {
@@ -111,25 +113,28 @@ public class RoleManagementService {
         return role;
     }
 
+    // GET ALL - Minimal data (no permissions)
     public List<RoleResponse> getAllRoles() {
         return roleRepository.findAll().stream()
-                .map(this::toResponse)
+                .map(this::convertToMinimalResponse)
                 .collect(Collectors.toList());
     }
 
+    // GET ACTIVE - Minimal data
     public List<RoleResponse> getActiveRoles() {
         return roleRepository.findAll().stream()
                 .filter(Role::isActive)
-                .map(this::toResponse)
+                .map(this::convertToMinimalResponse)
                 .collect(Collectors.toList());
     }
 
+    // GET BY ID - Complete data (with permissions)
     public RoleResponse getRoleById(UUID roleId) {
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         String.format("Role not found with id: %s", roleId)
                 ));
-        return toResponse(role);
+        return convertToCompleteResponse(role);
     }
 
     @Transactional
@@ -143,7 +148,6 @@ public class RoleManagementService {
 
         validateNotSystemRole(role, "delete");
 
-        // Check if role is assigned to any users
         if (roleRepository.countUsersByRoleId(roleId) > 0) {
             throw new BusinessRuleException(
                     String.format("Cannot delete role: %s. It is currently assigned to %d user(s)",
@@ -174,23 +178,30 @@ public class RoleManagementService {
         log.info("Role {} toggled to {} by admin: {}",
                 role.getRoleCode(), role.isActive(), adminId);
 
-        return toResponse(role);
+        return convertToCompleteResponse(role);
     }
 
-    private RoleResponse toResponse(Role role) {
-        // Load permissions for this role
+    // MINIMAL response (no permissions) - for getAll, getActive
+    private RoleResponse convertToMinimalResponse(Role role) {
+        return RoleResponse.builder()
+                .id(role.getId())
+                .name(role.getRoleName())
+                .code(role.getRoleCode())
+                .description(role.getDescription())
+                .isSystem(role.getIsSystem() != null && role.getIsSystem())
+                .isActive(role.isActive())
+                .createdAt(role.getCreatedAt())
+                .updatedAt(role.getUpdatedAt())
+                // permissions = null (not included)
+                .build();
+    }
+
+    // COMPLETE response (with permissions) - for getById, upsert, toggle
+    private RoleResponse convertToCompleteResponse(Role role) {
         List<PermissionResponse> permissions = rolePermissionRepository
                 .findPermissionsByRoleId(role.getId())
                 .stream()
-                .map(permission -> PermissionResponse.builder()
-                        .id(permission.getId())
-                        .module(permission.getModule())
-                        .action(permission.getAction())
-                        .code(permission.getCode())
-                        .description(permission.getDescription())
-                        .isActive(permission.isActive())
-                        .createdAt(permission.getCreatedAt())
-                        .build())
+                .map(this::convertPermissionToResponse)
                 .collect(Collectors.toList());
 
         return RoleResponse.builder()
@@ -200,9 +211,29 @@ public class RoleManagementService {
                 .description(role.getDescription())
                 .isSystem(role.getIsSystem() != null && role.getIsSystem())
                 .isActive(role.isActive())
-                .permissions(permissions)
+                .permissions(permissions)  // Only included in complete response
                 .createdAt(role.getCreatedAt())
                 .updatedAt(role.getUpdatedAt())
+                .build();
+    }
+
+    private PermissionResponse convertPermissionToResponse(Permission permission) {
+        // For permission's module, send minimal data (avoid deep nesting)
+        ModuleResponse moduleResponse = ModuleResponse.builder()
+                .id(permission.getModule().getId())
+                .name(permission.getModule().getName())
+                .code(permission.getModule().getCode())
+                .isActive(permission.getModule().isActive())
+                .build();
+
+        return PermissionResponse.builder()
+                .id(permission.getId())
+                .module(moduleResponse)
+                .action(permission.getAction())
+                .code(permission.getCode())
+                .description(permission.getDescription())
+                .isActive(permission.isActive())
+                .createdAt(permission.getCreatedAt())
                 .build();
     }
 }

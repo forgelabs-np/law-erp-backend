@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.lawfirm.erp.rbac.mapper.ModuleMapper">
+
+    <!-- Result Map for Module -->
+    <resultMap id="ModuleResultMap" type="com.lawfirm.erp.dto.admin.response.ModuleResponse">
+        <id property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="code" column="code"/>
+        <result property="description" column="description"/>
+        <result property="displayOrder" column="display_order"/>
+        <result property="icon" column="icon"/>
+        <result property="path" column="path"/>
+        <result property="isSystem" column="is_system"/>
+        <result property="isActive" column="is_active"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <!-- Get all modules -->
+    <select id="findAllModules" resultMap="ModuleResultMap">
+        SELECT
+            id,
+            name,
+            code,
+            description,
+            display_order,
+            icon,
+            path,
+            is_system,
+            is_active,
+            created_at,
+            updated_at
+        FROM modules
+        ORDER BY display_order ASC
+    </select>
+
+    <!-- Get active modules -->
+    <select id="findAllActiveModules" resultMap="ModuleResultMap">
+        SELECT
+            id,
+            name,
+            code,
+            description,
+            display_order,
+            icon,
+            path,
+            is_system,
+            is_active,
+            created_at,
+            updated_at
+        FROM modules
+        WHERE is_active = true
+        ORDER BY display_order ASC
+    </select>
+
+    <!-- Get module by ID -->
+    <select id="findModuleById" resultMap="ModuleResultMap">
+        SELECT
+            id,
+            name,
+            code,
+            description,
+            display_order,
+            icon,
+            path,
+            is_system,
+            is_active,
+            created_at,
+            updated_at
+        FROM modules
+        WHERE id = #{moduleId}
+    </select>
+
+    <!-- Count permissions by module ID -->
+    <select id="countPermissionsByModuleId" resultType="int">
+        SELECT COUNT(*)
+        FROM permissions
+        WHERE module_id = #{moduleId}
+    </select>
+
+</mapper>

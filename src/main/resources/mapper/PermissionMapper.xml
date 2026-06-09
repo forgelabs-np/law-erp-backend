@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.lawfirm.erp.rbac.mapper.PermissionMapper">
+
+    <!-- Result Map for Permission with nested Module -->
+    <resultMap id="PermissionResultMap" type="com.lawfirm.erp.dto.admin.response.PermissionResponse">
+        <id property="id" column="id"/>
+        <result property="code" column="code"/>
+        <result property="action" column="action"/>
+        <result property="description" column="description"/>
+        <result property="isActive" column="is_active"/>
+        <result property="createdAt" column="created_at"/>
+
+        <!-- Nested Module object -->
+        <association property="module" javaType="com.lawfirm.erp.dto.admin.response.ModuleResponse">
+            <id property="id" column="module_id"/>
+            <result property="name" column="module_name"/>
+            <result property="code" column="module_code"/>
+            <result property="isActive" column="module_is_active"/>
+        </association>
+    </resultMap>
+
+    <!-- Base SQL with module join -->
+    <sql id="BasePermissionWithModule">
+        SELECT
+            p.id, p.code, p.action, p.description,
+            p.is_active, p.created_at, p.updated_at,
+            m.id as module_id, m.name as module_name,
+            m.code as module_code, m.is_active as module_is_active
+        FROM permissions p
+                 INNER JOIN modules m ON m.id = p.module_id
+        WHERE p.is_deleted = 0
+    </sql>
+
+    <!-- Get all permissions with module info -->
+    <select id="findAllPermissions" resultMap="PermissionResultMap">
+        <include refid="BasePermissionWithModule"/>
+        ORDER BY m.display_order ASC, p.action ASC
+        <if test="limit != null and offset != null">
+            LIMIT #{limit} OFFSET #{offset}
+        </if>
+    </select>
+
+    <!-- Get active permissions only -->
+    <select id="findAllActivePermissions" resultMap="PermissionResultMap">
+        <include refid="BasePermissionWithModule"/>
+        AND p.is_active = 1
+        ORDER BY m.display_order ASC, p.action ASC
+    </select>
+
+    <!-- Get permission by ID -->
+    <select id="findPermissionById" resultMap="PermissionResultMap">
+        <include refid="BasePermissionWithModule"/>
+        AND p.id = #{permissionId}
+    </select>
+
+    <!-- Get permissions by module ID -->
+    <select id="findPermissionsByModuleId" resultMap="PermissionResultMap">
+        <include refid="BasePermissionWithModule"/>
+        AND p.module_id = #{moduleId}
+        <if test="activeOnly != null and activeOnly == true">
+            AND p.is_active = 1
+        </if>
+        ORDER BY p.action ASC
+    </select>
+
+    <!-- Get permissions by module codes -->
+    <select id="findPermissionsByModuleCodes" resultMap="PermissionResultMap">
+        <include refid="BasePermissionWithModule"/>
+        AND m.code IN
+        <foreach collection="moduleCodes" item="code" open="(" separator="," close=")">
+            #{code}
+        </foreach>
+        <if test="activeOnly != null and activeOnly == true">
+            AND p.is_active = 1
+        </if>
+        ORDER BY m.display_order ASC, p.action ASC
+    </select>
+
+    <!-- Get permissions by role ID (optimized) -->
+    <select id="findPermissionsByRoleId" resultMap="PermissionResultMap">
+        SELECT DISTINCT
+            p.id, p.code, p.action, p.description,
+            p.is_active, p.created_at, p.updated_at,
+            m.id as module_id, m.name as module_name,
+            m.code as module_code, m.is_active as module_is_active
+        FROM permissions p
+                 INNER JOIN modules m ON m.id = p.module_id
+                 INNER JOIN role_permissions rp ON rp.permission_id = p.id
+        WHERE rp.role_id = #{roleId}
+          AND p.is_active = 1
+          AND p.is_deleted = 0
+        ORDER BY m.display_order ASC, p.action ASC
+    </select>
+
+    <!-- Bulk permission check for a role -->
+    <select id="checkRolePermissions" resultType="string">
+        SELECT p.code
+        FROM permissions p
+        INNER JOIN role_permissions rp ON rp.permission_id = p.id
+        WHERE rp.role_id = #{roleId}
+        AND p.code IN
+        <foreach collection="permissionCodes" item="code" open="(" separator="," close=")">
+            #{code}
+        </foreach>
+        AND p.is_active = 1
+    </select>
+
+    <!-- Count permissions (for pagination) -->
+    <select id="countPermissions" resultType="long">
+        SELECT COUNT(*)
+        FROM permissions p
+        WHERE p.is_deleted = 0
+        <if test="moduleId != null">
+            AND p.module_id = #{moduleId}
+        </if>
+        <if test="activeOnly != null and activeOnly == true">
+            AND p.is_active = 1
+        </if>
+        <if test="search != null and search != ''">
+            AND (p.code LIKE CONCAT('%', #{search}, '%')
+            OR p.description LIKE CONCAT('%', #{search}, '%'))
+        </if>
+    </select>
+
+    <!-- Search permissions with filters -->
+    <select id="searchPermissions" resultMap="PermissionResultMap">
+        <include refid="BasePermissionWithModule"/>
+        <if test="moduleId != null">
+            AND p.module_id = #{moduleId}
+        </if>
+        <if test="action != null">
+            AND p.action = #{action}
+        </if>
+        <if test="activeOnly != null and activeOnly == true">
+            AND p.is_active = 1
+        </if>
+        <if test="search != null and search != ''">
+            AND (p.code LIKE CONCAT('%', #{search}, '%')
+            OR p.description LIKE CONCAT('%', #{search}, '%'))
+        </if>
+        ORDER BY m.display_order ASC, p.action ASC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+</mapper>

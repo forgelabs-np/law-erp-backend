@@ -3,6 +3,7 @@ package com.lawfirm.erp.rbac.service;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
+import com.lawfirm.erp.dto.admin.response.ModuleResponse;
 import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
 import com.lawfirm.erp.rbac.entity.Permission;
@@ -60,15 +61,15 @@ public class RolePermissionService {
         // Remove existing permissions
         rolePermissionRepository.deleteByRole(role);
 
-        // Assign new permissions - FIXED: Use entity objects instead of IDs
+        // Assign new permissions
         List<RolePermission> rolePermissions = permissions.stream()
                 .map(permission -> RolePermission.builder()
-                        .role(role)           // Set the Role entity
-                        .permission(permission) // Set the Permission entity
+                        .role(role)
+                        .permission(permission)
                         .build())
                 .collect(Collectors.toList());
 
-        // Set audit fields manually if needed
+        // Set audit fields
         rolePermissions.forEach(rp -> {
             rp.setCreatedBy(adminId);
             rp.setCreatedAt(LocalDateTime.now());
@@ -89,15 +90,7 @@ public class RolePermissionService {
         List<Permission> permissions = rolePermissionRepository.findPermissionsByRoleId(roleId);
 
         List<PermissionResponse> permissionResponses = permissions.stream()
-                .map(permission -> PermissionResponse.builder()
-                        .id(permission.getId())
-                        .module(permission.getModule())
-                        .action(permission.getAction())
-                        .code(permission.getCode())
-                        .description(permission.getDescription())
-                        .isActive(permission.isActive())
-                        .createdAt(permission.getCreatedAt())
-                        .build())
+                .map(this::convertPermissionToResponse)  // Use conversion method
                 .collect(Collectors.toList());
 
         return RolePermissionResponse.builder()
@@ -105,6 +98,37 @@ public class RolePermissionService {
                 .roleName(role.getRoleName())
                 .roleCode(role.getRoleCode())
                 .permissions(permissionResponses)
+                .build();
+    }
+
+    // Helper method to convert Permission entity to PermissionResponse DTO
+    private PermissionResponse convertPermissionToResponse(Permission permission) {
+        // Convert Module entity to ModuleResponse DTO (minimal data)
+        ModuleResponse moduleResponse = null;
+        if (permission.getModule() != null) {
+            moduleResponse = ModuleResponse.builder()
+                    .id(permission.getModule().getId())
+                    .name(permission.getModule().getName())
+                    .code(permission.getModule().getCode())
+                    .description(permission.getModule().getDescription())
+                    .displayOrder(permission.getModule().getDisplayOrder())
+                    .icon(permission.getModule().getIcon())
+                    .path(permission.getModule().getPath())
+                    .isSystem(permission.getModule().getIsSystem())
+                    .isActive(permission.getModule().isActive())
+                    .createdAt(permission.getModule().getCreatedAt())
+                    .updatedAt(permission.getModule().getUpdatedAt())
+                    .build();
+        }
+
+        return PermissionResponse.builder()
+                .id(permission.getId())
+                .module(moduleResponse)  // Now passing ModuleResponse, not Module entity
+                .action(permission.getAction())
+                .code(permission.getCode())
+                .description(permission.getDescription())
+                .isActive(permission.isActive())
+                .createdAt(permission.getCreatedAt())
                 .build();
     }
 }
