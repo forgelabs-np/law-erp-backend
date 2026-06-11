@@ -16,5 +16,9 @@ public interface ModuleMapper {
 
     ModuleResponse findModuleById(@Param("moduleId") UUID moduleId);
 
+    List<ModuleResponse> findSubModulesByParentId(@Param("id") UUID parentId);
+
+    List<ModuleResponse> findAllModulesFlat();
+
     int countPermissionsByModuleId(@Param("moduleId") UUID moduleId);
 }

@@ -23,6 +23,8 @@ public class ModuleRequest {
     @Size(max = 200, message = "Description cannot exceed 200 characters")
     private String description;
 
+    private UUID parentId;
+
     private Integer displayOrder = 0;
     private String icon;
     private String path;

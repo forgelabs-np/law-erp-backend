@@ -17,8 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -54,15 +53,42 @@ public class ModuleService {
             return convertToCompleteResponse(module);
         }
     }
-
-    // GET ALL - MyBatis
+    // In ModuleService.java - replace getAllModules method
     public List<ModuleResponse> getAllModules() {
-        return moduleMapper.findAllModules();
+        List<ModuleResponse> allModules = moduleMapper.findAllModules();
+        return buildModuleTree(allModules);
     }
 
-    // GET ACTIVE - MyBatis
+    private List<ModuleResponse> buildModuleTree(List<ModuleResponse> flatModules) {
+        Map<UUID, ModuleResponse> moduleMap = new HashMap<>();
+
+        // First, put all modules in a map
+        for (ModuleResponse module : flatModules) {
+            moduleMap.put(module.getId(), module);
+            module.setSubModules(new ArrayList<>());
+        }
+
+        // Build the tree
+        List<ModuleResponse> rootModules = new ArrayList<>();
+        for (ModuleResponse module : flatModules) {
+            if (module.getParentId() != null && moduleMap.containsKey(module.getParentId())) {
+                ModuleResponse parent = moduleMap.get(module.getParentId());
+                if (parent.getSubModules() == null) {
+                    parent.setSubModules(new ArrayList<>());
+                }
+                parent.getSubModules().add(module);
+            } else {
+                rootModules.add(module);
+            }
+        }
+
+        return rootModules;
+    }
+
+    // For getActiveModules
     public List<ModuleResponse> getActiveModules() {
-        return moduleMapper.findAllActiveModules();
+        List<ModuleResponse> allModules = moduleMapper.findAllActiveModules();
+        return buildModuleTree(allModules);
     }
 
     // GET BY ID - MyBatis then add permissions
@@ -89,6 +115,11 @@ public class ModuleService {
         return module;
     }
 
+    // Get all modules as flat list (for dropdown/selection)
+    public List<ModuleResponse> getAllModulesFlat() {
+        return moduleMapper.findAllModulesFlat();
+    }
+
     @Transactional
     public void deleteModule(UUID moduleId) {
         UUID adminId = currentUserResolver.getCurrentUserId();
@@ -100,6 +131,15 @@ public class ModuleService {
 
         validateNotSystemModule(module, "delete");
 
+        // Check if module has sub-modules
+        if (module.getSubModules() != null && !module.getSubModules().isEmpty()) {
+            throw new BusinessRuleException(
+                    String.format("Cannot delete module: %s. It has %d sub-modules. Delete sub-modules first.",
+                            module.getName(), module.getSubModules().size())
+            );
+        }
+
+        // Check if module has permissions
         long permissionCount = permissionRepository.countByModuleId(moduleId);
         if (permissionCount > 0) {
             throw new BusinessRuleException(
@@ -172,6 +212,18 @@ public class ModuleService {
         module.setDisplayOrder(request.getDisplayOrder() != null ? request.getDisplayOrder() : 0);
         module.setIcon(request.getIcon());
         module.setPath(request.getPath());
+
+        // Handle parent module (for sub-modules)
+        if (request.getParentId() != null) {
+            Module parent = moduleRepository.findById(request.getParentId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Parent module not found"));
+            module.setParent(parent);
+            module.setLevel(parent.getLevel() + 1);
+        } else {
+            module.setParent(null);
+            module.setLevel(0);
+        }
+
         if (request.getIsActive() != null) {
             module.setActive(request.getIsActive());
         }
@@ -187,6 +239,18 @@ public class ModuleService {
         module.setDisplayOrder(request.getDisplayOrder() != null ? request.getDisplayOrder() : 0);
         module.setIcon(request.getIcon());
         module.setPath(request.getPath());
+
+        // Handle parent module (for sub-modules)
+        if (request.getParentId() != null) {
+            Module parent = moduleRepository.findById(request.getParentId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Parent module not found"));
+            module.setParent(parent);
+            module.setLevel(parent.getLevel() + 1);
+        } else {
+            module.setParent(null);
+            module.setLevel(0);
+        }
+
         module.setIsSystem(false);
         module.setActive(request.getIsActive() != null ? request.getIsActive() : true);
         module.setCreatedBy(adminId);
@@ -212,6 +276,7 @@ public class ModuleService {
                 .name(module.getName())
                 .code(module.getCode())
                 .description(module.getDescription())
+                .level(module.getLevel())
                 .displayOrder(module.getDisplayOrder())
                 .icon(module.getIcon())
                 .path(module.getPath())
