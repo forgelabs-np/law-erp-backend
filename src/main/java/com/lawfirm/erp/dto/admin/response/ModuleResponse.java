@@ -11,19 +11,23 @@ import java.util.UUID;
 
 @Data
 @Builder
-@NoArgsConstructor
+@NoArgsConstructor  
 @AllArgsConstructor
 public class ModuleResponse {
     private UUID id;
     private String name;
     private String code;
     private String description;
+    private UUID parentId;
+    private ModuleResponse parent;
+    private List<ModuleResponse> subModules;
+    private Integer level;
     private Integer displayOrder;
     private String icon;
     private String path;
     private Boolean isSystem;
     private Boolean isActive;
+    private List<PermissionResponse> permissions;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private List<PermissionResponse> permissions;
 }

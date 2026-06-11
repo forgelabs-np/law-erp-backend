@@ -4,11 +4,11 @@ import com.lawfirm.erp.entity.base.ActiveAuditableEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Entity
-@Table(name = "modules", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"code"}),
-        @UniqueConstraint(columnNames = {"name"})
-})
+@Table(name = "modules")
 @Getter
 @Setter
 @AllArgsConstructor
@@ -24,6 +24,17 @@ public class Module extends ActiveAuditableEntity {
 
     @Column(length = 200)
     private String description;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private Module parent;
+
+    @OneToMany(mappedBy = "parent", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<Module> subModules = new ArrayList<>();
+
+    @Column(nullable = false)
+    private Integer level = 0;
 
     @Column(nullable = false)
     private Integer displayOrder = 0;
