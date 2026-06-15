@@ -49,4 +49,16 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.username = :username AND u.userType = :userType")
     boolean existsByUsernameAndUserType(@Param("username") String username, @Param("userType") UserType userType);
+
+    @Query("SELECT COUNT(u) FROM User u WHERE u.firm.id = :firmId AND u.userType = :userType")
+    long countByFirmIdAndUserType(@Param("firmId") UUID firmId, @Param("userType") UserType userType);
+
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.username = :username AND u.firm.id IS NULL")
+    boolean existsByUsernameAndFirmIdIsNull(@Param("username") String username);
+
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.email = :email AND u.firm.id IS NULL")
+    boolean existsByEmailAndFirmIdIsNull(@Param("email") String email);
+
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.mobileNo = :mobileNo AND u.firm.id IS NULL")
+    boolean existsByMobileNoAndFirmIdIsNull(@Param("mobileNo") String mobileNo);
 }
