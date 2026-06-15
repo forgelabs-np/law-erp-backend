@@ -51,14 +51,22 @@ public class User extends ActiveAuditableEntity implements UserDetails {
     private String fullName;
     private String profilePhotoUrl;
 
+    @Builder.Default
     private Boolean isEmailVerified = false;
+
+    @Builder.Default
     private Boolean isMobileVerified = false;
+
+    @Builder.Default
     private Boolean isBlocked = false;
+
+    @Builder.Default
     private Integer loginAttempts = 0;
+
     private LocalDateTime lockedUntil;
     private LocalDateTime lastLoginAt;
 
-    @Column(name = "portal_access_enabled")
+    @Builder.Default
     private Boolean portalAccessEnabled = false;
 
     @Override

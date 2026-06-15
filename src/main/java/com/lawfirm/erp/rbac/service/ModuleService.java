@@ -53,7 +53,8 @@ public class ModuleService {
             return convertToCompleteResponse(module);
         }
     }
-    // In ModuleService.java - replace getAllModules method
+
+    // GET ALL - Using MyBatis (minimal data, no sub-modules in tree)
     public List<ModuleResponse> getAllModules() {
         List<ModuleResponse> allModules = moduleMapper.findAllModules();
         return buildModuleTree(allModules);
@@ -62,57 +63,36 @@ public class ModuleService {
     private List<ModuleResponse> buildModuleTree(List<ModuleResponse> flatModules) {
         Map<UUID, ModuleResponse> moduleMap = new HashMap<>();
 
-        // First, put all modules in a map
         for (ModuleResponse module : flatModules) {
             moduleMap.put(module.getId(), module);
             module.setSubModules(new ArrayList<>());
         }
 
-        // Build the tree
         List<ModuleResponse> rootModules = new ArrayList<>();
         for (ModuleResponse module : flatModules) {
             if (module.getParentId() != null && moduleMap.containsKey(module.getParentId())) {
                 ModuleResponse parent = moduleMap.get(module.getParentId());
-                if (parent.getSubModules() == null) {
-                    parent.setSubModules(new ArrayList<>());
-                }
                 parent.getSubModules().add(module);
             } else {
                 rootModules.add(module);
             }
         }
-
         return rootModules;
     }
 
-    // For getActiveModules
+    // GET ACTIVE - MyBatis
     public List<ModuleResponse> getActiveModules() {
         List<ModuleResponse> allModules = moduleMapper.findAllActiveModules();
         return buildModuleTree(allModules);
     }
 
-    // GET BY ID - MyBatis then add permissions
+    // GET BY ID - Using JPA to get sub-modules
     public ModuleResponse getModuleById(UUID moduleId) {
-        ModuleResponse module = moduleMapper.findModuleById(moduleId);
-        if (module == null) {
-            throw new ResourceNotFoundException(String.format("Module not found with id: %s", moduleId));
-        }
-
-        // Add permissions to the response
-        List<PermissionResponse> permissions = permissionRepository.findByModuleId(moduleId)
-                .stream()
-                .map(permission -> PermissionResponse.builder()
-                        .id(permission.getId())
-                        .action(permission.getAction())
-                        .code(permission.getCode())
-                        .description(permission.getDescription())
-                        .isActive(permission.isActive())
-                        .createdAt(permission.getCreatedAt())
-                        .build())
-                .collect(Collectors.toList());
-
-        module.setPermissions(permissions);
-        return module;
+        Module module = moduleRepository.findById(moduleId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        String.format("Module not found with id: %s", moduleId)
+                ));
+        return convertToCompleteResponseWithSubModules(module);
     }
 
     // Get all modules as flat list (for dropdown/selection)
@@ -207,13 +187,12 @@ public class ModuleService {
 
     private void updateModule(Module module, ModuleRequest request, UUID adminId) {
         module.setName(request.getName());
-        module.setCode(request.getCode());
+        module.setCode(request.getCode().toUpperCase()); // Force uppercase
         module.setDescription(request.getDescription());
         module.setDisplayOrder(request.getDisplayOrder() != null ? request.getDisplayOrder() : 0);
         module.setIcon(request.getIcon());
         module.setPath(request.getPath());
 
-        // Handle parent module (for sub-modules)
         if (request.getParentId() != null) {
             Module parent = moduleRepository.findById(request.getParentId())
                     .orElseThrow(() -> new ResourceNotFoundException("Parent module not found"));
@@ -234,13 +213,12 @@ public class ModuleService {
     private Module createModule(ModuleRequest request, UUID adminId) {
         Module module = new Module();
         module.setName(request.getName());
-        module.setCode(request.getCode());
+        module.setCode(request.getCode().toUpperCase()); // Force uppercase
         module.setDescription(request.getDescription());
         module.setDisplayOrder(request.getDisplayOrder() != null ? request.getDisplayOrder() : 0);
         module.setIcon(request.getIcon());
         module.setPath(request.getPath());
 
-        // Handle parent module (for sub-modules)
         if (request.getParentId() != null) {
             Module parent = moduleRepository.findById(request.getParentId())
                     .orElseThrow(() -> new ResourceNotFoundException("Parent module not found"));
@@ -258,6 +236,7 @@ public class ModuleService {
         return module;
     }
 
+    // Complete response (with permissions, NO sub-modules - for non-parent modules)
     private ModuleResponse convertToCompleteResponse(Module module) {
         List<PermissionResponse> permissions = permissionRepository.findByModuleId(module.getId())
                 .stream()
@@ -285,6 +264,64 @@ public class ModuleService {
                 .createdAt(module.getCreatedAt())
                 .updatedAt(module.getUpdatedAt())
                 .permissions(permissions)
+                .build();
+    }
+
+    // Complete response WITH sub-modules - for getModuleById on parent modules
+    private ModuleResponse convertToCompleteResponseWithSubModules(Module module) {
+        List<PermissionResponse> permissions = permissionRepository.findByModuleId(module.getId())
+                .stream()
+                .map(permission -> PermissionResponse.builder()
+                        .id(permission.getId())
+                        .action(permission.getAction())
+                        .code(permission.getCode())
+                        .description(permission.getDescription())
+                        .isActive(permission.isActive())
+                        .createdAt(permission.getCreatedAt())
+                        .build())
+                .collect(Collectors.toList());
+
+        // Get sub-modules recursively
+        List<ModuleResponse> subModuleResponses = new ArrayList<>();
+        if (module.getSubModules() != null && !module.getSubModules().isEmpty()) {
+            subModuleResponses = module.getSubModules().stream()
+                    .map(this::convertToMinimalResponse)
+                    .collect(Collectors.toList());
+        }
+
+        return ModuleResponse.builder()
+                .id(module.getId())
+                .name(module.getName())
+                .code(module.getCode())
+                .description(module.getDescription())
+                .level(module.getLevel())
+                .displayOrder(module.getDisplayOrder())
+                .icon(module.getIcon())
+                .path(module.getPath())
+                .isSystem(module.getIsSystem())
+                .isActive(module.isActive())
+                .createdAt(module.getCreatedAt())
+                .updatedAt(module.getUpdatedAt())
+                .permissions(permissions)
+                .subModules(subModuleResponses)
+                .build();
+    }
+
+    // Minimal response (no permissions, no sub-modules)
+    private ModuleResponse convertToMinimalResponse(Module module) {
+        return ModuleResponse.builder()
+                .id(module.getId())
+                .name(module.getName())
+                .code(module.getCode())
+                .description(module.getDescription())
+                .level(module.getLevel())
+                .displayOrder(module.getDisplayOrder())
+                .icon(module.getIcon())
+                .path(module.getPath())
+                .isSystem(module.getIsSystem())
+                .isActive(module.isActive())
+                .createdAt(module.getCreatedAt())
+                .updatedAt(module.getUpdatedAt())
                 .build();
     }
 }

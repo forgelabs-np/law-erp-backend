@@ -7,10 +7,7 @@ import com.lawfirm.erp.common.enums.Message;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.dto.auth.request.LoginRequest;
 import com.lawfirm.erp.dto.auth.request.RefreshTokenRequest;
-import com.lawfirm.erp.dto.auth.request.RegisterClientRequest;
-import com.lawfirm.erp.dto.auth.request.RegisterSoloRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
-import com.lawfirm.erp.dto.auth.response.RegisterResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -49,27 +46,29 @@ public class AuthController {
         );
     }
 
-    @PostMapping("/register/solo")
-    @Operation(summary = "API to register solo lawyer", description = "Register a new solo practitioner")
-    public ResponseEntity<ApiResponse<RegisterResponse>> registerSolo(
-            @Valid @RequestBody ApiRequest<RegisterSoloRequest> request) {
-        return responseHandler.ok(
-                authService.registerSolo(request.getData()),
-                Message.CREATE_SUCCESS,
-                "Solo Lawyer"
-        );
-    }
+    // ========== REGISTRATION ENDPOINTS - DISABLED (Super Admin only creates) ==========
 
-    @PostMapping("/register/client")
-    @Operation(summary = "API to register client", description = "Register a new client")
-    public ResponseEntity<ApiResponse<RegisterResponse>> registerClient(
-            @Valid @RequestBody ApiRequest<RegisterClientRequest> request) {
-        return responseHandler.ok(
-                authService.registerClient(request.getData()),
-                Message.CREATE_SUCCESS,
-                "Client"
-        );
-    }
+    // @PostMapping("/register/solo")
+    // @Operation(summary = "API to register solo lawyer", description = "Register a new solo practitioner")
+    // public ResponseEntity<ApiResponse<RegisterResponse>> registerSolo(
+    //         @Valid @RequestBody ApiRequest<RegisterSoloRequest> request) {
+    //     return responseHandler.ok(
+    //             authService.registerSolo(request.getData()),
+    //             Message.CREATE_SUCCESS,
+    //             "Solo Lawyer"
+    //     );
+    // }
+
+    // @PostMapping("/register/client")
+    // @Operation(summary = "API to register client", description = "Register a new client")
+    // public ResponseEntity<ApiResponse<RegisterResponse>> registerClient(
+    //         @Valid @RequestBody ApiRequest<RegisterClientRequest> request) {
+    //     return responseHandler.ok(
+    //             authService.registerClient(request.getData()),
+    //             Message.CREATE_SUCCESS,
+    //             "Client"
+    //     );
+    // }
 
     @PostMapping("/refresh")
     @Operation(summary = "API to refresh token", description = "Get new access token using refresh token")
