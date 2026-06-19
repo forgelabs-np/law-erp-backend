@@ -7,7 +7,10 @@ import com.lawfirm.erp.dto.admin.request.ModuleRequest;
 import com.lawfirm.erp.dto.admin.response.ModuleResponse;
 import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.rbac.entity.Module;
+import com.lawfirm.erp.rbac.entity.ModulePermission;
+import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.mapper.ModuleMapper;
+import com.lawfirm.erp.rbac.repository.ModulePermissionRepository;
 import com.lawfirm.erp.rbac.repository.ModuleRepository;
 import com.lawfirm.erp.rbac.repository.PermissionRepository;
 import com.lawfirm.erp.security.CurrentUserResolver;
@@ -29,6 +32,7 @@ public class ModuleService {
     private final PermissionRepository permissionRepository;
     private final ModuleMapper moduleMapper;
     private final CurrentUserResolver currentUserResolver;
+    private final ModulePermissionRepository modulePermissionRepository;
 
     @Transactional
     public ModuleResponse upsertModule(ModuleRequest request) {
@@ -37,21 +41,79 @@ public class ModuleService {
             throw new BusinessRuleException("Authenticated user not found");
         }
 
-        Module module = findExistingModule(request);
+        Module existingModule = findExistingModule(request);
+        final Module module;  // Declare as effectively final
 
-        if (module != null) {
-            validateNotSystemModule(module, "modify");
-            updateModule(module, request, adminId);
-            log.info("Module updated: {} by admin: {}", module.getCode(), adminId);
-            module = moduleRepository.save(module);
-            return convertToCompleteResponse(module);
+        if (existingModule != null) {
+            validateNotSystemModule(existingModule, "modify");
+            updateModule(existingModule, request, adminId);
+            log.info("Module updated: {} by admin: {}", existingModule.getCode(), adminId);
+            module = moduleRepository.save(existingModule);
         } else {
             validateDuplicateModule(request);
-            module = createModule(request, adminId);
-            log.info("Module created: {} by admin: {}", module.getCode(), adminId);
-            module = moduleRepository.save(module);
-            return convertToCompleteResponse(module);
+            Module newModule = createModule(request, adminId);
+            log.info("Module created: {} by admin: {}", newModule.getCode(), adminId);
+            module = moduleRepository.save(newModule);
         }
+
+        // Handle permission assignments using junction table
+        if (request.getPermissionIds() != null) {
+            modulePermissionRepository.deleteByModuleId(module.getId());
+
+            if (!request.getPermissionIds().isEmpty()) {
+                List<Permission> permissions = permissionRepository.findAllById(request.getPermissionIds());
+
+                List<ModulePermission> modulePermissions = permissions.stream()
+                        .map(permission -> ModulePermission.builder()
+                                .module(module)  // module is effectively final here
+                                .permission(permission)
+                                .build())
+                        .collect(Collectors.toList());
+
+                modulePermissionRepository.saveAll(modulePermissions);
+                log.info("Assigned {} permissions to module: {}", permissions.size(), module.getCode());
+            }
+        }
+
+        return convertToCompleteResponse(module);
+    }
+
+    // Assign permissions to existing module
+    @Transactional
+    public ModuleResponse assignPermissionsToModule(UUID moduleId, List<UUID> permissionIds) {
+        UUID adminId = currentUserResolver.getCurrentUserId();
+        if (adminId == null) {
+            throw new BusinessRuleException("Authenticated user not found");
+        }
+
+        Module module = moduleRepository.findById(moduleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Module not found: " + moduleId));
+
+        validateNotSystemModule(module, "modify permissions of");
+
+        // Clear existing permissions
+        modulePermissionRepository.deleteByModuleId(moduleId);
+
+        // Assign new permissions
+        if (permissionIds != null && !permissionIds.isEmpty()) {
+            List<Permission> permissions = permissionRepository.findAllById(permissionIds);
+
+            if (permissions.size() != permissionIds.size()) {
+                throw new ResourceNotFoundException("One or more permission IDs are invalid");
+            }
+
+            List<ModulePermission> modulePermissions = permissions.stream()
+                    .map(permission -> ModulePermission.builder()
+                            .module(module)
+                            .permission(permission)
+                            .build())
+                    .collect(Collectors.toList());
+
+            modulePermissionRepository.saveAll(modulePermissions);
+            log.info("Assigned {} permissions to module: {}", permissions.size(), module.getCode());
+        }
+
+        return convertToCompleteResponse(module);
     }
 
     // GET ALL - Using MyBatis (minimal data, no sub-modules in tree)
@@ -86,7 +148,7 @@ public class ModuleService {
         return buildModuleTree(allModules);
     }
 
-    // GET BY ID - Using JPA to get sub-modules
+    // GET BY ID - Using JPA to get sub-modules and permissions
     public ModuleResponse getModuleById(UUID moduleId) {
         Module module = moduleRepository.findById(moduleId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -119,11 +181,11 @@ public class ModuleService {
             );
         }
 
-        // Check if module has permissions
-        long permissionCount = permissionRepository.countByModuleId(moduleId);
+        // Check if module has permissions (via junction table)
+        long permissionCount = modulePermissionRepository.countByModuleId(moduleId);
         if (permissionCount > 0) {
             throw new BusinessRuleException(
-                    String.format("Cannot delete module: %s. It has %d permissions assigned.",
+                    String.format("Cannot delete module: %s. It has %d permissions assigned. Remove permissions first.",
                             module.getName(), permissionCount)
             );
         }
@@ -137,19 +199,26 @@ public class ModuleService {
         UUID adminId = currentUserResolver.getCurrentUserId();
 
         Module module = moduleRepository.findById(moduleId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        String.format("Module not found with id: %s", moduleId)
-                ));
+                .orElseThrow(() -> new ResourceNotFoundException("Module not found"));
 
         validateNotSystemModule(module, "toggle status of");
 
-        module.setActive(!module.isActive());
+        boolean newStatus = !module.isActive();
+        module.setActive(newStatus);
         module.setUpdatedBy(adminId);
         module.setUpdatedAt(LocalDateTime.now());
         module = moduleRepository.save(module);
 
-        log.info("Module {} toggled to {} by admin: {}",
-                module.getCode(), module.isActive(), adminId);
+        // Cascade disable to child modules
+        if (!newStatus && module.getSubModules() != null) {
+            for (Module child : module.getSubModules()) {
+                child.setActive(false);
+                child.setUpdatedBy(adminId);
+                child.setUpdatedAt(LocalDateTime.now());
+                moduleRepository.save(child);
+            }
+            log.info("Disabled {} child modules of {}", module.getSubModules().size(), module.getCode());
+        }
 
         return convertToCompleteResponse(module);
     }
@@ -187,9 +256,10 @@ public class ModuleService {
 
     private void updateModule(Module module, ModuleRequest request, UUID adminId) {
         module.setName(request.getName());
-        module.setCode(request.getCode().toUpperCase()); // Force uppercase
+        module.setCode(request.getCode().toUpperCase());
         module.setDescription(request.getDescription());
         module.setDisplayOrder(request.getDisplayOrder() != null ? request.getDisplayOrder() : 0);
+        module.setSortOrder(request.getSortOrder() != null ? request.getSortOrder() : 0);
         module.setIcon(request.getIcon());
         module.setPath(request.getPath());
 
@@ -213,9 +283,10 @@ public class ModuleService {
     private Module createModule(ModuleRequest request, UUID adminId) {
         Module module = new Module();
         module.setName(request.getName());
-        module.setCode(request.getCode().toUpperCase()); // Force uppercase
+        module.setCode(request.getCode().toUpperCase());
         module.setDescription(request.getDescription());
         module.setDisplayOrder(request.getDisplayOrder() != null ? request.getDisplayOrder() : 0);
+        module.setSortOrder(request.getSortOrder() != null ? request.getSortOrder() : 0);
         module.setIcon(request.getIcon());
         module.setPath(request.getPath());
 
@@ -236,13 +307,15 @@ public class ModuleService {
         return module;
     }
 
-    // Complete response (with permissions, NO sub-modules - for non-parent modules)
+    // Complete response (with permissions from junction table)
     private ModuleResponse convertToCompleteResponse(Module module) {
-        List<PermissionResponse> permissions = permissionRepository.findByModuleId(module.getId())
+        List<PermissionResponse> permissions = modulePermissionRepository
+                .findPermissionsByModuleId(module.getId())
                 .stream()
                 .map(permission -> PermissionResponse.builder()
                         .id(permission.getId())
                         .action(permission.getAction())
+                        .scope(permission.getScope())
                         .code(permission.getCode())
                         .description(permission.getDescription())
                         .isActive(permission.isActive())
@@ -257,6 +330,7 @@ public class ModuleService {
                 .description(module.getDescription())
                 .level(module.getLevel())
                 .displayOrder(module.getDisplayOrder())
+                .sortOrder(module.getSortOrder())
                 .icon(module.getIcon())
                 .path(module.getPath())
                 .isSystem(module.getIsSystem())
@@ -267,13 +341,15 @@ public class ModuleService {
                 .build();
     }
 
-    // Complete response WITH sub-modules - for getModuleById on parent modules
+    // Complete response WITH sub-modules
     private ModuleResponse convertToCompleteResponseWithSubModules(Module module) {
-        List<PermissionResponse> permissions = permissionRepository.findByModuleId(module.getId())
+        List<PermissionResponse> permissions = modulePermissionRepository
+                .findPermissionsByModuleId(module.getId())
                 .stream()
                 .map(permission -> PermissionResponse.builder()
                         .id(permission.getId())
                         .action(permission.getAction())
+                        .scope(permission.getScope())
                         .code(permission.getCode())
                         .description(permission.getDescription())
                         .isActive(permission.isActive())
@@ -281,7 +357,6 @@ public class ModuleService {
                         .build())
                 .collect(Collectors.toList());
 
-        // Get sub-modules recursively
         List<ModuleResponse> subModuleResponses = new ArrayList<>();
         if (module.getSubModules() != null && !module.getSubModules().isEmpty()) {
             subModuleResponses = module.getSubModules().stream()
@@ -296,6 +371,7 @@ public class ModuleService {
                 .description(module.getDescription())
                 .level(module.getLevel())
                 .displayOrder(module.getDisplayOrder())
+                .sortOrder(module.getSortOrder())
                 .icon(module.getIcon())
                 .path(module.getPath())
                 .isSystem(module.getIsSystem())
@@ -316,6 +392,7 @@ public class ModuleService {
                 .description(module.getDescription())
                 .level(module.getLevel())
                 .displayOrder(module.getDisplayOrder())
+                .sortOrder(module.getSortOrder())
                 .icon(module.getIcon())
                 .path(module.getPath())
                 .isSystem(module.getIsSystem())

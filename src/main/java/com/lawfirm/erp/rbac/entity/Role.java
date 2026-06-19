@@ -36,6 +36,14 @@ public class Role extends ActiveAuditableEntity {
     @Column(name = "parent_role_id")
     private UUID parentRoleId;
 
+    // NEW: Role hierarchy (extends another role)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "extends_role_id")
+    private Role extendsRole;
+
+    @OneToMany(mappedBy = "extendsRole", fetch = FetchType.LAZY)
+    private List<Role> extendedBy = new ArrayList<>();
+
     @Enumerated(EnumType.STRING)
     @Column(name = "applicable_to")
     private UserType applicableTo;

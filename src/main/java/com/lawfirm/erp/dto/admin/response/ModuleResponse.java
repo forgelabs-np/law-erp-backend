@@ -11,7 +11,7 @@ import java.util.UUID;
 
 @Data
 @Builder
-@NoArgsConstructor  
+@NoArgsConstructor
 @AllArgsConstructor
 public class ModuleResponse {
     private UUID id;
@@ -23,6 +23,7 @@ public class ModuleResponse {
     private List<ModuleResponse> subModules;
     private Integer level;
     private Integer displayOrder;
+    private Integer sortOrder;      // ← NEW field
     private String icon;
     private String path;
     private Boolean isSystem;

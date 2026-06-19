@@ -21,4 +21,10 @@ public interface ModuleMapper {
     List<ModuleResponse> findAllModulesFlat();
 
     int countPermissionsByModuleId(@Param("moduleId") UUID moduleId);
+
+    List<ModuleResponse> findModulesByLevel(@Param("level") Integer level);
+
+    List<ModuleResponse> searchModules(@Param("search") String search,
+                                       @Param("limit") Integer limit,
+                                       @Param("offset") Integer offset);
 }

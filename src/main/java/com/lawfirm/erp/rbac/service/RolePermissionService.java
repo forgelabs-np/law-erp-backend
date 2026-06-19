@@ -1,9 +1,10 @@
 package com.lawfirm.erp.rbac.service;
 
 import com.lawfirm.erp.common.exception.BusinessRuleException;
+import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
+import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
-import com.lawfirm.erp.dto.admin.response.ModuleResponse;
 import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
 import com.lawfirm.erp.rbac.entity.Permission;
@@ -13,6 +14,7 @@ import com.lawfirm.erp.rbac.repository.PermissionRepository;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
 import com.lawfirm.erp.security.CurrentUserResolver;
+import com.lawfirm.erp.security.PermissionEvaluator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -32,6 +35,8 @@ public class RolePermissionService {
     private final PermissionRepository permissionRepository;
     private final RolePermissionRepository rolePermissionRepository;
     private final CurrentUserResolver currentUserResolver;
+    private final UserRepository userRepository;
+    private final PermissionEvaluator permissionEvaluator;
 
     @Transactional
     public void assignPermissionsToRole(RolePermissionRequest request) {
@@ -45,11 +50,32 @@ public class RolePermissionService {
                         String.format("Role not found with id: %s", request.getRoleId())
                 ));
 
-        // Prevent modifying system roles
         if (role.getIsSystem() != null && role.getIsSystem()) {
             throw new BusinessRuleException(
                     String.format("Cannot modify permissions for system role: %s", role.getRoleName())
             );
+        }
+
+        if (role.getParentRoleId() != null) {
+            Role parentRole = roleRepository.findById(role.getParentRoleId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Parent system role not found"));
+
+            Set<UUID> ceilingPermissionIds = rolePermissionRepository
+                    .findPermissionsByRoleId(parentRole.getId())
+                    .stream()
+                    .map(Permission::getId)
+                    .collect(Collectors.toSet());
+
+            for (UUID permId : request.getPermissionIds()) {
+                if (!ceilingPermissionIds.contains(permId)) {
+                    Permission perm = permissionRepository.findById(permId)
+                            .orElseThrow(() -> new ResourceNotFoundException("Permission not found"));
+                    throw new ForbiddenException(
+                            "Permission '" + perm.getCode() + "' exceeds your role's ceiling. " +
+                                    "This permission is not available for role type '" + parentRole.getRoleCode() + "'."
+                    );
+                }
+            }
         }
 
         // Verify all permissions exist
@@ -69,7 +95,6 @@ public class RolePermissionService {
                         .build())
                 .collect(Collectors.toList());
 
-        // Set audit fields
         rolePermissions.forEach(rp -> {
             rp.setCreatedBy(adminId);
             rp.setCreatedAt(LocalDateTime.now());
@@ -77,8 +102,15 @@ public class RolePermissionService {
 
         rolePermissionRepository.saveAll(rolePermissions);
 
-        log.info("Assigned {} permissions to role: {} by admin: {}",
-                permissions.size(), role.getRoleCode(), adminId);
+        // Invalidate user sessions
+        List<UUID> userIds = userRepository.findUserIdsByRoleId(role.getId());
+        for (UUID userId : userIds) {
+            userRepository.incrementPermissionVersion(userId);
+            permissionEvaluator.clearUserCache(userId);
+        }
+
+        log.info("Assigned {} permissions to role: {} by admin: {}. Invalidated {} user sessions.",
+                permissions.size(), role.getRoleCode(), adminId, userIds.size());
     }
 
     public RolePermissionResponse getRolePermissions(UUID roleId) {
@@ -90,7 +122,7 @@ public class RolePermissionService {
         List<Permission> permissions = rolePermissionRepository.findPermissionsByRoleId(roleId);
 
         List<PermissionResponse> permissionResponses = permissions.stream()
-                .map(this::convertPermissionToResponse)  // Use conversion method
+                .map(this::convertPermissionToResponse)
                 .collect(Collectors.toList());
 
         return RolePermissionResponse.builder()
@@ -101,30 +133,11 @@ public class RolePermissionService {
                 .build();
     }
 
-    // Helper method to convert Permission entity to PermissionResponse DTO
     private PermissionResponse convertPermissionToResponse(Permission permission) {
-        // Convert Module entity to ModuleResponse DTO (minimal data)
-        ModuleResponse moduleResponse = null;
-        if (permission.getModule() != null) {
-            moduleResponse = ModuleResponse.builder()
-                    .id(permission.getModule().getId())
-                    .name(permission.getModule().getName())
-                    .code(permission.getModule().getCode())
-                    .description(permission.getModule().getDescription())
-                    .displayOrder(permission.getModule().getDisplayOrder())
-                    .icon(permission.getModule().getIcon())
-                    .path(permission.getModule().getPath())
-                    .isSystem(permission.getModule().getIsSystem())
-                    .isActive(permission.getModule().isActive())
-                    .createdAt(permission.getModule().getCreatedAt())
-                    .updatedAt(permission.getModule().getUpdatedAt())
-                    .build();
-        }
-
         return PermissionResponse.builder()
                 .id(permission.getId())
-                .module(moduleResponse)  // Now passing ModuleResponse, not Module entity
                 .action(permission.getAction())
+                .scope(permission.getScope())
                 .code(permission.getCode())
                 .description(permission.getDescription())
                 .isActive(permission.isActive())

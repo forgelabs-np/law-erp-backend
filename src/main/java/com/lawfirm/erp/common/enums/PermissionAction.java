@@ -20,5 +20,5 @@ public enum PermissionAction {
     APPROVE, REJECT, REVIEW,
 
     // Additional operations
-    ARCHIVE, RESTORE, PRINT
+    ARCHIVE, RESTORE, PRINT, FORWARD
 }

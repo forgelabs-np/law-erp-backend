@@ -1,7 +1,6 @@
 package com.lawfirm.erp.dto.firm.request;
 
 import com.lawfirm.erp.common.enums.FirmType;
-import com.lawfirm.erp.common.enums.PlanTier;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -22,8 +21,6 @@ public class CreateFirmRequest {
     private String name;
 
     private FirmType firmType = FirmType.FIRM;
-
-    private PlanTier planTier = PlanTier.BASIC;
 
     @Email
     private String email;

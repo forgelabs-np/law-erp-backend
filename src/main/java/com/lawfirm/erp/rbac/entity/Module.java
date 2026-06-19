@@ -39,6 +39,9 @@ public class Module extends ActiveAuditableEntity {
     @Column(nullable = false)
     private Integer displayOrder = 0;
 
+    @Column(name = "sort_order", nullable = false)
+    private Integer sortOrder = 0;
+
     @Column(length = 100)
     private String icon;
 

@@ -4,7 +4,6 @@ import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.DuplicateResourceException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.dto.admin.request.RoleRequest;
-import com.lawfirm.erp.dto.admin.response.ModuleResponse;
 import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
 import com.lawfirm.erp.rbac.entity.Permission;
@@ -113,14 +112,12 @@ public class RoleManagementService {
         return role;
     }
 
-    // GET ALL - Minimal data (no permissions)
     public List<RoleResponse> getAllRoles() {
         return roleRepository.findAll().stream()
                 .map(this::convertToMinimalResponse)
                 .collect(Collectors.toList());
     }
 
-    // GET ACTIVE - Minimal data
     public List<RoleResponse> getActiveRoles() {
         return roleRepository.findAll().stream()
                 .filter(Role::isActive)
@@ -128,7 +125,6 @@ public class RoleManagementService {
                 .collect(Collectors.toList());
     }
 
-    // GET BY ID - Complete data (with permissions)
     public RoleResponse getRoleById(UUID roleId) {
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -181,7 +177,6 @@ public class RoleManagementService {
         return convertToCompleteResponse(role);
     }
 
-    // MINIMAL response (no permissions) - for getAll, getActive
     private RoleResponse convertToMinimalResponse(Role role) {
         return RoleResponse.builder()
                 .id(role.getId())
@@ -192,11 +187,9 @@ public class RoleManagementService {
                 .isActive(role.isActive())
                 .createdAt(role.getCreatedAt())
                 .updatedAt(role.getUpdatedAt())
-                // permissions = null (not included)
                 .build();
     }
 
-    // COMPLETE response (with permissions) - for getById, upsert, toggle
     private RoleResponse convertToCompleteResponse(Role role) {
         List<PermissionResponse> permissions = rolePermissionRepository
                 .findPermissionsByRoleId(role.getId())
@@ -211,25 +204,18 @@ public class RoleManagementService {
                 .description(role.getDescription())
                 .isSystem(role.getIsSystem() != null && role.getIsSystem())
                 .isActive(role.isActive())
-                .permissions(permissions)  // Only included in complete response
+                .permissions(permissions)
                 .createdAt(role.getCreatedAt())
                 .updatedAt(role.getUpdatedAt())
                 .build();
     }
 
+    // FIXED: Permission has NO module in Option B
     private PermissionResponse convertPermissionToResponse(Permission permission) {
-        // For permission's module, send minimal data (avoid deep nesting)
-        ModuleResponse moduleResponse = ModuleResponse.builder()
-                .id(permission.getModule().getId())
-                .name(permission.getModule().getName())
-                .code(permission.getModule().getCode())
-                .isActive(permission.getModule().isActive())
-                .build();
-
         return PermissionResponse.builder()
                 .id(permission.getId())
-                .module(moduleResponse)
                 .action(permission.getAction())
+                .scope(permission.getScope())
                 .code(permission.getCode())
                 .description(permission.getDescription())
                 .isActive(permission.isActive())

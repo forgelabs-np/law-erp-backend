@@ -1,6 +1,6 @@
 package com.lawfirm.erp.security;
 
-import com.lawfirm.erp.common.exception.UnauthorizedException;
+import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.auth.AuthenticatedDetail;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -27,6 +28,7 @@ import java.util.UUID;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
+    private final UserRepository userRepository;
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -53,6 +55,28 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String firmId = claims.get("firmId", String.class);
             String firmCode = claims.get("firmCode", String.class);
             String userType = claims.get("userType", String.class);
+            String userIdStr = claims.get("userId", String.class);
+
+            if (userIdStr != null && !"SUPER_ADMIN".equals(userType)) {
+                UUID userId = UUID.fromString(userIdStr);
+                Integer tokenVersion = claims.get("permVersion", Integer.class);
+
+                if (tokenVersion == null) {
+                    log.warn("Token missing permission version for user: {}", userIdStr);
+                    response.sendError(HttpStatus.UNAUTHORIZED.value(),
+                            "Your session is outdated. Please login again.");
+                    return;
+                }
+
+                Integer currentVersion = userRepository.findPermissionVersionById(userId);
+                if (currentVersion == null || !currentVersion.equals(tokenVersion)) {
+                    log.warn("Token stale for user {}: token version {} != current version {}",
+                            userIdStr, tokenVersion, currentVersion);
+                    response.sendError(HttpStatus.UNAUTHORIZED.value(),
+                            "Your permissions have changed. Please login again.");
+                    return;
+                }
+            }
 
             // Set firm context for non-super-admin users
             if (firmId != null && !"SUPER_ADMIN".equals(userType)) {
@@ -66,7 +90,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             deviceId = deviceId != null ? deviceId + "_" + jwtUtil.extractUserId(token) : "UNKNOWN_";
             request = new HeaderWrapper(request, Map.of("deviceId", deviceId));
             SecurityContextHolder.getContext().setAuthentication(auth);
-// After getting auth, populate AuthenticatedUser
+
             if (auth != null && auth.getPrincipal() instanceof AuthenticatedDetail) {
                 AuthenticatedDetail detail = (AuthenticatedDetail) auth.getPrincipal();
 
@@ -80,7 +104,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 if (detail.getFirmId() != null) {
                     authenticatedUser.setFirmId(UUID.fromString(detail.getFirmId()));
                 }
-                // TODO: Load roles and permissions from DB/cache
+
+                @SuppressWarnings("unchecked")
+                List<String> permissions = claims.get("permissions", List.class);
+                if (permissions != null) {
+                    authenticatedUser.setPermissions(permissions);
+                }
 
                 request.setAttribute("authenticatedUser", authenticatedUser);
             }

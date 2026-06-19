@@ -43,7 +43,6 @@ public class JwtUtil {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    // In generateAccessToken method - change HS256 to HS512
     public String generateAccessToken(User user) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId().toString());
@@ -55,22 +54,22 @@ public class JwtUtil {
         claims.put("roleCode", user.getRole().getRoleCode());
         claims.put("userType", user.getUserType().name());
 
+        // ✅ ADD THIS - permission version for JWT staleness check
+        claims.put("permVersion", user.getPermissionVersion() != null ? user.getPermissionVersion() : 0);
+
         if (user.getFirm() != null) {
             claims.put("firmId", user.getFirm().getId().toString());
             claims.put("firmCode", user.getFirm().getLawFirmCode());
         }
 
-        String token = Jwts.builder()
+        return Jwts.builder()
                 .id(user.getId().toString())
                 .claims(claims)
                 .subject(user.getUsername())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + accessExpiry))
-                .signWith(key, Jwts.SIG.HS512)  // ✅ CHANGE TO HS512
+                .signWith(key, Jwts.SIG.HS512)
                 .compact();
-
-        log.debug("Generated access token for user: {}", user.getUsername());
-        return token;
     }
 
     public String generateRefreshToken(User user) {
