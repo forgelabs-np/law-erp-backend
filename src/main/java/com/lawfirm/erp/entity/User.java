@@ -69,6 +69,10 @@ public class User extends ActiveAuditableEntity implements UserDetails {
     @Builder.Default
     private Boolean portalAccessEnabled = false;
 
+    @Column(name = "permission_version")
+    private Integer permissionVersion = 0;
+
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority("ROLE_" + role.getRoleCode()));

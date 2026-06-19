@@ -13,15 +13,14 @@ import java.util.UUID;
 
 @Repository
 public interface PermissionRepository extends JpaRepository<Permission, UUID> {
+
     Optional<Permission> findByCode(String code);
+
     boolean existsByCode(String code);
-    boolean existsByModuleIdAndAction(UUID moduleId, PermissionAction action);
-
-    List<Permission> findByModuleId(UUID moduleId);
-
-    @Query("SELECT COUNT(p) FROM Permission p WHERE p.module.id = :moduleId AND p.active = true")
-    long countByModuleId(@Param("moduleId") UUID moduleId);
 
     @Query("SELECT COUNT(rp) FROM RolePermission rp WHERE rp.permission.id = :permissionId")
     long countRolePermissionsByPermissionId(@Param("permissionId") UUID permissionId);
+
+    @Query("SELECT COUNT(mp) FROM ModulePermission mp WHERE mp.permission.id = :permissionId")
+    long countModulePermissionsByPermissionId(@Param("permissionId") UUID permissionId);
 }

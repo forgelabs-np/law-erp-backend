@@ -51,18 +51,17 @@ public class FirmService {
             throw new DuplicateResourceException("Admin mobile number already exists");
         }
 
-        // 3. Create Firm
+        // 3. Create Firm (REMOVED maxEmployees)
         Firm firm = Firm.builder()
                 .lawFirmCode(firmCode)
                 .name(request.getName())
                 .firmType(request.getFirmType())
                 .status(FirmStatus.ACTIVE)
-                .planTier(request.getPlanTier())
                 .email(request.getEmail())
                 .phone(request.getPhone())
                 .address(request.getAddress())
                 .jurisdiction(request.getJurisdiction())
-                .maxEmployees(resolveMaxEmployees(request.getPlanTier().name()))
+                // .maxEmployees(resolveMaxEmployees(...)) ← REMOVED THIS
                 .build();
         firm = firmRepository.save(firm);
         log.info("Firm created: {}", firm.getLawFirmCode());
@@ -71,7 +70,7 @@ public class FirmService {
         Role firmAdminRole = roleRepository.findByRoleCode("FIRM_ADMIN")
                 .orElseThrow(() -> new BusinessRuleException("FIRM_ADMIN role not found in system"));
 
-        // 5. Create Firm Admin User - REMOVED .active() because it's inherited
+        // 5. Create Firm Admin User
         User admin = User.builder()
                 .username(request.getAdminUsername())
                 .email(request.getAdminEmail())
@@ -81,16 +80,15 @@ public class FirmService {
                 .firm(firm)
                 .role(firmAdminRole)
                 .userType(UserType.FIRM_USER)
-                // .active(true)  ← REMOVE THIS - inherited from ActiveAuditableEntity
+                .isEmailVerified(true)
+                .isMobileVerified(true)
+                .isBlocked(false)
+                .loginAttempts(0)
                 .build();
-        admin = userRepository.save(admin);
-        log.info("Firm admin created: {}", admin.getUsername());
-
-        // Set active status manually if needed
         admin.setActive(true);
         admin = userRepository.save(admin);
 
-        // 6. Assign role via UserRole (for future multiple roles support)
+        // 6. Assign role via UserRole
         UserRole userRole = UserRole.builder()
                 .user(admin)
                 .role(firmAdminRole)
@@ -107,14 +105,5 @@ public class FirmService {
                 .adminUsername(admin.getUsername())
                 .message("Firm created successfully. Share lawFirmCode and credentials with admin.")
                 .build();
-    }
-
-    private int resolveMaxEmployees(String planTier) {
-        return switch (planTier) {
-            case "BASIC" -> 5;
-            case "PROFESSIONAL" -> 25;
-            case "ENTERPRISE" -> 500;
-            default -> 5;
-        };
     }
 }

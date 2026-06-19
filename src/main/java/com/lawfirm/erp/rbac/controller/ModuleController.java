@@ -3,6 +3,7 @@ package com.lawfirm.erp.rbac.controller;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
+import com.lawfirm.erp.dto.admin.request.AssignPermissionsRequest;
 import com.lawfirm.erp.dto.admin.request.ModuleRequest;
 import com.lawfirm.erp.dto.admin.response.ModuleResponse;
 import com.lawfirm.erp.rbac.service.ModuleService;
@@ -77,6 +78,17 @@ public class ModuleController {
         return responseHandler.ok(
                 moduleService.toggleModuleStatus(moduleId),
                 "Module status toggled successfully"
+        );
+    }
+
+    @PostMapping("/{moduleId}/permissions")
+    @Operation(summary = "Assign permissions to module")
+    public ResponseEntity<ApiResponse<ModuleResponse>> assignPermissionsToModule(
+            @PathVariable UUID moduleId,
+            @Valid @RequestBody ApiRequest<AssignPermissionsRequest> request) {
+        return responseHandler.ok(
+                moduleService.assignPermissionsToModule(moduleId, request.getData().getPermissionIds()),
+                "Permissions assigned to module successfully"
         );
     }
 }

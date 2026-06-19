@@ -12,6 +12,7 @@
         <result property="description" column="description"/>
         <result property="level" column="level"/>
         <result property="displayOrder" column="display_order"/>
+        <result property="sortOrder" column="sort_order"/>
         <result property="icon" column="icon"/>
         <result property="path" column="path"/>
         <result property="parentId" column="parent_id"/>
@@ -21,113 +22,74 @@
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
-    <!-- Get all modules -->
+    <!-- Base SQL fragment for reuse -->
+    <sql id="BaseModuleColumns">
+        id, name, code, description, level,
+        display_order, sort_order, icon, path,
+        parent_id, is_system, is_active,
+        created_at, updated_at
+    </sql>
+
+    <!-- Get all modules - ordered by sort_order then display_order -->
     <select id="findAllModules" resultMap="ModuleResultMap">
-        SELECT
-            id,
-            name,
-            code,
-            description,
-            level,
-            display_order,
-            icon,
-            path,
-            parent_id,
-            is_system,
-            is_active,
-            created_at,
-            updated_at
+        SELECT <include refid="BaseModuleColumns"/>
         FROM modules
-        ORDER BY level ASC, display_order ASC
+        ORDER BY sort_order ASC, display_order ASC
     </select>
 
     <!-- Get active modules -->
     <select id="findAllActiveModules" resultMap="ModuleResultMap">
-        SELECT
-            id,
-            name,
-            code,
-            description,
-            level,
-            display_order,
-            icon,
-            path,
-            parent_id,
-            is_system,
-            is_active,
-            created_at,
-            updated_at
+        SELECT <include refid="BaseModuleColumns"/>
         FROM modules
         WHERE is_active = true
-        ORDER BY level ASC, display_order ASC
+        ORDER BY sort_order ASC, display_order ASC
     </select>
 
     <!-- Get module by ID -->
     <select id="findModuleById" resultMap="ModuleResultMap">
-        SELECT
-            id,
-            name,
-            code,
-            description,
-            level,
-            display_order,
-            icon,
-            path,
-            parent_id,
-            is_system,
-            is_active,
-            created_at,
-            updated_at
+        SELECT <include refid="BaseModuleColumns"/>
         FROM modules
-        WHERE id = #{moduleId}
+        WHERE id = #{moduleId}::uuid
     </select>
 
     <!-- Get sub-modules by parent ID -->
     <select id="findSubModulesByParentId" resultMap="ModuleResultMap">
-        SELECT
-            id,
-            name,
-            code,
-            description,
-            level,
-            display_order,
-            icon,
-            path,
-            parent_id,
-            is_system,
-            is_active,
-            created_at,
-            updated_at
+        SELECT <include refid="BaseModuleColumns"/>
         FROM modules
-        WHERE parent_id = #{id}
-        ORDER BY display_order ASC
+        WHERE parent_id = #{id}::uuid
+        ORDER BY sort_order ASC, display_order ASC
     </select>
 
-    <!-- Get flat list -->
+    <!-- Get flat list for dropdown -->
     <select id="findAllModulesFlat" resultMap="ModuleResultMap">
-        SELECT
-            id,
-            name,
-            code,
-            description,
-            level,
-            display_order,
-            icon,
-            path,
-            parent_id,
-            is_system,
-            is_active,
-            created_at,
-            updated_at
+        SELECT <include refid="BaseModuleColumns"/>, parent_id
         FROM modules
-        ORDER BY level ASC, display_order ASC
+        ORDER BY sort_order ASC, display_order ASC
     </select>
 
-    <!-- Count permissions by module ID -->
+    <!-- ✅ FIXED: Use module_permissions junction table -->
     <select id="countPermissionsByModuleId" resultType="int">
         SELECT COUNT(*)
-        FROM permissions
-        WHERE module_id = #{moduleId}
+        FROM module_permissions
+        WHERE module_id = #{moduleId}::uuid
+    </select>
+
+    <!-- Get modules by level (for hierarchy building) -->
+    <select id="findModulesByLevel" resultMap="ModuleResultMap">
+        SELECT <include refid="BaseModuleColumns"/>
+        FROM modules
+        WHERE level = #{level}
+        ORDER BY sort_order ASC, display_order ASC
+    </select>
+
+    <!-- Search modules by name or code -->
+    <select id="searchModules" resultMap="ModuleResultMap">
+        SELECT <include refid="BaseModuleColumns"/>
+        FROM modules
+        WHERE (name ILIKE CONCAT('%', #{search}, '%')
+        OR code ILIKE CONCAT('%', #{search}, '%'))
+        ORDER BY sort_order ASC, display_order ASC
+        LIMIT #{limit} OFFSET #{offset}
     </select>
 
 </mapper>

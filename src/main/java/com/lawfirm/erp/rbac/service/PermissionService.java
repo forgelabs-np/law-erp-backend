@@ -4,11 +4,8 @@ import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.DuplicateResourceException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.dto.admin.request.PermissionRequest;
-import com.lawfirm.erp.dto.admin.response.ModuleResponse;
 import com.lawfirm.erp.dto.admin.response.PermissionResponse;
-import com.lawfirm.erp.rbac.entity.Module;
 import com.lawfirm.erp.rbac.entity.Permission;
-import com.lawfirm.erp.rbac.repository.ModuleRepository;
 import com.lawfirm.erp.rbac.repository.PermissionRepository;
 import com.lawfirm.erp.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
@@ -27,33 +24,47 @@ import java.util.stream.Collectors;
 public class PermissionService {
 
     private final PermissionRepository permissionRepository;
-    private final ModuleRepository moduleRepository;
     private final CurrentUserResolver currentUserResolver;
 
     @Transactional
     public PermissionResponse upsert(PermissionRequest request) {
         UUID adminId = currentUserResolver.getCurrentUserId();
+        if (adminId == null) {
+            throw new BusinessRuleException("Authenticated user not found");
+        }
 
-        // Get the module
-        Module module = moduleRepository.findById(request.getModuleId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        String.format("Module not found with id: %s", request.getModuleId())
-                ));
+        // Auto-generate code if not provided
+        String generatedCode = request.getCode();
+        if (generatedCode == null || generatedCode.isEmpty()) {
+            generatedCode = request.getModuleCode() + ":" + request.getAction().name();
+        }
 
         Permission permission = findExistingPermission(request);
 
         if (permission != null) {
-            updatePermission(permission, request, module, adminId);
+            updatePermission(permission, request, adminId);
             log.info("Permission updated: {} by admin: {}", permission.getCode(), adminId);
         } else {
-            validateCodeUniqueness(request.getCode());
-            validateModuleActionUniqueness(module.getId(), request.getAction());
-            permission = createPermission(request, module, adminId);
+            validateCodeUniqueness(generatedCode);
+            permission = createPermission(request, generatedCode, adminId);
             log.info("Permission created: {} by admin: {}", permission.getCode(), adminId);
         }
 
         permission = permissionRepository.save(permission);
         return toResponse(permission);
+    }
+
+    private Permission createPermission(PermissionRequest request, String code, UUID adminId) {
+        Permission permission = new Permission();
+        permission.setModuleCode(request.getModuleCode());
+        permission.setAction(request.getAction());
+        permission.setScope(request.getScope());
+        permission.setCode(code);
+        permission.setDescription(request.getDescription());
+        permission.setActive(request.getIsActive() != null ? request.getIsActive() : true);
+        permission.setCreatedBy(adminId);
+        permission.setCreatedAt(LocalDateTime.now());
+        return permission;
     }
 
     private Permission findExistingPermission(PermissionRequest request) {
@@ -72,17 +83,9 @@ public class PermissionService {
         }
     }
 
-    private void validateModuleActionUniqueness(UUID moduleId, com.lawfirm.erp.common.enums.PermissionAction action) {
-        if (permissionRepository.existsByModuleIdAndAction(moduleId, action)) {
-            throw new DuplicateResourceException(
-                    String.format("Permission with action %s already exists for this module", action)
-            );
-        }
-    }
-
-    private void updatePermission(Permission permission, PermissionRequest request, Module module, UUID adminId) {
-        permission.setModule(module);
+    private void updatePermission(Permission permission, PermissionRequest request, UUID adminId) {
         permission.setAction(request.getAction());
+        permission.setScope(request.getScope());
         permission.setCode(request.getCode());
         permission.setDescription(request.getDescription());
         if (request.getIsActive() != null) {
@@ -92,10 +95,10 @@ public class PermissionService {
         permission.setUpdatedAt(LocalDateTime.now());
     }
 
-    private Permission createPermission(PermissionRequest request, Module module, UUID adminId) {
+    private Permission createPermission(PermissionRequest request, UUID adminId) {
         Permission permission = new Permission();
-        permission.setModule(module);
         permission.setAction(request.getAction());
+        permission.setScope(request.getScope());
         permission.setCode(request.getCode());
         permission.setDescription(request.getDescription());
         permission.setActive(request.getIsActive() != null ? request.getIsActive() : true);
@@ -129,6 +132,13 @@ public class PermissionService {
         Permission permission = permissionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Permission not found: " + id));
 
+        // Check if permission is assigned to any module
+        if (permissionRepository.countModulePermissionsByPermissionId(id) > 0) {
+            throw new BusinessRuleException(
+                    String.format("Cannot delete permission: %s. It is assigned to modules.", permission.getCode())
+            );
+        }
+
         // Check if permission is assigned to any role
         if (permissionRepository.countRolePermissionsByPermissionId(id) > 0) {
             throw new BusinessRuleException(
@@ -155,17 +165,10 @@ public class PermissionService {
     }
 
     private PermissionResponse toResponse(Permission entity) {
-        ModuleResponse moduleResponse = ModuleResponse.builder()
-                .id(entity.getModule().getId())
-                .name(entity.getModule().getName())
-                .code(entity.getModule().getCode())
-                .isActive(entity.getModule().isActive())
-                .build();
-
         return PermissionResponse.builder()
                 .id(entity.getId())
-                .module(moduleResponse)
                 .action(entity.getAction())
+                .scope(entity.getScope())
                 .code(entity.getCode())
                 .description(entity.getDescription())
                 .isActive(entity.isActive())

@@ -21,7 +21,6 @@ import java.util.UUID;
 public class FirmProfileService {
 
     private final FirmRepository firmRepository;
-    private final UserRepository userRepository;
     private final CurrentUserResolver currentUserResolver;
 
     public FirmProfileResponse getMyFirmProfile() {
@@ -35,7 +34,6 @@ public class FirmProfileService {
         UUID firmId = getCurrentFirmId();
         Firm firm = getFirmById(firmId);
 
-        // Update only fields that are provided
         if (request.getName() != null) firm.setName(request.getName());
         if (request.getEmail() != null) firm.setEmail(request.getEmail());
         if (request.getPhone() != null) firm.setPhone(request.getPhone());
@@ -63,24 +61,17 @@ public class FirmProfileService {
     }
 
     private FirmProfileResponse toProfileResponse(Firm firm) {
-        long employeeCount = userRepository.countByFirmIdAndUserType(firm.getId(), com.lawfirm.erp.common.enums.UserType.FIRM_USER);
-        long customerCount = userRepository.countByFirmIdAndUserType(firm.getId(), com.lawfirm.erp.common.enums.UserType.CLIENT);
-
         return FirmProfileResponse.builder()
                 .id(firm.getId())
                 .lawFirmCode(firm.getLawFirmCode())
                 .name(firm.getName())
                 .firmType(firm.getFirmType())
                 .status(firm.getStatus())
-                .planTier(firm.getPlanTier())
                 .email(firm.getEmail())
                 .phone(firm.getPhone())
                 .address(firm.getAddress())
                 .jurisdiction(firm.getJurisdiction())
                 .logoUrl(firm.getLogoUrl())
-                .maxEmployees(firm.getMaxEmployees())
-                .currentEmployeeCount((int) employeeCount)
-                .currentCustomerCount((int) customerCount)
                 .createdAt(firm.getCreatedAt())
                 .build();
     }

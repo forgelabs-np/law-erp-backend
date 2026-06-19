@@ -3,7 +3,6 @@ package com.lawfirm.erp.auth.service;
 import com.lawfirm.erp.common.enums.FirmStatus;
 import com.lawfirm.erp.common.enums.FirmType;
 import com.lawfirm.erp.common.enums.LoginStatus;
-import com.lawfirm.erp.common.enums.PlanTier;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.common.service.UserLoginHistoryService;
@@ -149,10 +148,8 @@ public class AuthService {
                 .name(request.getFullName() + " Law")
                 .firmType(FirmType.SOLO)
                 .status(FirmStatus.ACTIVE)
-                .planTier(PlanTier.BASIC)
                 .email(request.getEmail())
                 .phone(request.getMobileNo())
-                .maxEmployees(1)
                 .build();
         firm = firmRepository.save(firm);
 
@@ -192,10 +189,8 @@ public class AuthService {
                     .name(request.getFullName())
                     .firmType(FirmType.SOLO)
                     .status(FirmStatus.ACTIVE)
-                    .planTier(PlanTier.BASIC)
                     .email(request.getEmail())
                     .phone(request.getMobileNo())
-                    .maxEmployees(1)
                     .build();
             firm = firmRepository.save(firm);
         }
