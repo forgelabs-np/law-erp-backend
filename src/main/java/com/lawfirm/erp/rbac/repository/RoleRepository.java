@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,4 +23,13 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
 
     @Query("SELECT COUNT(ur) FROM UserRole ur WHERE ur.role.id = :roleId")
     int countUsersByRoleId(@Param("roleId") UUID roleId);
+
+    @Query("SELECT r FROM Role r WHERE r.firm IS NULL AND r.isSystem = true")
+    List<Role> findByFirmIsNullAndIsSystemTrue();
+
+    @Query("SELECT r FROM Role r WHERE r.firm.id = :firmId AND r.roleCode = :roleCode")
+    Optional<Role> findByFirmIdAndRoleCode(@Param("firmId") UUID firmId, @Param("roleCode") String roleCode);
+
+    @Query("SELECT r FROM Role r WHERE r.firm.id = :firmId AND r.isSystem = false")
+    List<Role> findByFirmIdAndIsSystemFalse(@Param("firmId") UUID firmId);
 }

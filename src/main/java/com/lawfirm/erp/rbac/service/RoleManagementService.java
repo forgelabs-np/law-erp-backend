@@ -1,5 +1,8 @@
 package com.lawfirm.erp.rbac.service;
 
+import com.lawfirm.erp.audit.service.AuditService;
+import com.lawfirm.erp.common.enums.AuditAction;
+import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.DuplicateResourceException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
@@ -29,6 +32,7 @@ public class RoleManagementService {
     private final RoleRepository roleRepository;
     private final RolePermissionRepository rolePermissionRepository;
     private final CurrentUserResolver currentUserResolver;
+    private final AuditService auditService;
 
     @Transactional
     public RoleResponse upsertRole(RoleRequest request) {
@@ -40,15 +44,94 @@ public class RoleManagementService {
             validateNotSystemRole(role, "modify");
             updateRole(role, request, adminId);
             log.info("Role updated: {} by admin: {}", role.getRoleCode(), adminId);
+            role = roleRepository.save(role);
+
+            // ✅ AUDIT: Role updated
+            auditService.log(
+                    AuditAction.ROLE_UPDATED,
+                    AuditEntity.ROLE,
+                    role.getId(),
+                    "Role updated: " + role.getRoleCode() + " (" + role.getRoleName() + ")"
+            );
         } else {
             validateNoDuplicateRole(request);
             role = createRole(request, adminId);
             log.info("Role created: {} by admin: {}", role.getRoleCode(), adminId);
+            role = roleRepository.save(role);
+
+            // ✅ AUDIT: Role created
+            auditService.log(
+                    AuditAction.ROLE_CREATED,
+                    AuditEntity.ROLE,
+                    role.getId(),
+                    "Role created: " + role.getRoleCode() + " (" + role.getRoleName() + ")"
+            );
         }
 
-        role = roleRepository.save(role);
         return convertToCompleteResponse(role);
     }
+
+    @Transactional
+    public void deleteRole(UUID roleId) {
+        UUID adminId = getCurrentAdminId();
+
+        Role role = roleRepository.findById(roleId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        String.format("Role not found with id: %s", roleId)
+                ));
+
+        validateNotSystemRole(role, "delete");
+
+        if (roleRepository.countUsersByRoleId(roleId) > 0) {
+            throw new BusinessRuleException(
+                    String.format("Cannot delete role: %s. It is currently assigned to %d user(s)",
+                            role.getRoleName(), roleRepository.countUsersByRoleId(roleId))
+            );
+        }
+
+        roleRepository.delete(role);
+        log.info("Role deleted: {} by admin: {}", role.getRoleCode(), adminId);
+
+        // ✅ AUDIT: Role deleted
+        auditService.log(
+                AuditAction.ROLE_DELETED,
+                AuditEntity.ROLE,
+                role.getId(),
+                "Role deleted: " + role.getRoleCode()
+        );
+    }
+
+    @Transactional
+    public RoleResponse toggleRoleStatus(UUID roleId) {
+        UUID adminId = getCurrentAdminId();
+
+        Role role = roleRepository.findById(roleId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        String.format("Role not found with id: %s", roleId)
+                ));
+
+        validateNotSystemRole(role, "toggle status of");
+
+        role.setActive(!role.isActive());
+        role.setUpdatedBy(adminId);
+        role.setUpdatedAt(LocalDateTime.now());
+        role = roleRepository.save(role);
+
+        log.info("Role {} toggled to {} by admin: {}",
+                role.getRoleCode(), role.isActive(), adminId);
+
+        // ✅ AUDIT: Role status toggled
+        auditService.log(
+                role.isActive() ? AuditAction.ROLE_ACTIVATED : AuditAction.ROLE_DEACTIVATED,
+                AuditEntity.ROLE,
+                role.getId(),
+                "Role " + role.getRoleCode() + " toggled to: " + (role.isActive() ? "active" : "inactive")
+        );
+
+        return convertToCompleteResponse(role);
+    }
+
+    // ─── Private Methods ─────────────────────────────────────────────────────
 
     private UUID getCurrentAdminId() {
         UUID adminId = currentUserResolver.getCurrentUserId();
@@ -133,50 +216,6 @@ public class RoleManagementService {
         return convertToCompleteResponse(role);
     }
 
-    @Transactional
-    public void deleteRole(UUID roleId) {
-        UUID adminId = getCurrentAdminId();
-
-        Role role = roleRepository.findById(roleId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        String.format("Role not found with id: %s", roleId)
-                ));
-
-        validateNotSystemRole(role, "delete");
-
-        if (roleRepository.countUsersByRoleId(roleId) > 0) {
-            throw new BusinessRuleException(
-                    String.format("Cannot delete role: %s. It is currently assigned to %d user(s)",
-                            role.getRoleName(), roleRepository.countUsersByRoleId(roleId))
-            );
-        }
-
-        roleRepository.delete(role);
-        log.info("Role deleted: {} by admin: {}", role.getRoleCode(), adminId);
-    }
-
-    @Transactional
-    public RoleResponse toggleRoleStatus(UUID roleId) {
-        UUID adminId = getCurrentAdminId();
-
-        Role role = roleRepository.findById(roleId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        String.format("Role not found with id: %s", roleId)
-                ));
-
-        validateNotSystemRole(role, "toggle status of");
-
-        role.setActive(!role.isActive());
-        role.setUpdatedBy(adminId);
-        role.setUpdatedAt(LocalDateTime.now());
-        role = roleRepository.save(role);
-
-        log.info("Role {} toggled to {} by admin: {}",
-                role.getRoleCode(), role.isActive(), adminId);
-
-        return convertToCompleteResponse(role);
-    }
-
     private RoleResponse convertToMinimalResponse(Role role) {
         return RoleResponse.builder()
                 .id(role.getId())
@@ -210,7 +249,6 @@ public class RoleManagementService {
                 .build();
     }
 
-    // FIXED: Permission has NO module in Option B
     private PermissionResponse convertPermissionToResponse(Permission permission) {
         return PermissionResponse.builder()
                 .id(permission.getId())

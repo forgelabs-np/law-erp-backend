@@ -1,0 +1,85 @@
+package com.lawfirm.erp.common.enums;
+
+/**
+ * All auditable actions across the system.
+ * Each name must be <= 30 chars — stored as CHAR(30) in DB.
+ */
+public enum AuditAction {
+
+    // ── Auth ────────────────────────────────
+    LOGIN,
+    LOGOUT,
+    LOGIN_FAILED,
+    PASSWORD_CHANGED,
+    TOKEN_REFRESHED,
+
+    // ── User / Employee ──────────────────────
+    USER_CREATED,
+    USER_UPDATED,
+    USER_DEACTIVATED,
+    USER_ACTIVATED,
+    USER_ROLE_CHANGED,
+    USER_BLOCKED,
+    USER_UNBLOCKED,
+
+    // ── Client ──────────────────────────────
+    CLIENT_CREATED,
+    CLIENT_UPDATED,
+    CLIENT_PORTAL_ENABLED,
+    CLIENT_PORTAL_DISABLED,
+
+    // ── Case management (Phase 9) ────────────
+    CASE_CREATED,
+    CASE_UPDATED,
+    CASE_DELETED,
+    CASE_ASSIGNED,
+    CASE_STATUS_CHANGED,
+    CASE_ARCHIVED,
+    CASE_REOPENED,
+
+    // ── Document management ──────────────────
+    DOCUMENT_UPLOADED,
+    DOCUMENT_DELETED,
+    DOCUMENT_DOWNLOADED,
+    DOCUMENT_SHARED,
+
+    // ── Billing ──────────────────────────────
+    INVOICE_CREATED,
+    INVOICE_UPDATED,
+    INVOICE_APPROVED,
+    INVOICE_SENT,
+    PAYMENT_RECORDED,
+
+    // ── Calendar ─────────────────────────────
+    HEARING_SCHEDULED,
+    HEARING_UPDATED,
+    HEARING_CANCELLED,
+
+    // ── Firm management ──────────────────────
+    FIRM_CREATED,
+    FIRM_UPDATED,
+    FIRM_SUSPENDED,
+    FIRM_MODULE_ENABLED,
+    FIRM_MODULE_DISABLED,
+    FIRM_MODULE_CONFIGURED,
+
+    // ── RBAC ─────────────────────────────────
+    ROLE_ASSIGNED,
+    ROLE_UPDATED,
+    ROLE_CREATED,
+    ROLE_DELETED,
+    ROLE_ACTIVATED,
+    ROLE_DEACTIVATED,
+    ROLE_PERMISSION_CHANGED,
+
+    PERMISSION_CREATED,
+    PERMISSION_DELETED,
+    PERMISSION_ACTIVATED,
+    PERMISSION_DEACTIVATED,
+    PERMISSION_UPDATED,
+    MODULE_CREATED,
+    MODULE_ACTIVATED,
+    MODULE_DEACTIVATED,
+    MODULE_UPDATED,
+    MODULE_DELETED
+}

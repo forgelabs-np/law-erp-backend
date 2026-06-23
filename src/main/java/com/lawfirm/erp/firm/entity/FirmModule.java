@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "firm_modules", uniqueConstraints = {
@@ -33,8 +34,17 @@ public class FirmModule extends AuditableEntity {
     private LocalDateTime enabledAt;
 
     @Column(name = "expires_at")
-    private LocalDateTime expiresAt;  // For trial/demo
+    private LocalDateTime expiresAt;
 
     @Column(name = "is_trial")
     private Boolean isTrial = false;
+
+    @Column(name = "max_file_size_mb")
+    private Integer maxFileSizeMb = 10;
+
+    @Column(name = "allowed_extensions", length = 500)
+    private String allowedExtensions; // CSV: "pdf,docx,doc,jpg,png"
+
+    @Column(name = "notes", columnDefinition = "TEXT")
+    private String notes;
 }

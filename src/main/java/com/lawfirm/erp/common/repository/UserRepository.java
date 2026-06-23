@@ -58,7 +58,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query("UPDATE User u SET u.permissionVersion = u.permissionVersion + 1 WHERE u.id = :userId")
     void incrementPermissionVersion(@Param("userId") UUID userId);
 
-
     @Query("SELECT u.id FROM User u WHERE u.role.id = :roleId")
     List<UUID> findUserIdsByRoleId(@Param("roleId") UUID roleId);
 }

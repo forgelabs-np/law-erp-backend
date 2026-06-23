@@ -1,5 +1,8 @@
 package com.lawfirm.erp.auth.service;
 
+import com.lawfirm.erp.audit.service.AuditService;
+import com.lawfirm.erp.common.enums.AuditAction;
+import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.FirmStatus;
 import com.lawfirm.erp.common.enums.FirmType;
 import com.lawfirm.erp.common.enums.LoginStatus;
@@ -46,6 +49,7 @@ public class AuthService {
     private final FirmRepository firmRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserLoginHistoryService loginHistoryService;
+    private final AuditService auditService;
 
     @Value("${security.max-login-attempts:5}")
     private int maxLoginAttempts;
@@ -109,6 +113,15 @@ public class AuthService {
             user.setLockedUntil(null);
             user.setLastLoginAt(LocalDateTime.now());
             userRepository.save(user);
+
+            //  AUDIT: Login success
+            auditService.log(
+                    AuditAction.LOGIN,
+                    AuditEntity.AUTH,
+                    user.getId(),
+                    "User logged in: " + user.getUsername()
+            );
+
         } catch (AuthenticationException e) {
             user.setLoginAttempts(user.getLoginAttempts() + 1);
             if (user.getLoginAttempts() >= maxLoginAttempts) {
@@ -116,6 +129,15 @@ public class AuthService {
             }
             userRepository.save(user);
             loginHistoryService.saveRecord(user, LoginStatus.LOGIN_FAILED, "Invalid password");
+
+            // ✅ AUDIT: Login failed
+            auditService.log(
+                    AuditAction.LOGIN_FAILED,
+                    AuditEntity.AUTH,
+                    user.getId(),
+                    "Failed login attempt for: " + user.getUsername()
+            );
+
             throw new BadCredentialsException("Invalid username or password");
         }
 
@@ -167,6 +189,22 @@ public class AuthService {
         user.setUserType(UserType.FIRM_USER);
         user = userRepository.save(user);
 
+        // ✅ AUDIT: Firm created
+        auditService.log(
+                AuditAction.FIRM_CREATED,
+                AuditEntity.FIRM,
+                firm.getId(),
+                "Firm created: " + firm.getLawFirmCode() + " (" + firm.getName() + ")"
+        );
+
+        // ✅ AUDIT: User created (FIRM_ADMIN)
+        auditService.log(
+                AuditAction.USER_CREATED,
+                AuditEntity.USER,
+                user.getId(),
+                "User registered: " + user.getUsername() + " (FIRM_ADMIN) for firm: " + firm.getLawFirmCode()
+        );
+
         log.info("Registered solo lawyer: {} with firm: {}", user.getUsername(), firm.getLawFirmCode());
 
         return RegisterResponse.builder()
@@ -209,6 +247,13 @@ public class AuthService {
         user.setUserType(UserType.CLIENT);
         user = userRepository.save(user);
 
+        auditService.log(
+                AuditAction.CLIENT_CREATED,
+                AuditEntity.CLIENT,
+                user.getId(),
+                "Client registered: " + user.getUsername() + " (" + user.getFullName() + ") under firm: " + firm.getLawFirmCode()
+        );
+
         log.info("Registered client: {} under firm: {}", user.getUsername(), firm.getLawFirmCode());
 
         return RegisterResponse.builder()
@@ -231,6 +276,13 @@ public class AuthService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         String newAccessToken = jwtUtil.generateAccessToken(user);
+
+        auditService.log(
+                AuditAction.TOKEN_REFRESHED,
+                AuditEntity.AUTH,
+                user.getId(),
+                "Token refreshed for user: " + user.getUsername()
+        );
 
         return LoginResponse.builder()
                 .accessToken(newAccessToken)

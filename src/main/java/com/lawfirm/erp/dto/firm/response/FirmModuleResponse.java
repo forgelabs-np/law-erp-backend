@@ -2,6 +2,7 @@ package com.lawfirm.erp.dto.firm.response;
 
 import lombok.Builder;
 import lombok.Data;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -16,4 +17,8 @@ public class FirmModuleResponse {
     private LocalDateTime enabledAt;
     private LocalDateTime expiresAt;
     private Boolean isTrial;
+
+    private Integer maxFileSizeMb;
+    private String allowedExtensions;
+    private String notes;
 }
