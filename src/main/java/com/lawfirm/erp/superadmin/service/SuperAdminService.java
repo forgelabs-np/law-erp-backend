@@ -1,5 +1,8 @@
 package com.lawfirm.erp.superadmin.service;
 
+import com.lawfirm.erp.audit.service.AuditService;
+import com.lawfirm.erp.common.enums.AuditAction;
+import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
@@ -37,6 +40,7 @@ public class SuperAdminService {
     private final RoleRepository roleRepository;
     private final FirmRepository firmRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuditService auditService;
 
     @Value("${super-admin.registration-secret:}")
     private String superAdminSecret;
@@ -82,6 +86,14 @@ public class SuperAdminService {
         user.setActive(true);
         user = userRepository.save(user);
 
+        // ✅ AUDIT: Super Admin created
+        auditService.log(
+                AuditAction.USER_CREATED,
+                AuditEntity.USER,
+                user.getId(),
+                "Super Admin registered: " + user.getUsername()
+        );
+
         log.info("Super admin registered: {}", user.getUsername());
 
         return RegisterResponse.builder()
@@ -110,6 +122,14 @@ public class SuperAdminService {
             User authenticatedUser = (User) authentication.getPrincipal();
             String accessToken = jwtUtil.generateAccessToken(authenticatedUser);
             String refreshToken = jwtUtil.generateRefreshToken(authenticatedUser);
+
+            // ✅ AUDIT: Super Admin login
+            auditService.log(
+                    AuditAction.LOGIN,
+                    AuditEntity.AUTH,
+                    user.getId(),
+                    "Super Admin logged in: " + user.getUsername()
+            );
 
             return LoginResponse.builder()
                     .accessToken(accessToken)

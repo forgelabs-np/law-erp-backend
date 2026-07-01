@@ -1,8 +1,10 @@
 package com.lawfirm.erp.firm.service;
 
+import com.lawfirm.erp.audit.service.AuditService;
+import com.lawfirm.erp.common.enums.AuditAction;
+import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
-import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.firm.request.UpdateFirmProfileRequest;
 import com.lawfirm.erp.dto.firm.response.FirmProfileResponse;
 import com.lawfirm.erp.firm.entity.Firm;
@@ -22,6 +24,7 @@ public class FirmProfileService {
 
     private final FirmRepository firmRepository;
     private final CurrentUserResolver currentUserResolver;
+    private final AuditService auditService;
 
     public FirmProfileResponse getMyFirmProfile() {
         UUID firmId = getCurrentFirmId();
@@ -34,6 +37,9 @@ public class FirmProfileService {
         UUID firmId = getCurrentFirmId();
         Firm firm = getFirmById(firmId);
 
+        String oldName = firm.getName();
+        String oldEmail = firm.getEmail();
+
         if (request.getName() != null) firm.setName(request.getName());
         if (request.getEmail() != null) firm.setEmail(request.getEmail());
         if (request.getPhone() != null) firm.setPhone(request.getPhone());
@@ -43,6 +49,13 @@ public class FirmProfileService {
 
         firm = firmRepository.save(firm);
         log.info("Firm profile updated: {}", firm.getLawFirmCode());
+
+        auditService.log(
+                AuditAction.FIRM_UPDATED,
+                AuditEntity.FIRM,
+                firm.getId(),
+                "Firm profile updated: " + firm.getLawFirmCode() + " (name: " + oldName + " → " + firm.getName() + ")"
+        );
 
         return toProfileResponse(firm);
     }

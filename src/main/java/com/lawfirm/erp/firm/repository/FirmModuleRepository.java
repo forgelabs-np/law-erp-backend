@@ -23,7 +23,10 @@ public interface FirmModuleRepository extends JpaRepository<FirmModule, UUID> {
 
     @Query("SELECT CASE WHEN COUNT(fm) > 0 THEN true ELSE false END " +
             "FROM FirmModule fm JOIN fm.module m " +
-            "WHERE fm.firm.id = :firmId AND m.code = :moduleCode AND fm.isEnabled = true")
+            "WHERE fm.firm.id = :firmId " +
+            "AND m.code = :moduleCode " +
+            "AND fm.isEnabled = true " +
+            "AND (fm.expiresAt IS NULL OR fm.expiresAt > CURRENT_TIMESTAMP)")
     boolean existsByFirmIdAndModuleCodeAndIsEnabledTrue(@Param("firmId") UUID firmId,
                                                         @Param("moduleCode") String moduleCode);
 }

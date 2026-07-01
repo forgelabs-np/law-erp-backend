@@ -37,9 +37,6 @@ public class Firm extends ActiveAuditableEntity {
     private String jurisdiction;
     private String logoUrl;
 
-    @Column(name = "plan_expires_at")
-    private LocalDateTime planExpiresAt;
-
     @Column(columnDefinition = "TEXT")
     private String settings;
 }

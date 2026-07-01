@@ -1,5 +1,8 @@
 package com.lawfirm.erp.rbac.service;
 
+import com.lawfirm.erp.audit.service.AuditService;
+import com.lawfirm.erp.common.enums.AuditAction;
+import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.DuplicateResourceException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
@@ -33,6 +36,7 @@ public class ModuleService {
     private final ModuleMapper moduleMapper;
     private final CurrentUserResolver currentUserResolver;
     private final ModulePermissionRepository modulePermissionRepository;
+    private final AuditService auditService;
 
     @Transactional
     public ModuleResponse upsertModule(ModuleRequest request) {
@@ -42,18 +46,34 @@ public class ModuleService {
         }
 
         Module existingModule = findExistingModule(request);
-        final Module module;  // Declare as effectively final
+        final Module module;
 
         if (existingModule != null) {
             validateNotSystemModule(existingModule, "modify");
             updateModule(existingModule, request, adminId);
             log.info("Module updated: {} by admin: {}", existingModule.getCode(), adminId);
             module = moduleRepository.save(existingModule);
+
+            // ✅ AUDIT: Module updated
+            auditService.log(
+                    AuditAction.MODULE_UPDATED,
+                    AuditEntity.MODULE,
+                    module.getId(),
+                    "Module updated: " + module.getCode() + " (" + module.getName() + ")"
+            );
         } else {
             validateDuplicateModule(request);
             Module newModule = createModule(request, adminId);
             log.info("Module created: {} by admin: {}", newModule.getCode(), adminId);
             module = moduleRepository.save(newModule);
+
+            // ✅ AUDIT: Module created
+            auditService.log(
+                    AuditAction.MODULE_CREATED,
+                    AuditEntity.MODULE,
+                    module.getId(),
+                    "Module created: " + module.getCode() + " (" + module.getName() + ")"
+            );
         }
 
         // Handle permission assignments using junction table
@@ -65,7 +85,7 @@ public class ModuleService {
 
                 List<ModulePermission> modulePermissions = permissions.stream()
                         .map(permission -> ModulePermission.builder()
-                                .module(module)  // module is effectively final here
+                                .module(module)
                                 .permission(permission)
                                 .build())
                         .collect(Collectors.toList());
@@ -78,7 +98,6 @@ public class ModuleService {
         return convertToCompleteResponse(module);
     }
 
-    // Assign permissions to existing module
     @Transactional
     public ModuleResponse assignPermissionsToModule(UUID moduleId, List<UUID> permissionIds) {
         UUID adminId = currentUserResolver.getCurrentUserId();
@@ -91,10 +110,8 @@ public class ModuleService {
 
         validateNotSystemModule(module, "modify permissions of");
 
-        // Clear existing permissions
         modulePermissionRepository.deleteByModuleId(moduleId);
 
-        // Assign new permissions
         if (permissionIds != null && !permissionIds.isEmpty()) {
             List<Permission> permissions = permissionRepository.findAllById(permissionIds);
 
@@ -111,12 +128,19 @@ public class ModuleService {
 
             modulePermissionRepository.saveAll(modulePermissions);
             log.info("Assigned {} permissions to module: {}", permissions.size(), module.getCode());
+
+            // ✅ AUDIT: Permissions assigned to module
+            auditService.log(
+                    AuditAction.ROLE_PERMISSION_CHANGED,
+                    AuditEntity.MODULE,
+                    module.getId(),
+                    "Assigned " + permissions.size() + " permissions to module: " + module.getCode()
+            );
         }
 
         return convertToCompleteResponse(module);
     }
 
-    // GET ALL - Using MyBatis (minimal data, no sub-modules in tree)
     public List<ModuleResponse> getAllModules() {
         List<ModuleResponse> allModules = moduleMapper.findAllModules();
         return buildModuleTree(allModules);
@@ -142,13 +166,11 @@ public class ModuleService {
         return rootModules;
     }
 
-    // GET ACTIVE - MyBatis
     public List<ModuleResponse> getActiveModules() {
         List<ModuleResponse> allModules = moduleMapper.findAllActiveModules();
         return buildModuleTree(allModules);
     }
 
-    // GET BY ID - Using JPA to get sub-modules and permissions
     public ModuleResponse getModuleById(UUID moduleId) {
         Module module = moduleRepository.findById(moduleId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -157,7 +179,6 @@ public class ModuleService {
         return convertToCompleteResponseWithSubModules(module);
     }
 
-    // Get all modules as flat list (for dropdown/selection)
     public List<ModuleResponse> getAllModulesFlat() {
         return moduleMapper.findAllModulesFlat();
     }
@@ -173,7 +194,6 @@ public class ModuleService {
 
         validateNotSystemModule(module, "delete");
 
-        // Check if module has sub-modules
         if (module.getSubModules() != null && !module.getSubModules().isEmpty()) {
             throw new BusinessRuleException(
                     String.format("Cannot delete module: %s. It has %d sub-modules. Delete sub-modules first.",
@@ -181,7 +201,6 @@ public class ModuleService {
             );
         }
 
-        // Check if module has permissions (via junction table)
         long permissionCount = modulePermissionRepository.countByModuleId(moduleId);
         if (permissionCount > 0) {
             throw new BusinessRuleException(
@@ -192,6 +211,14 @@ public class ModuleService {
 
         moduleRepository.delete(module);
         log.info("Module deleted: {} by admin: {}", module.getCode(), adminId);
+
+        // ✅ AUDIT: Module deleted
+        auditService.log(
+                AuditAction.MODULE_DELETED,
+                AuditEntity.MODULE,
+                module.getId(),
+                "Module deleted: " + module.getCode()
+        );
     }
 
     @Transactional
@@ -209,7 +236,6 @@ public class ModuleService {
         module.setUpdatedAt(LocalDateTime.now());
         module = moduleRepository.save(module);
 
-        // Cascade disable to child modules
         if (!newStatus && module.getSubModules() != null) {
             for (Module child : module.getSubModules()) {
                 child.setActive(false);
@@ -220,8 +246,18 @@ public class ModuleService {
             log.info("Disabled {} child modules of {}", module.getSubModules().size(), module.getCode());
         }
 
+        // ✅ AUDIT: Module status toggled
+        auditService.log(
+                newStatus ? AuditAction.MODULE_ACTIVATED : AuditAction.MODULE_DEACTIVATED,
+                AuditEntity.MODULE,
+                module.getId(),
+                "Module " + module.getCode() + " toggled to: " + (newStatus ? "active" : "inactive")
+        );
+
         return convertToCompleteResponse(module);
     }
+
+    // ─── Private Methods ─────────────────────────────────────────────────────
 
     private Module findExistingModule(ModuleRequest request) {
         if (request.getId() != null) {
@@ -307,7 +343,6 @@ public class ModuleService {
         return module;
     }
 
-    // Complete response (with permissions from junction table)
     private ModuleResponse convertToCompleteResponse(Module module) {
         List<PermissionResponse> permissions = modulePermissionRepository
                 .findPermissionsByModuleId(module.getId())
@@ -341,7 +376,6 @@ public class ModuleService {
                 .build();
     }
 
-    // Complete response WITH sub-modules
     private ModuleResponse convertToCompleteResponseWithSubModules(Module module) {
         List<PermissionResponse> permissions = modulePermissionRepository
                 .findPermissionsByModuleId(module.getId())
@@ -383,7 +417,6 @@ public class ModuleService {
                 .build();
     }
 
-    // Minimal response (no permissions, no sub-modules)
     private ModuleResponse convertToMinimalResponse(Module module) {
         return ModuleResponse.builder()
                 .id(module.getId())
