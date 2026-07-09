@@ -45,17 +45,15 @@ public class AuditLog {
     @Column(updatable = false, nullable = false)
     private UUID id;
 
-    // ── Who ──────────────────────────────────────────────────────────────
     @Column(name = "firm_id")
     private UUID firmId;                    // null only for SUPER_ADMIN actions
 
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
-    @Column(name = "user_type", nullable = false, length = 1, columnDefinition = "CHAR(1)")
+    @Column(name = "user_type", nullable = false, length = 15)
     private String userType;                // 'S' 'F' 'C'  — single char, not full enum string
 
-    // ── What ─────────────────────────────────────────────────────────────
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30, columnDefinition = "CHAR(30)")
     private AuditAction action;
