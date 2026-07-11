@@ -40,10 +40,10 @@ public class User extends ActiveAuditableEntity implements UserDetails {
     @Column(name = "user_type", nullable = false)
     private UserType userType;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String username;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String email;
 
     private String mobileNo;

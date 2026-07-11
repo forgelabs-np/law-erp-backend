@@ -1,4 +1,4 @@
-package com.lawfirm.erp.audit.annotation;
+package com.lawfirm.erp.modules.audit.annotation;
 
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;

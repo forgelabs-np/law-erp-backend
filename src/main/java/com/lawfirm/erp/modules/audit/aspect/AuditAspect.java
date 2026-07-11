@@ -1,9 +1,9 @@
-package com.lawfirm.erp.audit.aspect;
+package com.lawfirm.erp.modules.audit.aspect;
 
-import com.lawfirm.erp.audit.annotation.Audit;
-import com.lawfirm.erp.audit.entity.AuditLog;
-import com.lawfirm.erp.audit.repository.AuditLogRepository;
-import com.lawfirm.erp.audit.util.AuditSpelHelper;
+import com.lawfirm.erp.modules.audit.annotation.Audit;
+import com.lawfirm.erp.modules.audit.entity.AuditLog;
+import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
+import com.lawfirm.erp.modules.audit.util.AuditSpelHelper;
 import com.lawfirm.erp.security.AuthenticatedUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,7 +42,7 @@ public class AuditAspect {
 
     private final AuditLogRepository auditLogRepository;
 
-    @Around("@annotation(com.lawfirm.erp.audit.annotation.Audit)")
+    @Around("@annotation(com.lawfirm.erp.modules.audit.annotation.Audit)")
     public Object logAudit(ProceedingJoinPoint joinPoint) throws Throwable {
         // 1. Execute the method first
         Object result = joinPoint.proceed();

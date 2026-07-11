@@ -1,7 +1,7 @@
-package com.lawfirm.erp.audit.service;
+package com.lawfirm.erp.modules.audit.service;
 
-import com.lawfirm.erp.audit.entity.AuditLog;
-import com.lawfirm.erp.audit.repository.AuditLogRepository;
+import com.lawfirm.erp.modules.audit.entity.AuditLog;
+import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.security.AuthenticatedUser;
@@ -10,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -94,8 +93,6 @@ public class AuditService {
                     action, entityType, entityId, e.getMessage());
         }
     }
-
-    // ── Helpers — called on the main request thread only ─────────────────────
 
     private AuthenticatedUser getCurrentUser() {
         try {

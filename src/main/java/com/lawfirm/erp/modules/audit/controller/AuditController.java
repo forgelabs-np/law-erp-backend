@@ -1,7 +1,7 @@
-package com.lawfirm.erp.audit.controller;
+package com.lawfirm.erp.modules.audit.controller;
 
-import com.lawfirm.erp.audit.entity.AuditLog;
-import com.lawfirm.erp.audit.repository.AuditLogRepository;
+import com.lawfirm.erp.modules.audit.entity.AuditLog;
+import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
