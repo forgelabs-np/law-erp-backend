@@ -16,11 +16,15 @@ import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "users",
+@Table(
+        name = "users",
         uniqueConstraints = {
-                @UniqueConstraint(columnNames = {"email", "firm_id"}),
-                @UniqueConstraint(columnNames = {"username", "firm_id"})
-        })
+                // username unique per firm — two firms can both have "john"
+                @UniqueConstraint(columnNames = {"username", "firm_id"}),
+                // email unique per firm — same logic
+                @UniqueConstraint(columnNames = {"email", "firm_id"})
+        }
+)
 @Getter
 @Setter
 @AllArgsConstructor
@@ -43,7 +47,7 @@ public class User extends ActiveAuditableEntity implements UserDetails {
     @Column(nullable = false)
     private String username;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String email;
 
     private String mobileNo;
@@ -69,26 +73,19 @@ public class User extends ActiveAuditableEntity implements UserDetails {
     @Builder.Default
     private Boolean portalAccessEnabled = false;
 
-    @Column(name = "permission_version")
+    @Column(name = "permission_version", columnDefinition = "INTEGER DEFAULT 0")
+    @Builder.Default
     private Integer permissionVersion = 0;
-
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority("ROLE_" + role.getRoleCode()));
     }
 
-    @Override
-    public boolean isAccountNonExpired() { return true; }
-
-    @Override
-    public boolean isAccountNonLocked() { return !Boolean.TRUE.equals(isBlocked); }
-
-    @Override
-    public boolean isCredentialsNonExpired() { return true; }
-
-    @Override
-    public boolean isEnabled() { return isActive(); }
+    @Override public boolean isAccountNonExpired()     { return true; }
+    @Override public boolean isAccountNonLocked()      { return !Boolean.TRUE.equals(isBlocked); }
+    @Override public boolean isCredentialsNonExpired() { return true; }
+    @Override public boolean isEnabled()               { return isActive(); }
 
     public UUID getFirmId() {
         return firm != null ? firm.getId() : null;
