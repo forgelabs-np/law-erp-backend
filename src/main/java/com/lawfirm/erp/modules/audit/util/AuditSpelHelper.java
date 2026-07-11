@@ -1,4 +1,4 @@
-package com.lawfirm.erp.audit.util;
+package com.lawfirm.erp.modules.audit.util;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;

@@ -1,6 +1,6 @@
-package com.lawfirm.erp.audit.repository;
+package com.lawfirm.erp.modules.audit.repository;
 
-import com.lawfirm.erp.audit.entity.AuditLog;
+import com.lawfirm.erp.modules.audit.entity.AuditLog;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import org.springframework.data.domain.Page;

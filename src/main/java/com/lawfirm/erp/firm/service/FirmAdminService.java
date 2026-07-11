@@ -1,11 +1,10 @@
 package com.lawfirm.erp.firm.service;
 
-import com.lawfirm.erp.audit.service.AuditService;
+import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
-import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.firm.response.FirmAdminResponse;

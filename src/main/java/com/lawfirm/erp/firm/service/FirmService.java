@@ -1,6 +1,6 @@
 package com.lawfirm.erp.firm.service;
 
-import com.lawfirm.erp.audit.service.AuditService;
+import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.FirmStatus;
