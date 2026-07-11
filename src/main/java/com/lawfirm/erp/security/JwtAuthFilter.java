@@ -50,50 +50,60 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 return;
             }
 
-            // Extract claims and set firm context
             Claims claims = jwtUtil.extractAllClaims(token);
-            String firmId = claims.get("firmId", String.class);
+            String firmId   = claims.get("firmId",   String.class);
             String firmCode = claims.get("firmCode", String.class);
             String userType = claims.get("userType", String.class);
-            String userIdStr = claims.get("userId", String.class);
+            String userIdStr = claims.get("userId",  String.class);
 
+            // ── Permission version staleness check ────────────────────────
+            // Only for non-super-admin users
             if (userIdStr != null && !"SUPER_ADMIN".equals(userType)) {
                 UUID userId = UUID.fromString(userIdStr);
                 Integer tokenVersion = claims.get("permVersion", Integer.class);
 
+                // FIX 1: If token has no permVersion claim (old token format), reject it
+                // so user re-logs in and gets a fresh token with the claim.
                 if (tokenVersion == null) {
-                    log.warn("Token missing permission version for user: {}", userIdStr);
+                    log.warn("Token missing permVersion claim for user: {} — forcing re-login", userIdStr);
                     response.sendError(HttpStatus.UNAUTHORIZED.value(),
                             "Your session is outdated. Please login again.");
                     return;
                 }
 
                 Integer currentVersion = userRepository.findPermissionVersionById(userId);
-                if (currentVersion == null || !currentVersion.equals(tokenVersion)) {
-                    log.warn("Token stale for user {}: token version {} != current version {}",
-                            userIdStr, tokenVersion, currentVersion);
+
+                // FIX 2: If DB has null (user existed before permissionVersion column was added),
+                // treat DB null as 0 — same as the default. Don't reject the token.
+                // This prevents all pre-existing users from being locked out.
+                int dbVersion = (currentVersion != null) ? currentVersion : 0;
+
+                if (tokenVersion != dbVersion) {
+                    log.warn("Token stale for user {}: token version {} != db version {}",
+                            userIdStr, tokenVersion, dbVersion);
                     response.sendError(HttpStatus.UNAUTHORIZED.value(),
                             "Your permissions have changed. Please login again.");
                     return;
                 }
             }
 
-            // Set firm context for non-super-admin users
+            // ── Firm context ──────────────────────────────────────────────
             if (firmId != null && !"SUPER_ADMIN".equals(userType)) {
                 FirmContextHolder.set(UUID.fromString(firmId), firmCode);
             } else {
                 FirmContextHolder.clear();
             }
 
+            // ── Build authentication ──────────────────────────────────────
             Authentication auth = jwtUtil.getAuthentication(token, request);
+
             String deviceId = request.getHeader("deviceId");
             deviceId = deviceId != null ? deviceId + "_" + jwtUtil.extractUserId(token) : "UNKNOWN_";
             request = new HeaderWrapper(request, Map.of("deviceId", deviceId));
+
             SecurityContextHolder.getContext().setAuthentication(auth);
 
-            if (auth != null && auth.getPrincipal() instanceof AuthenticatedDetail) {
-                AuthenticatedDetail detail = (AuthenticatedDetail) auth.getPrincipal();
-
+            if (auth != null && auth.getPrincipal() instanceof AuthenticatedDetail detail) {
                 AuthenticatedUser authenticatedUser = new AuthenticatedUser();
                 authenticatedUser.setId(detail.getId());
                 authenticatedUser.setUsername(detail.getUsername());
@@ -114,6 +124,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 request.setAttribute("authenticatedUser", authenticatedUser);
             }
         }
+
         try {
             filterChain.doFilter(request, response);
         } finally {
