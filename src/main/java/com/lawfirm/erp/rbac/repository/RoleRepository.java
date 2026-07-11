@@ -13,7 +13,10 @@ import java.util.UUID;
 @Repository
 public interface RoleRepository extends JpaRepository<Role, UUID> {
 
-    Optional<Role> findByRoleCode(String roleCode);
+    @Query("SELECT r FROM Role r WHERE r.roleCode = :roleCode")
+    Optional<Role> findByRoleCode(@Param("roleCode") String roleCode);
+
+//    Optional<Role> findByRoleCode(String roleCode);
 
     Optional<Role> findByRoleName(String roleName);
 
@@ -35,4 +38,9 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
 
     @Query("SELECT r FROM Role r WHERE r.roleCode = :roleCode AND r.firm IS NULL")
     Optional<Role> findByRoleCodeAndFirmIsNull(@Param("roleCode") String roleCode);
+
+    //  ADD THIS NEW METHOD - for cases where multiple roles exist
+    @Query("SELECT r FROM Role r WHERE r.roleCode = :roleCode")
+    List<Role> findAllByRoleCode(@Param("roleCode") String roleCode);
+
 }
