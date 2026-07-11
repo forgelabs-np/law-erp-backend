@@ -32,4 +32,7 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
 
     @Query("SELECT r FROM Role r WHERE r.firm.id = :firmId AND r.isSystem = false")
     List<Role> findByFirmIdAndIsSystemFalse(@Param("firmId") UUID firmId);
+
+    @Query("SELECT r FROM Role r WHERE r.roleCode = :roleCode AND r.firm IS NULL")
+    Optional<Role> findByRoleCodeAndFirmIsNull(@Param("roleCode") String roleCode);
 }

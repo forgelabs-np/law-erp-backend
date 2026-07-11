@@ -40,7 +40,7 @@ public class User extends ActiveAuditableEntity implements UserDetails {
     @Column(name = "user_type", nullable = false)
     private UserType userType;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String username;
 
     @Column(nullable = false, unique = true)
