@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -40,35 +41,52 @@ public class FirmAdminService {
      * Get all firm admins across all firms (Super Admin only)
      */
     public List<FirmAdminResponse> getAllFirmAdmins() {
-        // Find all users with FIRM_ADMIN role
-        Role firmAdminRole = roleRepository.findByRoleCode("FIRM_ADMIN")
-                .orElseThrow(() -> new ResourceNotFoundException("FIRM_ADMIN role not found"));
+        // ✅ Use the NEW method that returns List
+        List<Role> firmAdminRoles = roleRepository.findAllByRoleCode("FIRM_ADMIN");
 
-        List<User> firmAdmins = userRepository.findByRoleId(firmAdminRole.getId());
+        if (firmAdminRoles.isEmpty()) {
+            log.warn("No FIRM_ADMIN roles found");
+            return new ArrayList<>();
+        }
 
-        return firmAdmins.stream()
+        List<User> allFirmAdmins = new ArrayList<>();
+        for (Role role : firmAdminRoles) {
+            // Only include firm-scoped roles (firm_id != null)
+            if (role.getFirm() != null) {
+                List<User> usersWithRole = userRepository.findByRoleId(role.getId());
+                allFirmAdmins.addAll(usersWithRole);
+            }
+        }
+
+        return allFirmAdmins.stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Get all firm admins for a specific firm
-     */
-    public List<FirmAdminResponse> getFirmAdminsByFirmId(UUID firmId) {
-        // Verify firm exists
-        Firm firm = firmRepository.findById(firmId)
-                .orElseThrow(() -> new ResourceNotFoundException("Firm not found"));
 
-        // Get all users with FIRM_ADMIN role in this firm
-        Role firmAdminRole = roleRepository.findByRoleCode("FIRM_ADMIN")
-                .orElseThrow(() -> new ResourceNotFoundException("FIRM_ADMIN role not found"));
+        /**
+         * Get all firm admins for a specific firm
+         */
+        public List<FirmAdminResponse> getFirmAdminsByFirmId(UUID firmId) {
+            Firm firm = firmRepository.findById(firmId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Firm not found"));
 
-        List<User> firmAdmins = userRepository.findByFirmIdAndRoleId(firmId, firmAdminRole.getId());
+            // ✅ Use existing method that returns Optional
+            Role firmAdminRole = roleRepository
+                    .findByFirmIdAndRoleCode(firmId, "FIRM_ADMIN")
+                    .orElse(null);
 
-        return firmAdmins.stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
-    }
+            if (firmAdminRole == null) {
+                log.warn("No FIRM_ADMIN role found for firm: {}", firmId);
+                return new ArrayList<>();
+            }
+
+            List<User> firmAdmins = userRepository.findByFirmIdAndRoleId(firmId, firmAdminRole.getId());
+            return firmAdmins.stream()
+                    .map(this::toResponse)
+                    .collect(Collectors.toList());
+        }
+
 
     /**
      * Get firm admin by ID
