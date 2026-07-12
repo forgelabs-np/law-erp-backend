@@ -29,9 +29,9 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
 
     @Query("SELECT r FROM Role r WHERE r.firm IS NULL AND r.isSystem = true")
     List<Role> findByFirmIsNullAndIsSystemTrue();
-
-    @Query("SELECT r FROM Role r WHERE r.firm.id = :firmId AND r.roleCode = :roleCode")
-    Optional<Role> findByFirmIdAndRoleCode(@Param("firmId") UUID firmId, @Param("roleCode") String roleCode);
+//
+//    @Query("SELECT r FROM Role r WHERE r.firm.id = :firmId AND r.roleCode = :roleCode")
+//    Optional<Role> findByFirmIdAndRoleCode(@Param("firmId") UUID firmId, @Param("roleCode") String roleCode);
 
     @Query("SELECT r FROM Role r WHERE r.firm.id = :firmId AND r.isSystem = false")
     List<Role> findByFirmIdAndIsSystemFalse(@Param("firmId") UUID firmId);
@@ -42,5 +42,20 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
     //  ADD THIS NEW METHOD - for cases where multiple roles exist
     @Query("SELECT r FROM Role r WHERE r.roleCode = :roleCode")
     List<Role> findAllByRoleCode(@Param("roleCode") String roleCode);
+
+
+    // For DataInitializer — only system roles
+    @Query("SELECT r FROM Role r WHERE r.roleCode = :roleCode AND r.firm IS NULL")
+    Optional<Role> findSystemRoleByCode(@Param("roleCode") String roleCode);
+
+    // For FirmService / FirmAdminService — only firm-scoped roles
+    @Query("SELECT r FROM Role r WHERE r.firm.id = :firmId AND r.roleCode = :roleCode")
+    Optional<Role> findByFirmIdAndRoleCode(@Param("firmId") UUID firmId,
+                                           @Param("roleCode") String roleCode);
+
+    // For super admin listing — all users with a role in a specific firm
+    @Query("SELECT r FROM Role r WHERE r.roleCode = :roleCode AND r.firm.id = :firmId")
+    Optional<Role> findFirmRoleByCode(@Param("firmId") UUID firmId,
+                                      @Param("roleCode") String roleCode);
 
 }

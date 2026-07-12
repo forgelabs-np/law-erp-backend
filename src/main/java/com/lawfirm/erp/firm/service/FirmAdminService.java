@@ -9,10 +9,7 @@ import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.firm.response.FirmAdminResponse;
 import com.lawfirm.erp.entity.User;
-import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
-import com.lawfirm.erp.rbac.entity.Role;
-import com.lawfirm.erp.rbac.repository.RoleRepository;
 import com.lawfirm.erp.security.CurrentUserResolver;
 import com.lawfirm.erp.security.PermissionEvaluator;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -32,122 +28,93 @@ public class FirmAdminService {
 
     private final UserRepository userRepository;
     private final FirmRepository firmRepository;
-    private final RoleRepository roleRepository;
     private final CurrentUserResolver currentUserResolver;
     private final PermissionEvaluator permissionEvaluator;
     private final AuditService auditService;
 
+    // RoleRepository removed entirely — we never look up roles here.
+    // We query users directly using role.roleCode in JPQL.
+    // This avoids the NonUniqueResultException caused by system + firm-scoped
+    // roles having the same roleCode.
+
     /**
-     * Get all firm admins across all firms (Super Admin only)
+     * All firm admins across all firms — Super Admin only.
+     * Uses UserRepository.findAllFirmAdmins() which queries users directly.
      */
     public List<FirmAdminResponse> getAllFirmAdmins() {
-        // ✅ Use the NEW method that returns List
-        List<Role> firmAdminRoles = roleRepository.findAllByRoleCode("FIRM_ADMIN");
-
-        if (firmAdminRoles.isEmpty()) {
-            log.warn("No FIRM_ADMIN roles found");
-            return new ArrayList<>();
-        }
-
-        List<User> allFirmAdmins = new ArrayList<>();
-        for (Role role : firmAdminRoles) {
-            // Only include firm-scoped roles (firm_id != null)
-            if (role.getFirm() != null) {
-                List<User> usersWithRole = userRepository.findByRoleId(role.getId());
-                allFirmAdmins.addAll(usersWithRole);
-            }
-        }
-
-        return allFirmAdmins.stream()
+        return userRepository.findAllFirmAdmins()
+                .stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
 
+    /**
+     * All firm admins for a specific firm — Super Admin only.
+     */
+    public List<FirmAdminResponse> getFirmAdminsByFirmId(UUID firmId) {
+        firmRepository.findById(firmId)
+                .orElseThrow(() -> new ResourceNotFoundException("Firm not found"));
 
-        /**
-         * Get all firm admins for a specific firm
-         */
-        public List<FirmAdminResponse> getFirmAdminsByFirmId(UUID firmId) {
-            Firm firm = firmRepository.findById(firmId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Firm not found"));
-
-            // ✅ Use existing method that returns Optional
-            Role firmAdminRole = roleRepository
-                    .findByFirmIdAndRoleCode(firmId, "FIRM_ADMIN")
-                    .orElse(null);
-
-            if (firmAdminRole == null) {
-                log.warn("No FIRM_ADMIN role found for firm: {}", firmId);
-                return new ArrayList<>();
-            }
-
-            List<User> firmAdmins = userRepository.findByFirmIdAndRoleId(firmId, firmAdminRole.getId());
-            return firmAdmins.stream()
-                    .map(this::toResponse)
-                    .collect(Collectors.toList());
-        }
-
+        return userRepository.findFirmAdminsByFirmId(firmId)
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
 
     /**
-     * Get firm admin by ID
+     * Get one firm admin by their user ID.
      */
     public FirmAdminResponse getFirmAdminById(UUID adminId) {
         User user = userRepository.findById(adminId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Verify user is FIRM_ADMIN
-        if (user.getUserType() != UserType.FIRM_USER) {
-            throw new BusinessRuleException("User is not a firm admin");
-        }
-
-        Role firmAdminRole = roleRepository.findByRoleCode("FIRM_ADMIN")
-                .orElseThrow(() -> new ResourceNotFoundException("FIRM_ADMIN role not found"));
-
-        // Check if user has FIRM_ADMIN role
-        boolean isFirmAdmin = user.getRole() != null && user.getRole().getId().equals(firmAdminRole.getId());
-        if (!isFirmAdmin) {
-            throw new BusinessRuleException("User does not have FIRM_ADMIN role");
-        }
+        validateIsFirmAdmin(user);
 
         return toResponse(user);
     }
 
     /**
-     * Toggle firm admin status (activate/deactivate)
+     * Toggle firm admin active/inactive — Super Admin only.
+     * Invalidates the user's JWT immediately.
      */
     @Transactional
     public FirmAdminResponse toggleFirmAdminStatus(UUID adminId) {
         User user = userRepository.findById(adminId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Verify user is FIRM_ADMIN
-        Role firmAdminRole = roleRepository.findByRoleCode("FIRM_ADMIN")
-                .orElseThrow(() -> new ResourceNotFoundException("FIRM_ADMIN role not found"));
-
-        boolean isFirmAdmin = user.getRole() != null && user.getRole().getId().equals(firmAdminRole.getId());
-        if (!isFirmAdmin) {
-            throw new BusinessRuleException("User does not have FIRM_ADMIN role");
-        }
+        validateIsFirmAdmin(user);
 
         boolean newStatus = !user.isActive();
         user.setActive(newStatus);
-        user = userRepository.save(user);
+        userRepository.save(user);
 
-        // Invalidate cache
-        permissionEvaluator.clearUserCache(user.getId());
-        userRepository.incrementPermissionVersion(user.getId());
+        // Invalidate JWT — must re-login after status change
+        userRepository.incrementPermissionVersion(adminId);
+        permissionEvaluator.clearUserCache(adminId);
 
-        // Audit log
         auditService.log(
                 newStatus ? AuditAction.USER_ACTIVATED : AuditAction.USER_DEACTIVATED,
                 AuditEntity.USER,
-                user.getId(),
+                adminId,
                 (newStatus ? "Activated" : "Deactivated") + " firm admin: " + user.getUsername()
         );
 
         log.info("Firm admin {} toggled to {}", user.getUsername(), newStatus ? "active" : "inactive");
 
         return toResponse(user);
+    }
+
+    /**
+     * Validates user is a FIRM_USER with FIRM_ADMIN roleCode.
+     * Does NOT call roleRepository — checks the role already loaded on the user.
+     */
+    private void validateIsFirmAdmin(User user) {
+        if (user.getUserType() != UserType.FIRM_USER) {
+            throw new BusinessRuleException("User is not a firm user");
+        }
+        if (user.getRole() == null || !"FIRM_ADMIN".equals(user.getRole().getRoleCode())) {
+            throw new BusinessRuleException("User does not have FIRM_ADMIN role");
+        }
     }
 
     private FirmAdminResponse toResponse(User user) {
