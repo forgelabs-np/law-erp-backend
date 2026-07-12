@@ -263,7 +263,7 @@ public class DataInitializer implements CommandLineRunner {
 
                 if (NO_ACCESS.equals(accessLevel)) continue;
 
-                Role role = roleRepository.findByRoleCodeAndFirmIsNull(roleCode).orElse(null);
+                Role role = roleRepository.findSystemRoleByCode(roleCode).orElse(null);
                 if (role == null) {
                     log.warn("Role not found, skipping: {}", roleCode);
                     continue;
