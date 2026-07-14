@@ -2,8 +2,10 @@ package com.lawfirm.erp.firm.controller;
 
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
+import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.dto.firm.request.CreateEmployeeRequest;
+import com.lawfirm.erp.dto.firm.request.UpdateEmployeeRequest;
 import com.lawfirm.erp.dto.firm.request.UpdateEmployeeRoleRequest;
 import com.lawfirm.erp.dto.firm.response.EmployeeResponse;
 import com.lawfirm.erp.firm.service.EmployeeService;
@@ -15,7 +17,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -39,10 +40,12 @@ public class EmployeeController {
     }
 
     @GetMapping
-    @Operation(summary = "Get all employees")
-    public ResponseEntity<ApiResponse<List<EmployeeResponse>>> getAllEmployees() {
+    @Operation(summary = "Get all employees (paginated)")
+    public ResponseEntity<ApiResponse<PagedResponse<EmployeeResponse>>> getAllEmployees(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         return responseHandler.ok(
-                employeeService.getAllEmployees(),
+                employeeService.getAllEmployees(page, size),
                 "Employees fetched successfully"
         );
     }
@@ -60,7 +63,7 @@ public class EmployeeController {
     @Operation(summary = "Update employee")
     public ResponseEntity<ApiResponse<EmployeeResponse>> updateEmployee(
             @PathVariable UUID employeeId,
-            @Valid @RequestBody ApiRequest<CreateEmployeeRequest> request) {
+            @Valid @RequestBody ApiRequest<UpdateEmployeeRequest> request) {
         return responseHandler.ok(
                 employeeService.updateEmployee(employeeId, request.getData()),
                 "Employee updated successfully"

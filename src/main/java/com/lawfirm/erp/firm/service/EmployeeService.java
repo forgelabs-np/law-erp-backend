@@ -1,5 +1,6 @@
 package com.lawfirm.erp.firm.service;
 
+import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.UserType;
@@ -9,6 +10,8 @@ import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.firm.request.CreateEmployeeRequest;
+import org.springframework.data.domain.Page;
+import com.lawfirm.erp.dto.firm.request.UpdateEmployeeRequest;
 import com.lawfirm.erp.dto.firm.request.UpdateEmployeeRoleRequest;
 import com.lawfirm.erp.dto.firm.response.EmployeeResponse;
 import com.lawfirm.erp.entity.User;
@@ -25,6 +28,9 @@ import com.lawfirm.erp.security.CurrentUserResolver;
 import com.lawfirm.erp.security.PermissionEvaluator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -120,16 +126,30 @@ public class EmployeeService {
         return toResponse(user, role, profile);
     }
 
-    public List<EmployeeResponse> getAllEmployees() {
+    public PagedResponse<EmployeeResponse> getAllEmployees(int page, int size) {
         UUID firmId = getCurrentFirmId();
-        return userRepository.findByFirmIdAndUserType(firmId, UserType.FIRM_USER)
-                .stream()
+
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by("createdAt").descending()
+        );
+
+        Page<User> userPage = userRepository.findByFirmIdAndUserTypePaged(
+                firmId,
+                UserType.FIRM_USER,
+                pageable
+        );
+
+        List<EmployeeResponse> content = userPage.getContent().stream()
                 .map(user -> {
                     EmployeeProfile profile = employeeProfileRepository.findByUserId(user.getId())
                             .orElse(null);
                     return toResponse(user, user.getRole(), profile);
                 })
                 .collect(Collectors.toList());
+
+        return PagedResponse.of(userPage, content);
     }
 
     public EmployeeResponse getEmployeeById(UUID employeeId) {
@@ -141,25 +161,20 @@ public class EmployeeService {
     }
 
     @Transactional
-    public EmployeeResponse updateEmployee(UUID employeeId, CreateEmployeeRequest request) {
+    public EmployeeResponse updateEmployee(UUID employeeId, UpdateEmployeeRequest request) {
         UUID firmId = getCurrentFirmId();
         User user = getUserValidated(employeeId, firmId);
+
+        // Get the employee profile
         EmployeeProfile profile = employeeProfileRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Employee profile not found"));
 
+        // Only update non-null fields — proper partial update
         if (request.getFullName() != null) user.setFullName(request.getFullName());
         if (request.getEmail() != null) user.setEmail(request.getEmail());
         if (request.getMobileNo() != null) user.setMobileNo(request.getMobileNo());
-        user = userRepository.save(user);
 
-        if (request.getDesignation() != null) profile.setDesignation(request.getDesignation());
-        if (request.getBarCouncilNo() != null) profile.setBarCouncilNo(request.getBarCouncilNo());
-        if (request.getSpecialization() != null) profile.setSpecialization(request.getSpecialization());
-        if (request.getJoiningDate() != null) profile.setJoiningDate(request.getJoiningDate());
-        if (request.getEmergencyContactName() != null) profile.setEmergencyContactName(request.getEmergencyContactName());
-        if (request.getEmergencyContactPhone() != null) profile.setEmergencyContactPhone(request.getEmergencyContactPhone());
-        if (request.getNotes() != null) profile.setNotes(request.getNotes());
-        profile = employeeProfileRepository.save(profile);
+        user = userRepository.save(user);
 
         auditService.log(
                 AuditAction.USER_UPDATED,
@@ -168,6 +183,7 @@ public class EmployeeService {
                 "Employee updated: " + user.getUsername()
         );
 
+        log.info("Employee updated: {}", user.getUsername());
         return toResponse(user, user.getRole(), profile);
     }
 
@@ -301,32 +317,32 @@ public class EmployeeService {
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found"));
 
-        //  1. Must be firm-scoped (not system role)
+        // 1. Must be firm-scoped (not system role)
         if (role.getFirm() == null) {
             throw new ForbiddenException("Cannot assign system roles directly to employees");
         }
 
-        //  2. Must belong to this firm
+        // 2. Must belong to this firm
         if (!role.getFirm().getId().equals(firmId)) {
             throw new ForbiddenException("Role does not belong to your firm");
         }
 
-        //  3. Must NOT be a system role
+        // 3. Must NOT be a system role
         if (role.getIsSystem() != null && role.getIsSystem()) {
             throw new ForbiddenException("Cannot assign system roles directly to employees");
         }
 
-        // 4. NEW: Must NOT be FIRM_ADMIN
+        // 4. Must NOT be FIRM_ADMIN
         if ("FIRM_ADMIN".equals(role.getRoleCode())) {
             throw new ForbiddenException("Cannot assign FIRM_ADMIN role. Only Super Admin can create Firm Admins.");
         }
 
-        //  5. Must be applicable to FIRM_USER
+        // 5. Must be applicable to FIRM_USER
         if (role.getApplicableTo() != UserType.FIRM_USER) {
             throw new BusinessRuleException("Cannot assign a CLIENT role to an employee");
         }
 
-        //  6. Role must be active
+        // 6. Role must be active
         if (!role.isActive()) {
             throw new BusinessRuleException("Cannot assign an inactive role");
         }

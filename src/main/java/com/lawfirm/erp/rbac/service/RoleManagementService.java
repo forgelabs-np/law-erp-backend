@@ -59,7 +59,7 @@ public class RoleManagementService {
             log.info("Role created: {} by admin: {}", role.getRoleCode(), adminId);
             role = roleRepository.save(role);
 
-            // ✅ AUDIT: Role created
+            //  AUDIT: Role created
             auditService.log(
                     AuditAction.ROLE_CREATED,
                     AuditEntity.ROLE,
@@ -92,7 +92,7 @@ public class RoleManagementService {
         roleRepository.delete(role);
         log.info("Role deleted: {} by admin: {}", role.getRoleCode(), adminId);
 
-        // ✅ AUDIT: Role deleted
+        //  AUDIT: Role deleted
         auditService.log(
                 AuditAction.ROLE_DELETED,
                 AuditEntity.ROLE,
@@ -120,7 +120,7 @@ public class RoleManagementService {
         log.info("Role {} toggled to {} by admin: {}",
                 role.getRoleCode(), role.isActive(), adminId);
 
-        // ✅ AUDIT: Role status toggled
+        //  AUDIT: Role status toggled
         auditService.log(
                 role.isActive() ? AuditAction.ROLE_ACTIVATED : AuditAction.ROLE_DEACTIVATED,
                 AuditEntity.ROLE,
@@ -146,7 +146,9 @@ public class RoleManagementService {
             return roleRepository.findById(request.getId()).orElse(null);
         }
         if (request.getCode() != null && !request.getCode().isEmpty()) {
-            return roleRepository.findByRoleCode(request.getCode()).orElse(null);
+            // System roles should not be found here — they can't be updated via this API
+            // Use findSystemRoleByCode to avoid NonUniqueResultException
+            return roleRepository.findSystemRoleByCode(request.getCode()).orElse(null);
         }
         return null;
     }
@@ -197,14 +199,14 @@ public class RoleManagementService {
 
     public List<RoleResponse> getAllRoles() {
         return roleRepository.findAll().stream()
-                .map(this::convertToMinimalResponse)
+                .map(this::convertToCompleteResponse)
                 .collect(Collectors.toList());
     }
 
     public List<RoleResponse> getActiveRoles() {
         return roleRepository.findAll().stream()
                 .filter(Role::isActive)
-                .map(this::convertToMinimalResponse)
+                .map(this::convertToCompleteResponse)
                 .collect(Collectors.toList());
     }
 
