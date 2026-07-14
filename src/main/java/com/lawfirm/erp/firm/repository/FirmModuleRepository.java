@@ -29,4 +29,8 @@ public interface FirmModuleRepository extends JpaRepository<FirmModule, UUID> {
             "AND (fm.expiresAt IS NULL OR fm.expiresAt > CURRENT_TIMESTAMP)")
     boolean existsByFirmIdAndModuleCodeAndIsEnabledTrue(@Param("firmId") UUID firmId,
                                                         @Param("moduleCode") String moduleCode);
+
+    @Query("SELECT fm FROM FirmModule fm JOIN FETCH fm.module WHERE fm.firm.id = :firmId")
+    List<FirmModule> findByFirmId(@Param("firmId") UUID firmId);
+
 }

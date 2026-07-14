@@ -2,6 +2,9 @@ package com.lawfirm.erp.common.repository;
 
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.common.enums.UserType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -78,4 +81,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query("SELECT COUNT(u) FROM User u WHERE u.firm.id = :firmId AND u.userType = :userType")
     long countByFirmIdAndUserType(@Param("firmId") UUID firmId, @Param("userType") UserType userType);
 
+    @Query("SELECT u FROM User u WHERE u.firm.id = :firmId AND u.userType = :userType")
+    Page<User> findByFirmIdAndUserTypePaged(@Param("firmId") UUID firmId,
+                                            @Param("userType") UserType userType,
+                                            Pageable pageable);
 }
