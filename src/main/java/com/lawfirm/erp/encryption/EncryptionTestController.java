@@ -49,17 +49,49 @@ public class EncryptionTestController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> encryptTestData(
             @RequestBody Map<String, Object> requestData) {
         try {
-            log.info("ENCRYPT_TEST - Received data to encrypt: {}", requestData);
+            // Check if this is a long data request (contains a special flag)
+            boolean isLongData = requestData.containsKey("_generateLongData") &&
+                    Boolean.TRUE.equals(requestData.get("_generateLongData"));
 
-            String encryptedData = decryptionHandlerService.encryptResponse(requestData);
+            Map<String, Object> dataToEncrypt;
+
+            if (isLongData) {
+                log.info("ENCRYPT_LONG_DATA - Generating and encrypting long test data");
+                dataToEncrypt = generateLongTestData();
+                // Remove the flag from the response
+                requestData.remove("_generateLongData");
+            } else {
+                log.info("ENCRYPT_TEST - Received data to encrypt: {}", requestData);
+                dataToEncrypt = requestData;
+            }
+
+            String encryptedData = decryptionHandlerService.encryptResponse(dataToEncrypt);
+
+            // Count chunks
+            String[] chunks = encryptedData.split("mofin");
+            int chunkCount = chunks.length;
+            boolean isChunked = encryptedData.contains("mofin");
 
             Map<String, Object> response = new HashMap<>();
-            response.put("originalData", requestData);
+            response.put("originalData", dataToEncrypt);
             response.put("encryptedData", encryptedData);
-            response.put("isChunked", encryptedData.contains("mofin"));
-            response.put("length", encryptedData.length());
+            response.put("isChunked", isChunked);
+            response.put("chunkCount", chunkCount);
+            response.put("totalLength", encryptedData.length());
+            response.put("originalDataSize", dataToEncrypt.toString().length() + " characters");
+            response.put("delimiter", "mofin");
 
-            log.info("ENCRYPT_TEST_SUCCESS - Data encrypted successfully");
+            // Add chunk size details if chunked
+            if (isChunked) {
+                response.put("chunkSizes", getChunkSizes(chunks));
+                response.put("firstChunkPreview", chunks.length > 0 ?
+                        chunks[0].substring(0, Math.min(50, chunks[0].length())) + "..." : "");
+                response.put("message", "Data encrypted with " + chunkCount + " chunks using 'mofin' delimiter");
+            } else {
+                response.put("message", " Data encrypted successfully (single chunk)");
+            }
+
+            log.info("ENCRYPT_TEST_SUCCESS - Data encrypted successfully, chunks: {}", chunkCount);
 
             return responseHandler.ok(response, Message.SUCCESS, "Data encrypted successfully");
 
@@ -84,15 +116,29 @@ public class EncryptionTestController {
 
             log.info("MANUAL_DECRYPT - Decrypting data manually");
 
+            boolean isChunked = encryptedData.contains("mofin");
+            int chunkCount = isChunked ? encryptedData.split("mofin").length : 1;
+
+            log.info("MANUAL_DECRYPT - Data is chunked: {}, chunks: {}", isChunked, chunkCount);
+
             String decryptedJson = decryptionHandlerService.decryptRequestString(encryptedData);
             Map<String, Object> decryptedMap = objectMapper.readValue(decryptedJson, Map.class);
 
             Map<String, Object> response = new HashMap<>();
             response.put("decryptedData", decryptedMap);
             response.put("decryptedJson", decryptedJson);
-            response.put("isChunked", encryptedData.contains("mofin"));
+            response.put("isChunked", isChunked);
+            response.put("chunkCount", chunkCount);
+            response.put("decryptedDataSize", decryptedJson.length() + " characters");
 
-            log.info("MANUAL_DECRYPT_SUCCESS - Data decrypted successfully");
+            if (isChunked) {
+                response.put("message", "Successfully decrypted " + chunkCount + " chunks of data!");
+                response.put("note", "The 'mofin' delimiter was used to split and reassemble the data");
+            } else {
+                response.put("message", "Successfully decrypted single chunk of data");
+            }
+
+            log.info("MANUAL_DECRYPT_SUCCESS - Data decrypted successfully, chunks: {}", chunkCount);
 
             return responseHandler.ok(response, Message.SUCCESS, "Data decrypted successfully");
 
@@ -101,7 +147,6 @@ public class EncryptionTestController {
             return responseHandler.error("Manual decryption failed: " + e.getMessage(), ApiStatus.BAD_REQUEST, HttpStatus.CONFLICT);
         }
     }
-
     /**
      * Step 4: AUTO DECRYPTION with @Decrypt annotation
      * This is what your actual endpoints will use
@@ -186,5 +231,56 @@ public class EncryptionTestController {
         } catch (Exception e) {
             return responseHandler.error("Health check failed: " + e.getMessage(), ApiStatus.BAD_REQUEST, HttpStatus.CONFLICT);
         }
+    }
+    private Map<String, Object> generateLongTestData() {
+        Map<String, Object> largeData = new HashMap<>();
+        largeData.put("username", "admin");
+        largeData.put("password", "password123");
+        largeData.put("email", "admin@company.com");
+        largeData.put("phone", "+977-9841234567");
+        largeData.put("address", "Kathmandu, Nepal");
+        largeData.put("department", "IT Department");
+        largeData.put("role", "SUPER_ADMIN");
+        largeData.put("permissions", new String[]{
+                "READ", "WRITE", "DELETE", "UPDATE", "MANAGE_USERS",
+                "MANAGE_ROLES", "VIEW_REPORTS", "EXPORT_DATA"
+        });
+
+        // Add a large nested object
+        Map<String, Object> profile = new HashMap<>();
+        profile.put("firstName", "John");
+        profile.put("lastName", "Doe");
+        profile.put("age", 35);
+        profile.put("bio", "Experienced software developer with over 10 years of experience");
+        profile.put("skills", new String[]{
+                "Java", "Spring Boot", "React", "Angular", "Docker",
+                "Kubernetes", "AWS", "MySQL", "MongoDB", "Redis",
+                "Kafka", "RabbitMQ", "Microservices", "REST APIs"
+        });
+        largeData.put("profile", profile);
+
+        // Add a long string to exceed 245 bytes
+        StringBuilder longText = new StringBuilder();
+        for (int i = 0; i < 50; i++) {
+            longText.append("This is a very long text to ensure we exceed the RSA encryption chunk size limit. ");
+        }
+        largeData.put("longDescription", longText.toString());
+
+        largeData.put("_isLongData", true);
+        largeData.put("_note", "This data exceeds 245 bytes and will be chunked with 'mofin' delimiter");
+
+        log.info("Generated long test data with size: {} characters", largeData.toString().length());
+        return largeData;
+    }
+
+    /**
+     * Get sizes of each chunk
+     */
+    private Map<String, Integer> getChunkSizes(String[] chunks) {
+        Map<String, Integer> sizes = new HashMap<>();
+        for (int i = 0; i < chunks.length; i++) {
+            sizes.put("chunk_" + (i + 1), chunks[i].length());
+        }
+        return sizes;
     }
 }
