@@ -152,115 +152,115 @@ public class AuthService {
                 .build();
     }
 
-    @Transactional
-    public RegisterResponse registerSolo(RegisterSoloRequest request) {
-        Pattern validMobilePattern = Pattern.compile("^(984|985|986|987|988|980|981|982|983)[0-9]{7}$");
-        if (!validMobilePattern.matcher(request.getMobileNo()).matches()) {
-            throw new RuntimeException("Invalid Nepal mobile number");
-        }
+//    @Transactional
+//    public RegisterResponse registerSolo(RegisterSoloRequest request) {
+//        Pattern validMobilePattern = Pattern.compile("^(984|985|986|987|988|980|981|982|983)[0-9]{7}$");
+//        if (!validMobilePattern.matcher(request.getMobileNo()).matches()) {
+//            throw new RuntimeException("Invalid Nepal mobile number");
+//        }
+//
+//        Pattern barCouncilPattern = Pattern.compile("^[A-Z]{3}-[0-9]{4,6}$");
+//        if (!barCouncilPattern.matcher(request.getBarCouncilNumber()).matches()) {
+//            throw new RuntimeException("Bar council number must be format: XXX-12345");
+//        }
+//
+//        String firmCode = SubdomainGenerator.generate(request.getUsername());
+//        Firm firm = Firm.builder()
+//                .lawFirmCode(firmCode)
+//                .name(request.getFullName() + " Law")
+//                .firmType(FirmType.SOLO)
+//                .status(FirmStatus.ACTIVE)
+//                .email(request.getEmail())
+//                .phone(request.getMobileNo())
+//                .build();
+//        firm = firmRepository.save(firm);
+//
+//        Role role = roleRepository.findByRoleCode("FIRM_ADMIN")
+//                .orElseThrow(() -> new RuntimeException("FIRM_ADMIN role not found"));
+//
+//        User user = new User();
+//        user.setUsername(request.getUsername());
+//        user.setEmail(request.getEmail());
+//        user.setMobileNo(request.getMobileNo());
+//        user.setPassword(passwordEncoder.encode(request.getPassword()));
+//        user.setFullName(request.getFullName());
+//        user.setFirm(firm);
+//        user.setRole(role);
+//        user.setUserType(UserType.FIRM_USER);
+//        user = userRepository.save(user);
+//
+//        // ✅ AUDIT: Firm created
+//        auditService.log(
+//                AuditAction.FIRM_CREATED,
+//                AuditEntity.FIRM,
+//                firm.getId(),
+//                "Firm created: " + firm.getLawFirmCode() + " (" + firm.getName() + ")"
+//        );
+//
+//        // ✅ AUDIT: User created (FIRM_ADMIN)
+//        auditService.log(
+//                AuditAction.USER_CREATED,
+//                AuditEntity.USER,
+//                user.getId(),
+//                "User registered: " + user.getUsername() + " (FIRM_ADMIN) for firm: " + firm.getLawFirmCode()
+//        );
+//
+//        log.info("Registered solo lawyer: {} with firm: {}", user.getUsername(), firm.getLawFirmCode());
+//
+//        return RegisterResponse.builder()
+//                .userId(user.getId())
+//                .message("Registration successful!")
+//                .build();
+//    }
 
-        Pattern barCouncilPattern = Pattern.compile("^[A-Z]{3}-[0-9]{4,6}$");
-        if (!barCouncilPattern.matcher(request.getBarCouncilNumber()).matches()) {
-            throw new RuntimeException("Bar council number must be format: XXX-12345");
-        }
-
-        String firmCode = SubdomainGenerator.generate(request.getUsername());
-        Firm firm = Firm.builder()
-                .lawFirmCode(firmCode)
-                .name(request.getFullName() + " Law")
-                .firmType(FirmType.SOLO)
-                .status(FirmStatus.ACTIVE)
-                .email(request.getEmail())
-                .phone(request.getMobileNo())
-                .build();
-        firm = firmRepository.save(firm);
-
-        Role role = roleRepository.findByRoleCode("FIRM_ADMIN")
-                .orElseThrow(() -> new RuntimeException("FIRM_ADMIN role not found"));
-
-        User user = new User();
-        user.setUsername(request.getUsername());
-        user.setEmail(request.getEmail());
-        user.setMobileNo(request.getMobileNo());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setFullName(request.getFullName());
-        user.setFirm(firm);
-        user.setRole(role);
-        user.setUserType(UserType.FIRM_USER);
-        user = userRepository.save(user);
-
-        // ✅ AUDIT: Firm created
-        auditService.log(
-                AuditAction.FIRM_CREATED,
-                AuditEntity.FIRM,
-                firm.getId(),
-                "Firm created: " + firm.getLawFirmCode() + " (" + firm.getName() + ")"
-        );
-
-        // ✅ AUDIT: User created (FIRM_ADMIN)
-        auditService.log(
-                AuditAction.USER_CREATED,
-                AuditEntity.USER,
-                user.getId(),
-                "User registered: " + user.getUsername() + " (FIRM_ADMIN) for firm: " + firm.getLawFirmCode()
-        );
-
-        log.info("Registered solo lawyer: {} with firm: {}", user.getUsername(), firm.getLawFirmCode());
-
-        return RegisterResponse.builder()
-                .userId(user.getId())
-                .message("Registration successful!")
-                .build();
-    }
-
-    @Transactional
-    public RegisterResponse registerClient(RegisterClientRequest request) {
-        Firm firm;
-
-        if (request.getLawyerSubdomain() != null && !request.getLawyerSubdomain().isEmpty()) {
-            firm = firmRepository.findByLawFirmCode(request.getLawyerSubdomain())
-                    .orElseThrow(() -> new RuntimeException("Firm not found with code: " + request.getLawyerSubdomain()));
-        } else {
-            String firmCode = SubdomainGenerator.generate(request.getUsername());
-            firm = Firm.builder()
-                    .lawFirmCode(firmCode)
-                    .name(request.getFullName())
-                    .firmType(FirmType.SOLO)
-                    .status(FirmStatus.ACTIVE)
-                    .email(request.getEmail())
-                    .phone(request.getMobileNo())
-                    .build();
-            firm = firmRepository.save(firm);
-        }
-
-        Role clientRole = roleRepository.findByRoleCode("CLIENT")
-                .orElseThrow(() -> new RuntimeException("CLIENT role not found"));
-
-        User user = new User();
-        user.setUsername(request.getUsername());
-        user.setEmail(request.getEmail());
-        user.setMobileNo(request.getMobileNo());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setFullName(request.getFullName());
-        user.setFirm(firm);
-        user.setRole(clientRole);
-        user.setUserType(UserType.CLIENT);
-        user = userRepository.save(user);
-
-        auditService.log(
-                AuditAction.CLIENT_CREATED,
-                AuditEntity.CLIENT,
-                user.getId(),
-                "Client registered: " + user.getUsername() + " (" + user.getFullName() + ") under firm: " + firm.getLawFirmCode()
-        );
-
-        log.info("Registered client: {} under firm: {}", user.getUsername(), firm.getLawFirmCode());
-
-        return RegisterResponse.builder()
-                .userId(user.getId())
-                .message("Client registration successful!")
-                .build();
-    }
+//    @Transactional
+//    public RegisterResponse registerClient(RegisterClientRequest request) {
+//        Firm firm;
+//
+//        if (request.getLawyerSubdomain() != null && !request.getLawyerSubdomain().isEmpty()) {
+//            firm = firmRepository.findByLawFirmCode(request.getLawyerSubdomain())
+//                    .orElseThrow(() -> new RuntimeException("Firm not found with code: " + request.getLawyerSubdomain()));
+//        } else {
+//            String firmCode = SubdomainGenerator.generate(request.getUsername());
+//            firm = Firm.builder()
+//                    .lawFirmCode(firmCode)
+//                    .name(request.getFullName())
+//                    .firmType(FirmType.SOLO)
+//                    .status(FirmStatus.ACTIVE)
+//                    .email(request.getEmail())
+//                    .phone(request.getMobileNo())
+//                    .build();
+//            firm = firmRepository.save(firm);
+//        }
+//
+//        Role clientRole = roleRepository.findByRoleCode("CLIENT")
+//                .orElseThrow(() -> new RuntimeException("CLIENT role not found"));
+//
+//        User user = new User();
+//        user.setUsername(request.getUsername());
+//        user.setEmail(request.getEmail());
+//        user.setMobileNo(request.getMobileNo());
+//        user.setPassword(passwordEncoder.encode(request.getPassword()));
+//        user.setFullName(request.getFullName());
+//        user.setFirm(firm);
+//        user.setRole(clientRole);
+//        user.setUserType(UserType.CLIENT);
+//        user = userRepository.save(user);
+//
+//        auditService.log(
+//                AuditAction.CLIENT_CREATED,
+//                AuditEntity.CLIENT,
+//                user.getId(),
+//                "Client registered: " + user.getUsername() + " (" + user.getFullName() + ") under firm: " + firm.getLawFirmCode()
+//        );
+//
+//        log.info("Registered client: {} under firm: {}", user.getUsername(), firm.getLawFirmCode());
+//
+//        return RegisterResponse.builder()
+//                .userId(user.getId())
+//                .message("Client registration successful!")
+//                .build();
+//    }
 
     public LoginResponse refreshToken(String refreshToken) {
         if (refreshToken == null || refreshToken.trim().isEmpty()) {
