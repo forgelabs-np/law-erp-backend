@@ -99,7 +99,7 @@ public class MeService {
         if (user.getFirm() == null) return List.of();
 
         //   FIX: Get enabled modules for this firm - use correct method
-        List<FirmModule> firmModules = firmModuleRepository.findByFirmId(user.getFirm().getId());
+        List<FirmModule> firmModules = firmModuleRepository.findByFirmIdWithModule(user.getFirm().getId());
 
         //   FIX: Check isEnabled and expiresAt
         Set<String> enabledModuleCodes = firmModules.stream()

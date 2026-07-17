@@ -1,6 +1,6 @@
 package com.lawfirm.erp.firm.service;
 
-import com.lawfirm.erp.modules.audit.service.AuditService;
+import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.UserType;
@@ -14,6 +14,7 @@ import com.lawfirm.erp.dto.firm.response.ClientResponse;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
+import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.entity.UserRole;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
@@ -21,6 +22,10 @@ import com.lawfirm.erp.rbac.repository.UserRoleRepository;
 import com.lawfirm.erp.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -82,7 +87,7 @@ public class ClientService {
                 .build();
         userRoleRepository.save(userRole);
 
-        // ✅ AUDIT: Client created
+        // Audit: Client created
         auditService.log(
                 AuditAction.CLIENT_CREATED,
                 AuditEntity.CLIENT,
@@ -95,12 +100,26 @@ public class ClientService {
         return toResponse(user);
     }
 
-    public List<ClientResponse> getAllClients() {
+    public PagedResponse<ClientResponse> getAllClients(int page, int size) {
         UUID firmId = getCurrentFirmId();
-        return userRepository.findByFirmIdAndUserType(firmId, UserType.CLIENT)
-                .stream()
+
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by("createdAt").descending()
+        );
+
+        Page<User> userPage = userRepository.findByFirmIdAndUserTypePaged(
+                firmId,
+                UserType.CLIENT,
+                pageable
+        );
+
+        List<ClientResponse> content = userPage.getContent().stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
+
+        return PagedResponse.of(userPage, content);
     }
 
     public ClientResponse getClientById(UUID clientId) {
@@ -118,7 +137,6 @@ public class ClientService {
         user.setPortalAccessEnabled(portalAccessEnabled);
         user = userRepository.save(user);
 
-        // ✅ AUDIT: Portal access toggled
         auditService.log(
                 portalAccessEnabled ? AuditAction.CLIENT_PORTAL_ENABLED : AuditAction.CLIENT_PORTAL_DISABLED,
                 AuditEntity.CLIENT,
@@ -130,8 +148,6 @@ public class ClientService {
 
         return toResponse(user);
     }
-
-    // ─── Validations ─────────────────────────────────────────────────────────
 
     private UUID getCurrentFirmId() {
         UUID firmId = currentUserResolver.getCurrentFirmId();
