@@ -2,6 +2,7 @@ package com.lawfirm.erp.firm.controller;
 
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
+import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.dto.firm.request.CreateClientRequest;
 import com.lawfirm.erp.dto.firm.response.ClientResponse;
@@ -14,7 +15,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -38,10 +38,12 @@ public class ClientController {
     }
 
     @GetMapping
-    @Operation(summary = "Get all clients")
-    public ResponseEntity<ApiResponse<List<ClientResponse>>> getAllClients() {
+    @Operation(summary = "Get all clients (paginated)")
+    public ResponseEntity<ApiResponse<PagedResponse<ClientResponse>>> getAllClients(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         return responseHandler.ok(
-                clientService.getAllClients(),
+                clientService.getAllClients(page, size),
                 "Clients fetched successfully"
         );
     }
