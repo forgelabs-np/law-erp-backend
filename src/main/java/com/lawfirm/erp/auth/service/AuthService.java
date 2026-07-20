@@ -1,26 +1,23 @@
 package com.lawfirm.erp.auth.service;
 
+import com.lawfirm.erp.auth.security.JwtUtil;
+import com.lawfirm.erp.auth.security.TotpUtil;
+import com.lawfirm.erp.dto.auth.request.ChangePasswordRequest;
+import com.lawfirm.erp.dto.auth.request.MfaSetupConfirmRequest;
+import com.lawfirm.erp.dto.auth.request.MfaValidateRequest;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
-import com.lawfirm.erp.common.enums.FirmStatus;
-import com.lawfirm.erp.common.enums.FirmType;
+import com.lawfirm.erp.common.enums.AuthStatus;
 import com.lawfirm.erp.common.enums.LoginStatus;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.common.service.UserLoginHistoryService;
 import com.lawfirm.erp.dto.auth.request.LoginRequest;
-import com.lawfirm.erp.dto.auth.request.RegisterClientRequest;
-import com.lawfirm.erp.dto.auth.request.RegisterSoloRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
-import com.lawfirm.erp.dto.auth.response.RegisterResponse;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
-import com.lawfirm.erp.rbac.entity.Role;
-import com.lawfirm.erp.rbac.repository.RoleRepository;
-import com.lawfirm.erp.security.JwtUtil;
-import com.lawfirm.erp.security.SubdomainGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,7 +32,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -44,254 +40,301 @@ public class AuthService {
 
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
-    private final UserRepository userRepository;
-    private final RoleRepository roleRepository;
-    private final FirmRepository firmRepository;
+    private final TotpUtil totpUtil;
     private final PasswordEncoder passwordEncoder;
+    private final UserRepository userRepository;
+    private final FirmRepository firmRepository;
     private final UserLoginHistoryService loginHistoryService;
     private final AuditService auditService;
 
     @Value("${security.max-login-attempts:5}")
     private int maxLoginAttempts;
 
+
     public LoginResponse authenticateInternalUser(LoginRequest request) {
-        return performAuthentication(request, AuthRoleType.INTERNAL);
+        return performAuthentication(request, false);
     }
 
     public LoginResponse authenticateClient(LoginRequest request) {
-        return performAuthentication(request, AuthRoleType.CLIENT);
+        return performAuthentication(request, true);
     }
 
-    private LoginResponse performAuthentication(LoginRequest request, AuthRoleType authRoleType) {
-        User user;
-        Firm firm;
+    @Transactional
+    public LoginResponse performAuthentication(LoginRequest request, boolean isClient) {
 
-        if (request.getLawFirmCode() == null || request.getLawFirmCode().trim().isEmpty()) {
+        // 1. Require firm code
+        if (request.getLawFirmCode() == null || request.getLawFirmCode().isBlank()) {
             throw new BadCredentialsException("Firm code is required");
         }
 
-        firm = firmRepository.findByLawFirmCode(request.getLawFirmCode())
-                .orElseThrow(() -> new BadCredentialsException("Invalid firm code"));
+        // 2. Find firm
+        Firm firm = firmRepository.findByLawFirmCode(request.getLawFirmCode().trim().toUpperCase())
+                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
 
-        if (authRoleType == AuthRoleType.CLIENT) {
-            user = userRepository.findByMobileNoAndFirmId(request.getUsername(), firm.getId())
-                    .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
-            if (user.getUserType() != UserType.CLIENT) {
-                throw new RuntimeException("You are not authorized to perform this operation");
-            }
-        } else {
-            user = userRepository.findByUsernameAndFirmId(request.getUsername(), firm.getId())
-                    .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
-            if (user.getUserType() == UserType.SUPER_ADMIN) {
-                throw new RuntimeException("Super admin must use /super-admin/login endpoint");
-            }
+        // 3. Find user by username (or mobileNo for clients)
+        User user = isClient
+                ? userRepository.findByMobileNoAndFirmId(request.getUsername(), firm.getId())
+                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"))
+                : userRepository.findByUsernameAndFirmId(request.getUsername(), firm.getId())
+                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+
+        // 4. Type guard
+        if (isClient && user.getUserType() != UserType.CLIENT) {
+            throw new BadCredentialsException("Invalid credentials");
+        }
+        if (!isClient && user.getUserType() == UserType.SUPER_ADMIN) {
+            throw new BadCredentialsException("Super admin must use /super-admin/login");
         }
 
+        // 5. Account status checks
         if (!user.isActive()) {
             loginHistoryService.saveRecord(user, LoginStatus.LOGIN_FAILED, "Account inactive");
-            throw new RuntimeException("Your account is inactive. Please contact support.");
+            throw new BadCredentialsException("Your account is inactive. Contact your firm admin.");
         }
-
-        if (user.getIsBlocked()) {
+        if (Boolean.TRUE.equals(user.getIsBlocked())) {
             loginHistoryService.saveRecord(user, LoginStatus.ACCOUNT_LOCKED, "Account blocked");
-            throw new RuntimeException("Your account has been blocked. Please contact support.");
+            throw new BadCredentialsException("Your account has been blocked. Contact support.");
+        }
+        if (user.getLoginAttempts() >= maxLoginAttempts
+                && user.getLockedUntil() != null
+                && user.getLockedUntil().isAfter(LocalDateTime.now())) {
+            loginHistoryService.saveRecord(user, LoginStatus.ACCOUNT_LOCKED, "Too many attempts");
+            throw new BadCredentialsException("Account locked. Try again in 30 minutes.");
         }
 
-        if (user.getLoginAttempts() >= maxLoginAttempts && user.getLockedUntil() != null &&
-                user.getLockedUntil().isAfter(LocalDateTime.now())) {
-            loginHistoryService.saveRecord(user, LoginStatus.ACCOUNT_LOCKED, "Too many failed attempts");
-            throw new RuntimeException("Account is temporarily locked. Please try again later.");
-        }
-
-        Authentication authentication;
+        // 6. Verify password via Spring Security
         try {
-            authentication = authenticationManager.authenticate(
+            Authentication auth = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(user.getUsername(), request.getPassword())
             );
-            loginHistoryService.saveRecord(user, LoginStatus.LOGIN_SUCCESS, null);
+
+            // Password correct — reset lockout counters
             user.setLoginAttempts(0);
             user.setLockedUntil(null);
             user.setLastLoginAt(LocalDateTime.now());
             userRepository.save(user);
 
-            //  AUDIT: Login success
-            auditService.log(
-                    AuditAction.LOGIN,
-                    AuditEntity.AUTH,
-                    user.getId(),
-                    "User logged in: " + user.getUsername()
-            );
+            loginHistoryService.saveRecord(user, LoginStatus.LOGIN_SUCCESS, null);
 
         } catch (AuthenticationException e) {
+            // Password wrong — increment lockout
             user.setLoginAttempts(user.getLoginAttempts() + 1);
             if (user.getLoginAttempts() >= maxLoginAttempts) {
                 user.setLockedUntil(LocalDateTime.now().plusMinutes(30));
+                log.warn("User {} locked after {} failed attempts", user.getUsername(), maxLoginAttempts);
             }
             userRepository.save(user);
             loginHistoryService.saveRecord(user, LoginStatus.LOGIN_FAILED, "Invalid password");
-
-            // ✅ AUDIT: Login failed
-            auditService.log(
-                    AuditAction.LOGIN_FAILED,
-                    AuditEntity.AUTH,
-                    user.getId(),
-                    "Failed login attempt for: " + user.getUsername()
-            );
-
+            auditService.log(AuditAction.LOGIN_FAILED, AuditEntity.AUTH, user.getId(),
+                    "Failed login: " + user.getUsername());
             throw new BadCredentialsException("Invalid username or password");
         }
 
-        User authenticatedUser = (User) authentication.getPrincipal();
-        String accessToken = jwtUtil.generateAccessToken(authenticatedUser);
-        String refreshToken = jwtUtil.generateRefreshToken(authenticatedUser);
+        // 7. Password correct — now check what the user must do before full access
+
+        // Step A: Must change password first (first login with temp password)
+        if (Boolean.TRUE.equals(user.getMustChangePassword())) {
+            log.info("User {} must change password (first login)", user.getUsername());
+            String pwdChangeToken = jwtUtil.generatePasswordChangeToken(user);
+
+            return LoginResponse.builder()
+                    .status(AuthStatus.PASSWORD_CHANGE_REQUIRED)
+                    .passwordChangeToken(pwdChangeToken)
+//                    .username(user.getUsername())
+//                    .fullName(user.getFullName())
+                    .build();
+        }
+
+        // Step B: MFA required
+        if (Boolean.TRUE.equals(user.getMfaEnabled())) {
+            if (!Boolean.TRUE.equals(user.getMfaVerified())) {
+                return buildMfaResponse(user);
+            }
+
+            // Already set up — allow code in the same request
+            if (request.getTotpCode() != null && !request.getTotpCode().isBlank()) {
+                if (!totpUtil.verify(user.getMfaSecret(), request.getTotpCode())) {
+                    auditService.log(AuditAction.LOGIN_FAILED, AuditEntity.AUTH, user.getId(),
+                            "Invalid MFA code on login: " + user.getUsername());
+                    throw new BadCredentialsException("Invalid authenticator code");
+                }
+                return issueFullTokens(user);
+            }
+        }
+
+        // Step C: All clear — issue full JWT
+        return issueFullTokens(user);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // TOKEN REFRESH
+    // ═══════════════════════════════════════════════════════════════════════
+
+    public LoginResponse refreshToken(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new BadCredentialsException("Refresh token is required");
+        }
+        if (!jwtUtil.validateToken(refreshToken) || !jwtUtil.isRefreshToken(refreshToken)) {
+            throw new BadCredentialsException("Invalid refresh token");
+        }
+
+        java.util.UUID userId = jwtUtil.extractUserId(refreshToken);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadCredentialsException("User not found"));
+
+        auditService.log(AuditAction.TOKEN_REFRESHED, AuditEntity.AUTH, user.getId(),
+                "Token refreshed: " + user.getUsername());
+
+        return issueFullTokens(user);
+    }
+// ═══════════════════════════════════════════════════════════════════════
+// MFA SETUP CONFIRM — first time, after scanning the QR code
+// ═══════════════════════════════════════════════════════════════════════
+
+    @Transactional
+    public LoginResponse confirmMfaSetup(MfaSetupConfirmRequest request) {
+        UUID userId = jwtUtil.extractUserIdFromMfaToken(request.getMfaToken());
+        if (userId == null) {
+            throw new BadCredentialsException("Invalid or expired MFA token");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadCredentialsException("User not found"));
+
+        if (user.getMfaSecret() == null) {
+            throw new BadCredentialsException("MFA setup was not initiated for this account");
+        }
+
+        if (!totpUtil.verify(user.getMfaSecret(), request.getTotpCode())) {
+            throw new BadCredentialsException("Invalid authenticator code");
+        }
+
+        user.setMfaVerified(true);
+        userRepository.save(user);
+
+        auditService.log(AuditAction.MFA_ENABLED, AuditEntity.AUTH, user.getId(),
+                "MFA setup confirmed: " + user.getUsername());
+        log.info("MFA setup confirmed for: {}", user.getUsername());
+
+        return issueFullTokens(user);
+    }
+
+// ═══════════════════════════════════════════════════════════════════════
+// MFA VALIDATE — subsequent logins, MFA already set up
+// ═══════════════════════════════════════════════════════════════════════
+
+    public LoginResponse validateMfa(MfaValidateRequest request) {
+        UUID userId = jwtUtil.extractUserIdFromMfaToken(request.getMfaToken());
+        if (userId == null) {
+            throw new BadCredentialsException("Invalid or expired MFA token");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadCredentialsException("User not found"));
+
+        if (!Boolean.TRUE.equals(user.getMfaVerified()) || user.getMfaSecret() == null) {
+            throw new BadCredentialsException("MFA is not set up for this account");
+        }
+
+        if (!totpUtil.verify(user.getMfaSecret(), request.getTotpCode())) {
+            auditService.log(AuditAction.LOGIN_FAILED, AuditEntity.AUTH, user.getId(),
+                    "Invalid MFA code: " + user.getUsername());
+            throw new BadCredentialsException("Invalid authenticator code");
+        }
+
+        return issueFullTokens(user);
+    }
+
+// ═══════════════════════════════════════════════════════════════════════
+// CHANGE PASSWORD — first login with admin-set temp password
+// ═══════════════════════════════════════════════════════════════════════
+
+    @Transactional
+    public LoginResponse changePassword(ChangePasswordRequest request) {
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new BadCredentialsException("Passwords do not match");
+        }
+
+        UUID userId = jwtUtil.extractUserIdFromPasswordChangeToken(request.getPasswordChangeToken());
+        if (userId == null) {
+            throw new BadCredentialsException("Invalid or expired password-change token");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadCredentialsException("User not found"));
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setMustChangePassword(false);
+        userRepository.save(user);
+
+        auditService.log(AuditAction.PASSWORD_CHANGED, AuditEntity.AUTH, user.getId(),
+                "Password changed on first login: " + user.getUsername());
+        log.info("Password changed on first login for: {}", user.getUsername());
+
+        // Straight to MFA check / full tokens — same branching as normal login
+        if (Boolean.TRUE.equals(user.getMfaEnabled())) {
+            return buildMfaResponse(user);
+        }
+        return issueFullTokens(user);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Helpers
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private LoginResponse buildMfaResponse(User user) {
+        String mfaToken = jwtUtil.generateMfaToken(user);
+
+        if (!Boolean.TRUE.equals(user.getMfaVerified())) {
+            String secret = user.getMfaSecret();
+            if (secret == null) {                     // ← only generate once
+                secret = totpUtil.generateSecret();
+                user.setMfaSecret(secret);
+                userRepository.save(user);
+            }
+
+            String qrUri = totpUtil.buildQrCodeUri(
+                    secret, user.getUsername(),
+                    user.getFirm() != null ? user.getFirm().getLawFirmCode() : "SYSTEM"
+            );
+
+            return LoginResponse.builder()
+                    .status(AuthStatus.MFA_SETUP_REQUIRED)
+                    .mfaToken(mfaToken)
+                    .mfaQrCodeUri(qrUri)
+                    .mfaManualKey(totpUtil.formatSecretForDisplay(secret))
+//                    .username(user.getUsername())
+//                    .fullName(user.getFullName())
+                    .build();
+        }
+
+        // MFA set up — just ask for the code
+        log.info("MFA validation required for: {}", user.getUsername());
 
         return LoginResponse.builder()
+                .status(AuthStatus.MFA_REQUIRED)
+                .mfaToken(mfaToken)
+//                .username(user.getUsername())
+//                .fullName(user.getFullName())
+                .build();
+    }
+
+    private LoginResponse issueFullTokens(User user) {
+        String accessToken  = jwtUtil.generateAccessToken(user);
+        String refreshToken = jwtUtil.generateRefreshToken(user);
+
+        auditService.log(AuditAction.LOGIN, AuditEntity.AUTH, user.getId(),
+                "Login successful: " + user.getUsername());
+
+        return LoginResponse.builder()
+                .status(AuthStatus.SUCCESS)
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .expiresIn(86400000L)
+//                .username(user.getUsername())
+//                .fullName(user.getFullName())
                 .build();
     }
 
-//    @Transactional
-//    public RegisterResponse registerSolo(RegisterSoloRequest request) {
-//        Pattern validMobilePattern = Pattern.compile("^(984|985|986|987|988|980|981|982|983)[0-9]{7}$");
-//        if (!validMobilePattern.matcher(request.getMobileNo()).matches()) {
-//            throw new RuntimeException("Invalid Nepal mobile number");
-//        }
-//
-//        Pattern barCouncilPattern = Pattern.compile("^[A-Z]{3}-[0-9]{4,6}$");
-//        if (!barCouncilPattern.matcher(request.getBarCouncilNumber()).matches()) {
-//            throw new RuntimeException("Bar council number must be format: XXX-12345");
-//        }
-//
-//        String firmCode = SubdomainGenerator.generate(request.getUsername());
-//        Firm firm = Firm.builder()
-//                .lawFirmCode(firmCode)
-//                .name(request.getFullName() + " Law")
-//                .firmType(FirmType.SOLO)
-//                .status(FirmStatus.ACTIVE)
-//                .email(request.getEmail())
-//                .phone(request.getMobileNo())
-//                .build();
-//        firm = firmRepository.save(firm);
-//
-//        Role role = roleRepository.findByRoleCode("FIRM_ADMIN")
-//                .orElseThrow(() -> new RuntimeException("FIRM_ADMIN role not found"));
-//
-//        User user = new User();
-//        user.setUsername(request.getUsername());
-//        user.setEmail(request.getEmail());
-//        user.setMobileNo(request.getMobileNo());
-//        user.setPassword(passwordEncoder.encode(request.getPassword()));
-//        user.setFullName(request.getFullName());
-//        user.setFirm(firm);
-//        user.setRole(role);
-//        user.setUserType(UserType.FIRM_USER);
-//        user = userRepository.save(user);
-//
-//        // ✅ AUDIT: Firm created
-//        auditService.log(
-//                AuditAction.FIRM_CREATED,
-//                AuditEntity.FIRM,
-//                firm.getId(),
-//                "Firm created: " + firm.getLawFirmCode() + " (" + firm.getName() + ")"
-//        );
-//
-//        // ✅ AUDIT: User created (FIRM_ADMIN)
-//        auditService.log(
-//                AuditAction.USER_CREATED,
-//                AuditEntity.USER,
-//                user.getId(),
-//                "User registered: " + user.getUsername() + " (FIRM_ADMIN) for firm: " + firm.getLawFirmCode()
-//        );
-//
-//        log.info("Registered solo lawyer: {} with firm: {}", user.getUsername(), firm.getLawFirmCode());
-//
-//        return RegisterResponse.builder()
-//                .userId(user.getId())
-//                .message("Registration successful!")
-//                .build();
-//    }
-
-//    @Transactional
-//    public RegisterResponse registerClient(RegisterClientRequest request) {
-//        Firm firm;
-//
-//        if (request.getLawyerSubdomain() != null && !request.getLawyerSubdomain().isEmpty()) {
-//            firm = firmRepository.findByLawFirmCode(request.getLawyerSubdomain())
-//                    .orElseThrow(() -> new RuntimeException("Firm not found with code: " + request.getLawyerSubdomain()));
-//        } else {
-//            String firmCode = SubdomainGenerator.generate(request.getUsername());
-//            firm = Firm.builder()
-//                    .lawFirmCode(firmCode)
-//                    .name(request.getFullName())
-//                    .firmType(FirmType.SOLO)
-//                    .status(FirmStatus.ACTIVE)
-//                    .email(request.getEmail())
-//                    .phone(request.getMobileNo())
-//                    .build();
-//            firm = firmRepository.save(firm);
-//        }
-//
-//        Role clientRole = roleRepository.findByRoleCode("CLIENT")
-//                .orElseThrow(() -> new RuntimeException("CLIENT role not found"));
-//
-//        User user = new User();
-//        user.setUsername(request.getUsername());
-//        user.setEmail(request.getEmail());
-//        user.setMobileNo(request.getMobileNo());
-//        user.setPassword(passwordEncoder.encode(request.getPassword()));
-//        user.setFullName(request.getFullName());
-//        user.setFirm(firm);
-//        user.setRole(clientRole);
-//        user.setUserType(UserType.CLIENT);
-//        user = userRepository.save(user);
-//
-//        auditService.log(
-//                AuditAction.CLIENT_CREATED,
-//                AuditEntity.CLIENT,
-//                user.getId(),
-//                "Client registered: " + user.getUsername() + " (" + user.getFullName() + ") under firm: " + firm.getLawFirmCode()
-//        );
-//
-//        log.info("Registered client: {} under firm: {}", user.getUsername(), firm.getLawFirmCode());
-//
-//        return RegisterResponse.builder()
-//                .userId(user.getId())
-//                .message("Client registration successful!")
-//                .build();
-//    }
-
-    public LoginResponse refreshToken(String refreshToken) {
-        if (refreshToken == null || refreshToken.trim().isEmpty()) {
-            throw new RuntimeException("Refresh token is required");
-        }
-
-        if (!jwtUtil.validateToken(refreshToken) || !jwtUtil.isRefreshToken(refreshToken)) {
-            throw new RuntimeException("Invalid refresh token");
-        }
-
-        UUID userId = jwtUtil.extractUserId(refreshToken);
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        String newAccessToken = jwtUtil.generateAccessToken(user);
-
-        auditService.log(
-                AuditAction.TOKEN_REFRESHED,
-                AuditEntity.AUTH,
-                user.getId(),
-                "Token refreshed for user: " + user.getUsername()
-        );
-
-        return LoginResponse.builder()
-                .accessToken(newAccessToken)
-                .refreshToken(refreshToken)
-                .expiresIn(86400000L)
-                .build();
-    }
-
-    private enum AuthRoleType {
-        INTERNAL, CLIENT
-    }
+    private enum AuthRoleType { INTERNAL, CLIENT }
 }

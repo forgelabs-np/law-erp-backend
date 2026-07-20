@@ -1,4 +1,4 @@
-package com.lawfirm.erp.security;
+package com.lawfirm.erp.auth.security;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

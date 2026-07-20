@@ -1,7 +1,7 @@
 package com.lawfirm.erp.config;
 
-import com.lawfirm.erp.security.AuthEntryPoint;
-import com.lawfirm.erp.security.JwtAuthFilter;
+import com.lawfirm.erp.auth.security.AuthEntryPoint;
+import com.lawfirm.erp.auth.security.JwtAuthFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpMethod;
@@ -42,9 +42,13 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/client/login",
-                                "/api/v1/auth/register/solo",
-                                "/api/v1/auth/register/client",
+//                                "/api/v1/auth/register/solo",
+//                                "/api/v1/auth/register/client",
                                 "/api/v1/auth/refresh",
+                                "/api/v1/auth/mfa/setup/confirm",
+                                "/api/v1/auth/mfa/validate",
+                                "/api/v1/auth/change-password",
+                                "/auth/mfa/setup/confirm",
                                 "/api/v1/super-admin/login",
                                 "/api/v1/super-admin/register",
                                 "/swagger-ui/**",

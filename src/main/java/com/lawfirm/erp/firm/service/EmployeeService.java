@@ -1,5 +1,6 @@
 package com.lawfirm.erp.firm.service;
 
+import com.lawfirm.erp.auth.security.UsernameGenerator;
 import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
@@ -24,8 +25,8 @@ import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.entity.UserRole;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
 import com.lawfirm.erp.rbac.repository.UserRoleRepository;
-import com.lawfirm.erp.security.CurrentUserResolver;
-import com.lawfirm.erp.security.PermissionEvaluator;
+import com.lawfirm.erp.auth.security.CurrentUserResolver;
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -62,7 +63,7 @@ public class EmployeeService {
                 .orElseThrow(() -> new ResourceNotFoundException("Firm not found"));
 
         // Validate uniqueness within firm
-        validateUniqueness(firmId, request.getUsername(), request.getEmail(), request.getMobileNo());
+        validateUniqueness(firmId, request.getEmail(), request.getMobileNo());
 
         // Validate role
         Role role = validateFirmRole(request.getRoleId(), firmId);
@@ -71,8 +72,10 @@ public class EmployeeService {
         }
 
         // Create User
+        String generatedUsername = generateUniqueUsername(firm.getLawFirmCode(), request.getUsername());
+
         User user = User.builder()
-                .username(request.getUsername())
+                .username(generatedUsername)          // ← generated, not admin-typed
                 .email(request.getEmail())
                 .mobileNo(request.getMobileNo())
                 .password(passwordEncoder.encode(request.getPassword()))
@@ -84,7 +87,10 @@ public class EmployeeService {
                 .isMobileVerified(true)
                 .isBlocked(false)
                 .loginAttempts(0)
+                .mustChangePassword(true)
+                .mfaEnabled("FIRM_ADMIN".equals(role.getRoleCode()))
                 .build();
+
         user.setActive(true);
         user = userRepository.save(user);
 
@@ -97,7 +103,7 @@ public class EmployeeService {
 
         // Generate employee code
         long count = employeeProfileRepository.countByFirmId(firmId);
-        String employeeCode = firm.getLawFirmCode() + "-EMP-" + String.format("%04d", count + 1);
+        String employeeCode = firm.getLawFirmCode() + "-" + String.format("%04d", count + 1);
 
         // Create EmployeeProfile
         EmployeeProfile profile = EmployeeProfile.builder()
@@ -255,10 +261,10 @@ public class EmployeeService {
         return firmId;
     }
 
-    private void validateUniqueness(UUID firmId, String username, String email, String mobileNo) {
-        if (userRepository.existsByUsernameAndFirmId(username, firmId)) {
-            throw new DuplicateResourceException("Username '" + username + "' already exists in your firm");
-        }
+    private void validateUniqueness(UUID firmId, String email, String mobileNo) {
+//        if (userRepository.existsByUsernameAndFirmId(username, firmId)) {
+//            throw new DuplicateResourceException("Username '" + username + "' already exists in your firm");
+//        }
         if (userRepository.existsByEmailAndFirmId(email, firmId)) {
             throw new DuplicateResourceException("Email '" + email + "' already exists in your firm");
         }
@@ -348,5 +354,20 @@ public class EmployeeService {
         }
 
         return role;
+    }
+
+    private boolean mfaRequiredFor(Role role) {
+        return "FIRM_ADMIN".equals(role.getRoleCode());
+    }
+
+    private String generateUniqueUsername(String firmCode, String baseName) {
+        String base = UsernameGenerator.build(firmCode, baseName);
+        String candidate = base;
+        int suffix = 1;
+        while (userRepository.existsByUsername(candidate)) {
+            suffix++;
+            candidate = base + suffix;
+        }
+        return candidate;
     }
 }

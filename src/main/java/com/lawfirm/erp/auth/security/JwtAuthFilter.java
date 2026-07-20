@@ -1,4 +1,4 @@
-package com.lawfirm.erp.security;
+package com.lawfirm.erp.auth.security;
 
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.auth.AuthenticatedDetail;
@@ -31,7 +31,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final UserRepository userRepository;
 
     @Override
-    protected void doFilterInternal(@NonNull HttpServletRequest request,
+        protected void doFilterInternal(@NonNull HttpServletRequest request,
                                     @NonNull HttpServletResponse response,
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
 
@@ -56,6 +56,20 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String userType = claims.get("userType", String.class);
             String userIdStr = claims.get("userId",  String.class);
 
+            if (jwtUtil.isLimitedScopeToken(token)) {
+                String path = request.getRequestURI();
+                boolean allowedPath = path.startsWith("/api/v1/auth/mfa/")
+                        || path.startsWith("/api/v1/auth/change-password");
+
+                if (!allowedPath) {
+                    response.sendError(HttpStatus.UNAUTHORIZED.value(),
+                            "This token is only valid for authentication steps. Please complete login.");
+                    return;
+                }
+                // For the allowed paths, skip all further checks and let it through
+                filterChain.doFilter(request, response);
+                return;
+            }
             // ── Permission version staleness check ────────────────────────
             // Only for non-super-admin users
             if (userIdStr != null && !"SUPER_ADMIN".equals(userType)) {

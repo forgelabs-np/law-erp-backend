@@ -16,7 +16,7 @@ import com.lawfirm.erp.rbac.mapper.ModuleMapper;
 import com.lawfirm.erp.rbac.repository.ModulePermissionRepository;
 import com.lawfirm.erp.rbac.repository.ModuleRepository;
 import com.lawfirm.erp.rbac.repository.PermissionRepository;
-import com.lawfirm.erp.security.CurrentUserResolver;
+import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

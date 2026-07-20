@@ -1,4 +1,4 @@
-package com.lawfirm.erp.security;
+package com.lawfirm.erp.auth.security;
 
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.repository.UserRepository;

@@ -12,6 +12,7 @@ public enum AuditAction {
     LOGIN_FAILED,
     PASSWORD_CHANGED,
     TOKEN_REFRESHED,
+    MFA_ENABLED,
 
     // ── User / Employee ──────────────────────
     USER_CREATED,
