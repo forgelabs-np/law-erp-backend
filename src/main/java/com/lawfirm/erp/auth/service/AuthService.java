@@ -151,15 +151,16 @@ public class AuthService {
                 return buildMfaResponse(user);
             }
 
-            // Already set up — allow code in the same request
-            if (request.getTotpCode() != null && !request.getTotpCode().isBlank()) {
-                if (!totpUtil.verify(user.getMfaSecret(), request.getTotpCode())) {
-                    auditService.log(AuditAction.LOGIN_FAILED, AuditEntity.AUTH, user.getId(),
-                            "Invalid MFA code on login: " + user.getUsername());
-                    throw new BadCredentialsException("Invalid authenticator code");
-                }
-                return issueFullTokens(user);
+            if (request.getTotpCode() == null || request.getTotpCode().isBlank()) {
+                return buildMfaResponse(user);   // set up, but no code sent this time — ask for it
             }
+
+            if (!totpUtil.verify(user.getMfaSecret(), request.getTotpCode())) {
+                auditService.log(AuditAction.LOGIN_FAILED, AuditEntity.AUTH, user.getId(),
+                        "Invalid MFA code on login: " + user.getUsername());
+                throw new BadCredentialsException("Invalid authenticator code");
+            }
+            return issueFullTokens(user);
         }
 
         // Step C: All clear — issue full JWT
