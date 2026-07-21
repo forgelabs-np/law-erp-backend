@@ -1,4 +1,4 @@
-package com.lawfirm.erp.security;
+package com.lawfirm.erp.auth.security;
 
 import com.lawfirm.erp.dto.auth.AuthenticatedDetail;
 import com.lawfirm.erp.entity.User;
@@ -219,4 +219,80 @@ public class JwtUtil {
         authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
         return authenticationToken;
     }
+    // ADD these methods to your existing JwtUtil.java
+// Place them after generateRefreshToken()
+
+    // ── Limited-scope tokens ──────────────────────────────────────────────────
+
+    /**
+     * Short-lived token (10 min) issued when MFA is required.
+     * Only valid for /auth/mfa/* endpoints — NOT a full access token.
+     * JwtAuthFilter rejects this for all other endpoints.
+     */
+    public String generateMfaToken(User user) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", user.getId().toString());
+        claims.put("type", "mfa");          // ← scope marker
+
+        return Jwts.builder()
+                .claims(claims)
+                .subject(user.getUsername())
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 10 * 60 * 1000L)) // 10 min
+                .signWith(key, Jwts.SIG.HS512)
+                .compact();
+    }
+
+    /**
+     * Short-lived token (10 min) issued when password change is required.
+     * Only valid for /auth/change-password — NOT a full access token.
+     */
+    public String generatePasswordChangeToken(User user) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", user.getId().toString());
+        claims.put("type", "pwd_change");   // ← scope marker
+
+        return Jwts.builder()
+                .claims(claims)
+                .subject(user.getUsername())
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 10 * 60 * 1000L)) // 10 min
+                .signWith(key, Jwts.SIG.HS512)
+                .compact();
+    }
+
+    /** Extract userId from an mfa token — returns null if wrong type or expired */
+    public UUID extractUserIdFromMfaToken(String token) {
+        return extractUserIdFromScopedToken(token, "mfa");
+    }
+
+    /** Extract userId from a password-change token — returns null if wrong type or expired */
+    public UUID extractUserIdFromPasswordChangeToken(String token) {
+        return extractUserIdFromScopedToken(token, "pwd_change");
+    }
+
+    private UUID extractUserIdFromScopedToken(String token, String expectedType) {
+        try {
+            if (!validateToken(token)) return null;
+            Claims claims = extractAllClaims(token);
+            String type = claims.get("type", String.class);
+            if (!expectedType.equals(type)) return null;
+            String userId = claims.get("userId", String.class);
+            return userId != null ? UUID.fromString(userId) : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Returns true if this is a limited-scope token (mfa or pwd_change), not a full access token */
+    public boolean isLimitedScopeToken(String token) {
+        try {
+            Claims claims = extractAllClaims(token);
+            String type = claims.get("type", String.class);
+            return "mfa".equals(type) || "pwd_change".equals(type);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
 }

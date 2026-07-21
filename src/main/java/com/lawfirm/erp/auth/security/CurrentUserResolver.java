@@ -1,4 +1,4 @@
-package com.lawfirm.erp.security;
+package com.lawfirm.erp.auth.security;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;

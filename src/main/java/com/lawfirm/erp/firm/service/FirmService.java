@@ -97,6 +97,8 @@ public class FirmService {
                 .isMobileVerified(true)
                 .isBlocked(false)
                 .loginAttempts(0)
+                .mustChangePassword(true)
+                .mfaEnabled(true)
                 .build();
         admin.setActive(true);
         admin = userRepository.save(admin);

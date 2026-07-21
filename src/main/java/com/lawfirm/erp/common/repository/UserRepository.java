@@ -85,4 +85,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Page<User> findByFirmIdAndUserTypePaged(@Param("firmId") UUID firmId,
                                             @Param("userType") UserType userType,
                                             Pageable pageable);
+
+    boolean existsByUsername(@Param("username") String username);
 }

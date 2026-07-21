@@ -1,4 +1,4 @@
-package com.lawfirm.erp.security;
+package com.lawfirm.erp.auth.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lawfirm.erp.common.dto.ApiResponse;

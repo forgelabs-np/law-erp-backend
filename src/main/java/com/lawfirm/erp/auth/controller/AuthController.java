@@ -5,14 +5,14 @@ import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.enums.Message;
 import com.lawfirm.erp.common.exception.ResponseHandler;
-import com.lawfirm.erp.dto.auth.request.LoginRequest;
-import com.lawfirm.erp.dto.auth.request.RefreshTokenRequest;
+import com.lawfirm.erp.dto.auth.request.*;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -80,4 +80,45 @@ public class AuthController {
                 "Token refreshed"
         );
     }
+
+    @PostMapping("/mfa/setup/confirm")
+    @Operation(summary = "Confirm MFA setup after scanning QR code")
+    public ResponseEntity<ApiResponse<LoginResponse>> confirmMfaSetup(
+            @Valid @RequestBody ApiRequest<MfaSetupConfirmRequest> request) {
+        return responseHandler.ok(
+                authService.confirmMfaSetup(request.getData()),
+                Message.SUCCESS,
+                "MFA enabled"
+        );
+    }
+
+    @PostMapping("/mfa/validate")
+    @Operation(summary = "Validate TOTP code on login")
+    public ResponseEntity<ApiResponse<LoginResponse>> validateMfa(
+            @Valid @RequestBody ApiRequest<MfaValidateRequest> request) {
+        return responseHandler.ok(
+                authService.validateMfa(request.getData()),
+                Message.SUCCESS,
+                "Authenticated"
+        );
+    }
+
+    @PostMapping("/change-password")
+    @Operation(summary = "Change password on first login")
+    public ResponseEntity<ApiResponse<LoginResponse>> changePassword(
+            @Valid @RequestBody ApiRequest<ChangePasswordRequest> request) {
+        return responseHandler.ok(
+                authService.changePassword(request.getData()),
+                Message.SUCCESS,
+                "Password changed"
+        );
+    }
+
+//    @PostMapping("/mfa/bulk-enable")
+//    @PreAuthorize("hasRole('FIRM_ADMIN') or hasRole('SUPER_ADMIN')")
+//    public ResponseEntity<ApiResponse<Void>> bulkEnableMfa(
+//            @Valid @RequestBody ApiRequest<BulkEnableMfaRequest> request) {
+//        authService.bulkEnableMfa(request.getData());
+//        return responseHandler.ok(null, Message.SUCCESS, "MFA enabled for selected users");
+//    }
 }
