@@ -30,6 +30,7 @@ public class RoleController {
     private final RoleManagementService roleManagementService;
     private final RolePermissionService rolePermissionService;
     private final ResponseHandler responseHandler;
+    private final CurrentUserResolver currentUserResolver;
 
     @PostMapping
     @Operation(summary = "Create or update role")

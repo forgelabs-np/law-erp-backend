@@ -33,16 +33,26 @@ public class RSAEncryptionUtil {
     private PrivateKey privateKey;
     private PublicKey publicKey;
 
-    // For testing - fallback keys if not in properties
-    private static final String FALLBACK_PUBLIC_KEY = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlA31xNwr4uAW+qT7+3XNd7lLS0xn1W5tgNyJVpR86dWOhPotnQhnasQOode80+AFgPz1bAjTAWSZfxLScnq65lH1ZdQJFydFQawKSMcVmelrXmq51lE//n7yUTXkG8DUD1rf6QY2vrI44gY+sjXT844qeHU+L89Xjk7BOK2S5v8WdYugvqD3krToPEgZfMTbSP2Fxztc1biXFvyEGxPuEGlniW3U7JXYmI27nBRYf8X1XIE1Xfg6Xo7JHeK2Ey+f0lu9Zxin6KUcFz2K/E2KZ6mBvebeXkvQ6+jZojdclkieN9aJQVn7A6W95uksAG+BAUy98Ff/8K8m3beghJnHDQIDAQAB";
-    private static final String FALLBACK_PRIVATE_KEY = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCUDfXE3Cvi4Bb6pPv7dc13uUtLTGfVbm2A3IlWlHzp1Y6E+i2dCGdqxA6h17zT4AWA/PVsCNMBZJl/EtJyerrmUfVl1AkXJ0VBrApIxxWZ6WtearnWUT/+fvJRNeQbwNQPWt/pBja+sjjiBj6yNdPzjip4dT4vz1eOTsE4rZLm/xZ1i6C+oPeStOg8SBl8xNtI/YXHO1zVuJcW/IQbE+4QaWeJbdTsldiYjbucFFh/xfVcgTVd+Dpejskd4rYTL5/SW71nGKfopRwXPYr8TYpnqYG95t5eS9Dr6NmiN1yWSJ431olBWfsDpb3m6SwAb4EBTL3wV//wrybdt6CEmccNAgMBAAECggEAC4UwkAJfydYNA7DNyKnIdJ3u7WuDEtj2XVYLu7hvJdTPs6ox3Wu3fFfIGbDLSSM/2mMUh7UCEjQtO3WP+YdyPpS3BxbiJDKSkYMdA7+1/xVqHN0qG7KTy64+FbKfTseI2K8GCEBLBzif83pv63cDyIpR5LCex6KXGgQnxcy/xwiI9Vh49V+t0v4t0Rs/wonLwOXD/LVapmwzsp2Ai2SJwgxJy/Qo49qxq/acidkg5YqlOSluL3SK1YWDE6bDMKQoIyA5Vvt04id7NixDn1EuclzD8fATZ44Op1tISZHoKZ7ediw96BMYFaabpByOdVXra4jsuxmO78YMUiqDPAVU4QKBgQDMuisiO8aqfJrUVyZ8+m9+ws34hO+FZDgjySB6HQda4jNjhhyKCeGtgAkrFnlXwQgYkjgHKnIRnzOuvzuIp+tOO/Luyxk5QeGqi358GeWlkgQCsY6juCvgkPNDLX2d1Ff6gdgUUi12jnnB61cLGtERal/SKQcUcFGTNEnFl12bcQKBgQC5IkreDSZLpaBZj0jGXMFUQaKktEKv3v9gqeSdidRkdtMNXQD6kDG4QMo35ODrrV634IRmdQzPD2i6Rt2nSWn7Bt3aOHWctIzoKcFT1NYY0MQtwznQsXJvCrdbOefEje4gFPBfFLlmBgrP2FHeIpGsCKnjq31/IDs8DOK6ZQ+/XQKBgEnelre4d9uGMFuTwphvyJEleypD1ST9X2BSLvzAwqmhWsd7WYrZO+vdefFpH4lxZhlvkPXM8/G1zvEroTCS3k2RRfuxnr1RLzrZMF9Y/Mq8H+RU6tHaH0LdKlk/7cZoGwKRnUTfzfWsPPSilPq1x2AQUNjE4wAV8uk5gbDhB+6RAoGBAJA8+3+NVyzQ2eFtFRIW6jku+fzAxMQpRWaWdxuWavfq6/wZXc3Z0iLvt51coTB9XrJ8Jit9PoGES9/1nnPbasq9StPd8SQqNy4aehlKVZP38yCEXeMOnU2OV9SnhL9KpSAxsCUkDF5Ejt/odcBPxpb2GQbccWY+QmhC0dLPMjmxAoGAdBHG+aWdXC5E/QUAhoTkqhHbtcgC97rtMkxWzkZTQjR17IcoIF6XvNVc6/sBEWoUDgLbuRusBv02iXdeOV3XhfBoQgMxy2+QGV9gy5HeSX/ZV/S90uTuQIQNXfmkB6A/N65dFF3lvxcGFYhaW9itolUed5tcp+iJ+2d3ylGuIio=";
+    // SECURITY FIX: Removed hardcoded fallback keys. RSA keys MUST be configured
+    // via application properties (encryption.rsa.public-key and encryption.rsa.private-key).
+    // If keys are not configured, initialization will fail at startup rather than
+    // silently using insecure defaults.
 
     public RSAEncryptionUtil() {
         try {
-            String publicKeyToUse = (rsaPublicKey == null || rsaPublicKey.isEmpty())
-                    ? FALLBACK_PUBLIC_KEY : rsaPublicKey;
-            String privateKeyToUse = (rsaPrivateKey == null || rsaPrivateKey.isEmpty())
-                    ? FALLBACK_PRIVATE_KEY : rsaPrivateKey;
+            if (rsaPublicKey == null || rsaPublicKey.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "RSA public key not configured. Set 'encryption.rsa.public-key' in application properties."
+                );
+            }
+            if (rsaPrivateKey == null || rsaPrivateKey.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "RSA private key not configured. Set 'encryption.rsa.private-key' in application properties."
+                );
+            }
+
+            String publicKeyToUse = rsaPublicKey;
+            String privateKeyToUse = rsaPrivateKey;
 
             String cleanedPublicKey = cleanBase64Key(publicKeyToUse);
             String cleanedPrivateKey = cleanBase64Key(privateKeyToUse);
@@ -197,6 +207,9 @@ public class RSAEncryptionUtil {
     }
 
     public String getPublicKeyBase64() {
-        return rsaPublicKey != null && !rsaPublicKey.isEmpty() ? rsaPublicKey : FALLBACK_PUBLIC_KEY;
+        if (rsaPublicKey == null || rsaPublicKey.isEmpty()) {
+            throw new IllegalStateException("RSA public key not configured");
+        }
+        return rsaPublicKey;
     }
 }

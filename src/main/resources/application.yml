@@ -42,5 +42,11 @@ mybatis:
     default-statement-timeout: 30
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
+# Config encryption key for AES-256 (32 bytes, Base64-encoded)
+# Generate with: openssl rand -base64 32
+config:
+  encryption:
+    key: ${CONFIG_ENCRYPTION_KEY:}
+
 security:
   max-login-attempts: 5

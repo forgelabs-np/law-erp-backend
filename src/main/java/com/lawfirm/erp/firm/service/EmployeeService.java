@@ -21,6 +21,7 @@ import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.EmployeeProfileRepository;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
+import com.lawfirm.erp.modules.email.service.EmailService;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.entity.UserRole;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
@@ -55,6 +56,7 @@ public class EmployeeService {
     private final CurrentUserResolver currentUserResolver;
     private final PermissionEvaluator permissionEvaluator;
     private final AuditService auditService;
+    private final EmailService emailService;
 
     @Transactional
     public EmployeeResponse createEmployee(CreateEmployeeRequest request) {
@@ -88,7 +90,10 @@ public class EmployeeService {
                 .isBlocked(false)
                 .loginAttempts(0)
                 .mustChangePassword(true)
-                .mfaEnabled("FIRM_ADMIN".equals(role.getRoleCode()))
+                // FIX: MFA is now configurable. FIRM_ADMIN always has MFA forced on.
+                // ADVOCATE and PARALEGAL can have MFA enabled by firm admin later.
+                // "FIRM_ADMIN" is blocked above, so this is always false for employees.
+                .mfaEnabled(false)
                 .build();
 
         user.setActive(true);
@@ -128,6 +133,19 @@ public class EmployeeService {
         );
 
         log.info("Employee created: {} (code: {}) in firm {}", user.getUsername(), employeeCode, firm.getLawFirmCode());
+
+        // 8. Send welcome email (async, non-blocking)
+        UUID currentUserId = currentUserResolver.getCurrentUserId();
+        emailService.sendWelcomeEmployee(
+                firmId,
+                currentUserId,
+                user.getEmail(),
+                user.getFullName(),
+                user.getUsername(),
+                request.getPassword(), // raw password before encoding
+                firm.getName(),
+                firm.getLawFirmCode()
+        );
 
         return toResponse(user, role, profile);
     }

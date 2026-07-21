@@ -94,8 +94,22 @@ public class AuditService {
         }
     }
 
+    /** FIX: The auth principal from JwtAuthFilter is AuthenticatedDetail (wrapped in
+     *  UsernamePasswordAuthenticationToken), NOT AuthenticatedUser.
+     *  AuthenticatedUser is stored as a request attribute under key "authenticatedUser".
+     *  We must read from the request attribute instead of SecurityContext principal. */
     private AuthenticatedUser getCurrentUser() {
         try {
+            // First try: check request attribute (set by JwtAuthFilter)
+            ServletRequestAttributes attrs =
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attrs != null) {
+                AuthenticatedUser authUser = (AuthenticatedUser) attrs.getRequest()
+                        .getAttribute("authenticatedUser");
+                if (authUser != null) return authUser;
+            }
+
+            // Second try: SecurityContext principal (may be AuthenticatedDetail)
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.getPrincipal() instanceof AuthenticatedUser user) {
                 return user;
