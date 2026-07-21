@@ -1,6 +1,7 @@
 package com.lawfirm.erp.firm.service;
 
 import com.lawfirm.erp.modules.audit.service.AuditService;
+import com.lawfirm.erp.modules.email.service.EmailService;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.FirmStatus;
@@ -40,6 +41,7 @@ public class FirmService {
     private final UserRoleRepository userRoleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
+    private final EmailService emailService;
 
     @Transactional
     public FirmCreationResponse createFirm(CreateFirmRequest request) {
@@ -111,6 +113,18 @@ public class FirmService {
         userRoleRepository.save(userRole);
 
         log.info("Firm '{}' created with admin '{}'", firm.getLawFirmCode(), admin.getUsername());
+
+        // 7. Send welcome email to firm admin (async, non-blocking)
+        emailService.sendWelcomeFirmAdmin(
+                firm.getId(),
+                admin.getId(),           // triggered by the super admin creating this
+                admin.getEmail(),
+                admin.getFullName(),
+                admin.getUsername(),
+                request.getAdminPassword(), // raw password before encoding
+                firm.getName(),
+                firm.getLawFirmCode()
+        );
 
         // 6. Audit — use logExplicit because this runs in SUPER_ADMIN context
         //    where SecurityContext IS available, but we pass the values explicitly

@@ -141,14 +141,22 @@ public class RoleManagementService {
         return adminId;
     }
 
+    /** FIX: Use findAllByRoleCode with code lookup, then filter non-system roles.
+     *  Previously used findSystemRoleByCode() which only found system roles (firm IS NULL),
+     *  making the update-by-code path always fail for non-system roles.
+     *  Now uses findAllByRoleCode() and filters for non-system roles. */
     private Role findExistingRole(RoleRequest request) {
         if (request.getId() != null) {
             return roleRepository.findById(request.getId()).orElse(null);
         }
         if (request.getCode() != null && !request.getCode().isEmpty()) {
-            // System roles should not be found here — they can't be updated via this API
-            // Use findSystemRoleByCode to avoid NonUniqueResultException
-            return roleRepository.findSystemRoleByCode(request.getCode()).orElse(null);
+            List<Role> roles = roleRepository.findAllByRoleCode(request.getCode());
+            // Prefer non-system (firm-scoped) roles for update
+            // System roles can't be modified (will be caught by validateNotSystemRole)
+            return roles.stream()
+                    .filter(r -> !Boolean.TRUE.equals(r.getIsSystem()))
+                    .findFirst()
+                    .orElse(null);
         }
         return null;
     }

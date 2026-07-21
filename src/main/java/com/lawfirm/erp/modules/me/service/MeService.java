@@ -3,6 +3,7 @@ package com.lawfirm.erp.modules.me.service;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.exception.UnauthorizedException;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.entity.FirmModule;
@@ -31,6 +32,7 @@ public class MeService {
     private final FirmModuleRepository firmModuleRepository;
     private final ModuleRepository moduleRepository;
     private final CurrentUserResolver currentUserResolver;
+    private final SystemConfigService systemConfigService;
 
     public MeResponse getMe() {
         UUID userId = currentUserResolver.getCurrentUserId();
@@ -63,6 +65,9 @@ public class MeService {
                 .role(buildRoleInfo(user.getRole()))
                 .permissions(permCodes)
                 .modules(moduleAccess)
+                .brandColorPrimary(resolveBrandPrimary(user))
+                .brandColorSecondary(resolveBrandSecondary(user))
+                .appName(resolveAppName())
                 .isActive(user.isActive())
                 .lastLoginAt(user.getLastLoginAt())
                 .build();
@@ -121,6 +126,27 @@ public class MeService {
                         .actions(permsByModule.getOrDefault(m.getCode(), List.of()))
                         .build())
                 .collect(Collectors.toList());
+    }
+
+    private String resolveBrandPrimary(User user) {
+        if (user.isSuperAdmin() || user.getFirm() == null) {
+            return "#1A237E"; // default
+        }
+        return systemConfigService.getFirm(user.getFirm().getId(),
+                SystemConfigService.KEY_BRAND_COLOR_PRIMARY).orElse("#1A237E");
+    }
+
+    private String resolveBrandSecondary(User user) {
+        if (user.isSuperAdmin() || user.getFirm() == null) {
+            return "#E3F2FD"; // default
+        }
+        return systemConfigService.getFirm(user.getFirm().getId(),
+                SystemConfigService.KEY_BRAND_COLOR_SECONDARY).orElse("#E3F2FD");
+    }
+
+    private String resolveAppName() {
+        return systemConfigService.getGlobal(SystemConfigService.KEY_APP_NAME)
+                .orElse("NepalCRM");
     }
 
     private MeResponse.FirmInfo buildFirmInfo(Firm firm) {
