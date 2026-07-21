@@ -1,5 +1,6 @@
 package com.lawfirm.erp.rbac.controller;
 
+import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
