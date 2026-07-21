@@ -1,0 +1,527 @@
+{
+  "info": {
+    "name": "NepalCRM — Email & Config API",
+    "description": "Complete test collection for SystemConfig, FirmEmailConfig, and EmailService. Import into Postman, set the two collection variables (baseUrl + token), and run through each folder in order.\n\n## Setup\n1. Set `baseUrl` collection variable to `http://localhost:6969/api/v1` (or your server URL)\n2. Run \"Login Super Admin\" → copy the accessToken → set `token` variable\n3. Run through SUPER ADMIN CONFIG first to seed global SMTP\n4. Then login as a Firm Admin and test firm-scoped endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "codebuff"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:6969/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "firmAdminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "superAdminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "firmId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "employeeId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 Step 1 — Auth (get tokens)",
+      "item": [
+        {
+          "name": "Register Super Admin (one-time)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"superadmin\",\n    \"email\": \"admin@nepalcrm.com\",\n    \"password\": \"Admin@123\",\n    \"fullName\": \"Super Admin\",\n    \"secretKey\": \"cdae9adca9e7cb0ab2afb82e2a2a74b7\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/super-admin/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["super-admin", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login Super Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.accessToken) {",
+                  "  pm.collectionVariables.set('superAdminToken', jsonData.data.accessToken);",
+                  "  console.log('Super Admin token set');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"superadmin\",\n    \"password\": \"Admin@123\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/super-admin/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["super-admin", "login"]
+            }
+          }
+        },
+        {
+          "name": "Create a Firm + Firm Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data) {",
+                  "  pm.collectionVariables.set('firmId', jsonData.data.firmId);",
+                  "  console.log('Firm ID:', jsonData.data.firmId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"lawFirmCode\": \"APEX\",\n    \"name\": \"Apex Law Associates\",\n    \"firmType\": \"PARTNERSHIP\",\n    \"email\": \"info@apexlaw.com\",\n    \"phone\": \"+977-1-4XXXXXX\",\n    \"address\": \"Kathmandu, Nepal\",\n    \"jurisdiction\": \"Nepal\",\n    \"adminUsername\": \"apexadmin\",\n    \"adminEmail\": \"admin@apexlaw.com\",\n    \"adminPassword\": \"FirmAdmin@123\",\n    \"adminFullName\": \"Apex Admin\",\n    \"adminMobileNo\": \"+977-98XXXXXXXX\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/super-admin",  
+              "host": ["{{baseUrl}}"],
+              "path": ["super-admin"]
+            }
+          }
+        },
+        {
+          "name": "Login as Firm Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.accessToken) {",
+                  "  pm.collectionVariables.set('firmAdminToken', jsonData.data.accessToken);",
+                  "  pm.collectionVariables.set('token', jsonData.data.accessToken);",
+                  "  console.log('Firm Admin token set');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"apexadmin\",\n    \"password\": \"FirmAdmin@123\",\n    \"lawFirmCode\": \"APEX\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🌍 Step 2 — Super Admin: Global Config (SystemConfig GLOBAL)",
+      "item": [
+        {
+          "name": "GET Global Config (list all)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/super-admin/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["super-admin", "config"]
+            }
+          }
+        },
+        {
+          "name": "PUT Global Config — seed platform SMTP + app settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"SMTP_HOST\": \"smtp.gmail.com\",\n  \"SMTP_PORT\": \"587\",\n  \"SMTP_USERNAME\": \"noreply@nepalcrm.com\",\n  \"SMTP_PASSWORD\": \"your-gmail-app-password-here\",\n  \"SMTP_FROM_NAME\": \"NepalCRM Platform\",\n  \"SMTP_FROM_ADDRESS\": \"noreply@nepalcrm.com\",\n  \"APP_PRODUCTION\": \"false\",\n  \"APP_NAME\": \"NepalCRM\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/super-admin/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["super-admin", "config"]
+            }
+          }
+        },
+        {
+          "name": "PUT Global Config — single key update",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"APP_NAME\": \"NepalCRM v2\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/super-admin/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["super-admin", "config"]
+            }
+          }
+        },
+        {
+          "name": "DELETE Global Config — remove a key",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/super-admin/config/SMTP_FROM_ADDRESS",
+              "host": ["{{baseUrl}}"],
+              "path": ["super-admin", "config", "SMTP_FROM_ADDRESS"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏢 Step 3 — Super Admin: Per-Firm Config (SystemConfig FIRM scope)",
+      "item": [
+        {
+          "name": "GET Firm Config (super admin view)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/super-admin/firms/{{firmId}}/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["super-admin", "firms", "{{firmId}}", "config"]
+            }
+          }
+        },
+        {
+          "name": "PUT Firm Config — set brand colors for a firm",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"BRAND_COLOR_PRIMARY\": \"#1A237E\",\n  \"BRAND_COLOR_SECONDARY\": \"#E3F2FD\",\n  \"EMAIL_FOOTER_TEXT\": \"Apex Law Associates © 2025. All rights reserved.\",\n  \"EMAIL_SIGNATURE\": \"Best regards,\\nApex Law Team\",\n  \"TIMEZONE\": \"Asia/Kathmandu\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/super-admin/firms/{{firmId}}/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["super-admin", "firms", "{{firmId}}", "config"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎨 Step 4 — Firm Admin: Firm Config (brand colors, footer)",
+      "item": [
+        {
+          "name": "GET Firm Config (firm admin view)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{firmAdminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/firm/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["firm", "config"]
+            }
+          }
+        },
+        {
+          "name": "PUT Firm Config — update brand color + footer",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{firmAdminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"BRAND_COLOR_PRIMARY\": \"#0D47A1\",\n  \"BRAND_COLOR_SECONDARY\": \"#BBDEFB\",\n  \"EMAIL_FOOTER_TEXT\": \"Apex Law Associates — Excellence in Legal Service\",\n  \"TIMEZONE\": \"Asia/Kathmandu\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/firm/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["firm", "config"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📧 Step 5 — Firm Admin: Email Config (SMTP)",
+      "item": [
+        {
+          "name": "GET Email Config (check current state)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{firmAdminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/firm/email-config",
+              "host": ["{{baseUrl}}"],
+              "path": ["firm", "email-config"]
+            }
+          }
+        },
+        {
+          "name": "PUT Email Config — setup Gmail SMTP with app password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{firmAdminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smtpHost\": \"smtp.gmail.com\",\n  \"smtpPort\": 587,\n  \"smtpUsername\": \"apex@apexlaw.com\",\n  \"smtpPassword\": \"your-gmail-app-password\",\n  \"fromName\": \"Apex Law Associates\",\n  \"fromAddress\": \"noreply@apexlaw.com\",\n  \"useTls\": true,\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/firm/email-config",
+              "host": ["{{baseUrl}}"],
+              "path": ["firm", "email-config"]
+            }
+          }
+        },
+        {
+          "name": "PUT Email Config — update without changing password (__UNCHANGED__)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{firmAdminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smtpHost\": \"smtp.gmail.com\",\n  \"smtpPort\": 587,\n  \"smtpUsername\": \"apex@apexlaw.com\",\n  \"smtpPassword\": \"__UNCHANGED__\",\n  \"fromName\": \"Apex Law Associates (Updated)\",\n  \"fromAddress\": \"noreply@apexlaw.com\",\n  \"useTls\": true,\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/firm/email-config",
+              "host": ["{{baseUrl}}"],
+              "path": ["firm", "email-config"]
+            }
+          }
+        },
+        {
+          "name": "POST Test Email Config — test SMTP connection",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{firmAdminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/firm/email-config/test",
+              "host": ["{{baseUrl}}"],
+              "path": ["firm", "email-config", "test"]
+            }
+          }
+        },
+        {
+          "name": "DELETE Email Config — reset to platform SMTP",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{firmAdminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/firm/email-config",
+              "host": ["{{baseUrl}}"],
+              "path": ["firm", "email-config"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👤 Step 6 — Verify /me includes brand config",
+      "item": [
+        {
+          "name": "GET /me (Firm Admin) — check brandColorPrimary in response",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{firmAdminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "✉️ Step 7 — Trigger emails (test email sending)",
+      "item": [
+        {
+          "name": "Create Employee → triggers WELCOME_EMPLOYEE email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.id) {",
+                  "  pm.collectionVariables.set('employeeId', jsonData.data.id);",
+                  "  console.log('Employee ID:', jsonData.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{firmAdminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"advocate1\",\n    \"email\": \"advocate1@apexlaw.com\",\n    \"mobileNo\": \"+977-9800000001\",\n    \"password\": \"Temp@123\",\n    \"fullName\": \"Shyam Sharma\",\n    \"designation\": \"Senior Advocate\",\n    \"barCouncilNo\": \"BC-2025-001\",\n    \"specialization\": \"Criminal Law\",\n    \"joiningDate\": \"2025-06-01\",\n    \"roleId\": \"<ADVOCATE_ROLE_ID>\",\n    \"emergencyContactName\": \"Ram Sharma\",\n    \"emergencyContactPhone\": \"+977-9800000002\",\n    \"notes\": \"Experienced criminal lawyer\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/firm/employees",
+              "host": ["{{baseUrl}}"],
+              "path": ["firm", "employees"]
+            }
+          }
+        },
+        {
+          "name": "Create Client → triggers WELCOME_CLIENT email",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{firmAdminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"clientraj\",\n    \"email\": \"raj.sharma@email.com\",\n    \"mobileNo\": \"+977-9800000003\",\n    \"password\": \"Client@123\",\n    \"fullName\": \"Raj Sharma\",\n    \"portalAccessEnabled\": true\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/firm/clients",
+              "host": ["{{baseUrl}}"],
+              "path": ["firm", "clients"]
+            }
+          }
+        },
+        {
+          "name": "Reset Password → triggers PASSWORD_RESET email",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{firmAdminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"newPassword\": \"NewTemp@456\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/modules/users/{{employeeId}}/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["modules", "users", "{{employeeId}}", "reset-password"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📋 Step 8 — Verify audit logs for email events",
+      "item": [
+        {
+          "name": "GET Firm Audit Logs — check EMAIL_SENT entries",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{firmAdminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/firm/audit",
+              "host": ["{{baseUrl}}"],
+              "path": ["firm", "audit"]
+            }
+          }
+        },
+        {
+          "name": "GET Global Config (verify persisted)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superAdminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/super-admin/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["super-admin", "config"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
