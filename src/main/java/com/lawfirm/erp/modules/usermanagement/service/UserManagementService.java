@@ -11,7 +11,7 @@ import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.modules.audit.entity.AuditLog;
 import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
-import com.lawfirm.erp.modules.email.service.EmailService;
+import com.lawfirm.erp.common.service.EmailService;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkDeactivateRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkRoleChangeRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;

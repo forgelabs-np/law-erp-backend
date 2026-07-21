@@ -15,7 +15,7 @@ import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
-import com.lawfirm.erp.modules.email.service.EmailService;
+import com.lawfirm.erp.common.service.EmailService;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.entity.UserRole;
 import com.lawfirm.erp.rbac.repository.RoleRepository;

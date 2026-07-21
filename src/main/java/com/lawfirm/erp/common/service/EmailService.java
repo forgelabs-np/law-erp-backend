@@ -1,13 +1,10 @@
-package com.lawfirm.erp.modules.email.service;
+package com.lawfirm.erp.common.service;
 
-import com.lawfirm.erp.common.entity.SystemConfig;
-import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.firm.entity.FirmEmailConfig;
 import com.lawfirm.erp.firm.service.FirmEmailConfigService;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
-import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +42,10 @@ public class EmailService {
     private final FirmEmailConfigService firmEmailConfigService;
     private final AuditService auditService;
     private final TemplateEngine templateEngine;
+
+    // Spring auto-configures this from application.yml spring.mail.* properties.
+    // Used as the ultimate fallback when no firm or global DB config is set.
+    private final JavaMailSender defaultMailSender;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Public API — called by other services
@@ -194,12 +195,14 @@ public class EmailService {
      *
      * Priority:
      *   1. Firm's own FirmEmailConfig (if active)
-     *   2. Global SystemConfig SMTP values (platform fallback)
+     *   2. Global SystemConfig SMTP values (from DB, set via /super-admin/config)
+     *   3. Spring auto-configured JavaMailSender (from application.yml spring.mail.*)
      */
     private JavaMailSender resolveMailSender(UUID firmId) {
+        // 1. Firm-specific SMTP config
         Optional<FirmEmailConfig> firmConfig = firmEmailConfigService.getDecrypted(firmId);
-
         if (firmConfig.isPresent() && firmConfig.get().isActive()) {
+            log.debug("Using firm SMTP config for firm: {}", firmId);
             return createMailSender(
                     firmConfig.get().getSmtpHost(),
                     firmConfig.get().getSmtpPort(),
@@ -209,32 +212,57 @@ public class EmailService {
             );
         }
 
-        // Fallback to global SMTP
-        String host = systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_HOST).orElse("smtp.gmail.com");
-        int port = systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_PORT)
-                .map(Integer::parseInt).orElse(587);
-        String username = systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_USERNAME).orElse("");
-        String password = systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_PASSWORD).orElse("");
+        // 2. Global SMTP from DB (system_config GLOBAL scope)
+        Optional<String> dbHost = systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_HOST);
+        if (dbHost.isPresent()) {
+            String host = dbHost.get();
+            int port = systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_PORT)
+                    .map(Integer::parseInt).orElse(587);
+            String username = systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_USERNAME).orElse("");
+            String password = systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_PASSWORD).orElse("");
 
-        return createMailSender(host, port, username, password, true);
+            if (!username.isEmpty() && !password.isEmpty()) {
+                log.debug("Using global DB SMTP config for firm: {}", firmId);
+                return createMailSender(host, port, username, password, true);
+            }
+        }
+
+        // 3. Fallback to Spring auto-configured JavaMailSender (from application.yml spring.mail.*)
+        log.debug("Using Spring auto-configured mail sender (no DB SMTP config found) for firm: {}", firmId);
+        return defaultMailSender;
     }
 
     private String resolveFromAddress(UUID firmId) {
+        // 1. Firm-specific config
         Optional<FirmEmailConfig> firmConfig = firmEmailConfigService.getByFirmId(firmId);
         if (firmConfig.isPresent() && firmConfig.get().isActive()) {
             return firmConfig.get().getFromAddress();
         }
-        return systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_FROM_ADDRESS)
-                .orElse("noreply@nepalcrm.com");
+        // 2. Global DB config
+        Optional<String> dbFrom = systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_FROM_ADDRESS);
+        if (dbFrom.isPresent()) {
+            return dbFrom.get();
+        }
+        // 3. From the auto-configured bean's username
+        if (defaultMailSender instanceof JavaMailSenderImpl impl) {
+            return impl.getUsername();
+        }
+        return "noreply@nepalcrm.com";
     }
 
     private String resolveFromName(UUID firmId) {
+        // 1. Firm-specific config
         Optional<FirmEmailConfig> firmConfig = firmEmailConfigService.getByFirmId(firmId);
         if (firmConfig.isPresent() && firmConfig.get().isActive()) {
             return firmConfig.get().getFromName();
         }
-        return systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_FROM_NAME)
-                .orElse("NepalCRM Platform");
+        // 2. Global DB config
+        Optional<String> dbName = systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_FROM_NAME);
+        if (dbName.isPresent()) {
+            return dbName.get();
+        }
+        // 3. Default
+        return "NepalCRM Platform";
     }
 
     private JavaMailSenderImpl createMailSender(String host, int port, String username,
