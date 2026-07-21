@@ -7,19 +7,7 @@ import org.hibernate.annotations.UuidGenerator;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * DB-backed key-value store for runtime configuration that changes per-firm
- * or needs to be editable without redeploying.
- *
- * Two scopes:
- *   - GLOBAL — super admin only, platform-wide settings (SMTP, app name, production flag)
- *   - FIRM   — per-firm settings (brand colors, timezone, email footer)
- *
- * Sensitive values (SMTP passwords) are stored AES-256 encrypted via ConfigEncryptionUtil.
- *
- * Table: system_config
- * Indexes: (scope, firm_id, config_key) unique — enforces one value per key per scope+firm
- */
+/** DB-backed key-value store. GLOBAL or FIRM scoped. Sensitive values AES-256 encrypted. */
 @Entity
 @Table(
         name = "system_config",
@@ -40,35 +28,24 @@ public class SystemConfig {
     @Column(updatable = false, nullable = false)
     private UUID id;
 
-    /**
-     * GLOBAL or FIRM.
-     * GLOBAL values have firmId = null.
-     */
+    /** GLOBAL or FIRM. GLOBAL values have firmId = null. */
     @Enumerated(EnumType.STRING)
     @Column(name = "scope", nullable = false, length = 10)
     private ConfigScope scope;
 
-    /**
-     * Null for GLOBAL scope. Set to firm's UUID for FIRM scope.
-     */
+    /** Null for GLOBAL scope. Set to firm's UUID for FIRM scope. */
     @Column(name = "firm_id")
     private UUID firmId;
 
-    /**
-     * Config key — e.g. "SMTP_HOST", "BRAND_COLOR_PRIMARY", "APP_PRODUCTION"
-     */
+    /** Config key, e.g. SMTP_HOST or BRAND_COLOR_PRIMARY. */
     @Column(name = "config_key", nullable = false, length = 50)
     private String configKey;
 
-    /**
-     * Config value — stored as plaintext or AES-256 encrypted depending on encrypted flag.
-     */
+    /** Plaintext or AES-256 encrypted depending on encrypted flag. */
     @Column(name = "config_value", columnDefinition = "TEXT")
     private String configValue;
 
-    /**
-     * If true, configValue is AES-256 encrypted. Decrypt at runtime.
-     */
+    /** If true, configValue is AES-256 encrypted. */
     @Builder.Default
     @Column(name = "encrypted", columnDefinition = "BOOLEAN DEFAULT FALSE")
     private boolean encrypted = false;

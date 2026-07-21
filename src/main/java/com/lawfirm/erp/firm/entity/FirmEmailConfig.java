@@ -7,18 +7,7 @@ import org.hibernate.annotations.UuidGenerator;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Per-firm SMTP email configuration.
- *
- * Each firm can have their own email sender so that emails to clients
- * come FROM the firm's email address, not the platform's.
- *
- * The smtpPassword is stored AES-256 encrypted via ConfigEncryptionUtil
- * and is NEVER returned in API responses.
- *
- * If isActive = false or no FirmEmailConfig exists for the firm,
- * EmailService falls back to the global SystemConfig SMTP values.
- */
+/** Per-firm SMTP email config. Password stored AES-256 encrypted, never returned in API. */
 @Entity
 @Table(name = "firm_email_configs")
 @Getter
@@ -33,9 +22,7 @@ public class FirmEmailConfig {
     @Column(updatable = false, nullable = false)
     private UUID id;
 
-    /**
-     * One config per firm. FK to firms table.
-     */
+    /** One config per firm. FK to firms table. */
     @Column(name = "firm_id", nullable = false, unique = true)
     private UUID firmId;
 
@@ -48,10 +35,7 @@ public class FirmEmailConfig {
     @Column(name = "smtp_username", nullable = false, length = 255)
     private String smtpUsername;
 
-    /**
-     * AES-256 encrypted. Never returned in API responses.
-     * The API always returns smtpPasswordSet = true/false instead of the actual password.
-     */
+    /** AES-256 encrypted. API returns smtpPasswordSet bool instead. */
     @Column(name = "smtp_password", nullable = false, length = 512)
     private String smtpPassword;
 

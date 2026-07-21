@@ -11,16 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
-/**
- * Standalone async writer for audit logs.
- *
- * Extracted from AuditService to fix the self-invocation problem:
- * {@code AuditService.log() → this.writeAsync()} bypasses Spring's AOP proxy,
- * so the {@code @Async} annotation was never picked up.
- *
- * Now {@code AuditService} delegates to this injected bean, the call goes
- * through the Spring proxy, and {@code @Async} works correctly.
- */
+/** Extracted from AuditService so @Async works through proxy injection (not self-invocation). */
 @Component
 @RequiredArgsConstructor
 @Slf4j

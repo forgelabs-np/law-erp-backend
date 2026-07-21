@@ -1,7 +1,7 @@
 package com.lawfirm.erp.firm.service;
 
 import com.lawfirm.erp.modules.audit.service.AuditService;
-import com.lawfirm.erp.common.service.EmailService;
+import com.lawfirm.erp.modules.email.service.EmailService;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.FirmStatus;
@@ -60,7 +60,6 @@ public class FirmService {
             throw new DuplicateResourceException("Admin mobile number already exists");
         }
 
-        // 1. Create firm
         Firm firm = Firm.builder()
                 .lawFirmCode(firmCode)
                 .name(request.getName())
@@ -74,18 +73,14 @@ public class FirmService {
         firm = firmRepository.save(firm);
         log.info("Firm created: {}", firm.getLawFirmCode());
 
-        // 2. Clone ALL system roles into firm-scoped copies — including FIRM_ADMIN
-        //    FIX: previously FIRM_ADMIN was skipped here, then looked up below → 404
+        // FIX: previously FIRM_ADMIN was skipped here, then looked up below -> 404
         cloneSystemRolesForFirm(firm);
 
-        // 3. Assign firm-scoped FIRM_ADMIN role to the admin user
-        //    This works now because cloneSystemRolesForFirm() includes FIRM_ADMIN
         Role firmScopedAdminRole = roleRepository
                 .findByFirmIdAndRoleCode(firm.getId(), "FIRM_ADMIN")
                 .orElseThrow(() -> new BusinessRuleException(
                         "Firm-scoped FIRM_ADMIN role not found after cloning — check DataInitializer seeded FIRM_ADMIN system role"));
 
-        // 4. Create firm admin user — uses firm-scoped role, not the system template
         User admin = User.builder()
                 .username(request.getAdminUsername())
                 .email(request.getAdminEmail())
@@ -93,7 +88,7 @@ public class FirmService {
                 .password(passwordEncoder.encode(request.getAdminPassword()))
                 .fullName(request.getAdminFullName())
                 .firm(firm)
-                .role(firmScopedAdminRole)   // ← firm-scoped clone, not the system template
+                .role(firmScopedAdminRole)
                 .userType(UserType.FIRM_USER)
                 .isEmailVerified(true)
                 .isMobileVerified(true)
@@ -105,7 +100,6 @@ public class FirmService {
         admin.setActive(true);
         admin = userRepository.save(admin);
 
-        // 5. Also write to user_roles join table (for future multi-role support)
         UserRole userRole = UserRole.builder()
                 .user(admin)
                 .role(firmScopedAdminRole)
@@ -114,25 +108,21 @@ public class FirmService {
 
         log.info("Firm '{}' created with admin '{}'", firm.getLawFirmCode(), admin.getUsername());
 
-        // 7. Send welcome email to firm admin (async, non-blocking)
         emailService.sendWelcomeFirmAdmin(
                 firm.getId(),
-                admin.getId(),           // triggered by the super admin creating this
+                admin.getId(),
                 admin.getEmail(),
                 admin.getFullName(),
                 admin.getUsername(),
-                request.getAdminPassword(), // raw password before encoding
+                request.getAdminPassword(),
                 firm.getName(),
                 firm.getLawFirmCode()
         );
 
-        // 6. Audit — use logExplicit because this runs in SUPER_ADMIN context
-        //    where SecurityContext IS available, but we pass the values explicitly
-        //    so the async thread doesn't need to read SecurityContext at all
         auditService.logExplicit(
-                null,                    // firmId = null (super admin action, not firm-scoped)
-                admin.getId(),           // use admin as the "actor" placeholder
-                "S",                     // S = SUPER_ADMIN
+                null,
+                admin.getId(),
+                "S",
                 AuditAction.FIRM_CREATED,
                 AuditEntity.FIRM,
                 firm.getId(),
@@ -170,8 +160,6 @@ public class FirmService {
         }
 
         for (Role systemRole : systemRoles) {
-            // FIX: clone ALL roles including FIRM_ADMIN — no skip
-            // SUPER_ADMIN is the only one to skip — it should never exist at firm scope
             if ("SUPER_ADMIN".equals(systemRole.getRoleCode())) {
                 log.debug("Skipping SUPER_ADMIN clone for firm {} — super admin is platform-level only",
                         firm.getLawFirmCode());

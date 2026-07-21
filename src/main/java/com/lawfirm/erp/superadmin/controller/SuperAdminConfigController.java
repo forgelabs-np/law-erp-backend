@@ -17,16 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Super Admin manages GLOBAL and per-firm SystemConfig values.
- *
- * Endpoints:
- *   GET    /api/v1/super-admin/config              — list all global config
- *   PUT    /api/v1/super-admin/config              — bulk upsert global config
- *   DELETE /api/v1/super-admin/config/{key}        — delete global config key
- *   GET    /api/v1/super-admin/firms/{id}/config   — get firm config
- *   PUT    /api/v1/super-admin/firms/{id}/config   — set firm config values
- */
+/** Super Admin manages GLOBAL and per-firm SystemConfig values. */
 @RestController
 @RequestMapping("/api/v1/super-admin")
 @RequiredArgsConstructor
@@ -39,7 +30,7 @@ public class SuperAdminConfigController {
     private final CurrentUserResolver currentUserResolver;
     private final ResponseHandler responseHandler;
 
-    // ── Global config ────────────────────────────────────────────────────────
+    // Global config
 
     @GetMapping("/config")
     @Operation(summary = "Get all global system config values")
@@ -78,7 +69,7 @@ public class SuperAdminConfigController {
         return responseHandler.ok(null, "Config key deleted: " + key);
     }
 
-    // ── Per-firm config ──────────────────────────────────────────────────────
+    // Per-firm config
 
     @GetMapping("/firms/{firmId}/config")
     @Operation(summary = "Get all config values for a specific firm")

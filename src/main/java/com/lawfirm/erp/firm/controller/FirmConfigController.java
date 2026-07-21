@@ -18,19 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Firm admin manages their firm's brand/display configuration.
- *
- * Base path: /api/v1/firm/config
- * Requires: FIRM_ADMIN role
- *
- * Configurable values:
- *   - BRAND_COLOR_PRIMARY    — sidebar, buttons (#1A237E)
- *   - BRAND_COLOR_SECONDARY  — accents (#E3F2FD)
- *   - EMAIL_FOOTER_TEXT      — "Apex Law Associates © 2025"
- *   - EMAIL_SIGNATURE        — default email sign-off
- *   - TIMEZONE               — "Asia/Kathmandu"
- */
+/** Firm admin manages their firm's brand/display configuration. */
 @RestController
 @RequestMapping("/api/v1/firm/config")
 @RequiredArgsConstructor

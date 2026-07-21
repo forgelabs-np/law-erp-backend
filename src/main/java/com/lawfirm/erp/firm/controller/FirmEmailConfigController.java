@@ -21,16 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Firm admin configures their firm's SMTP settings.
- *
- * Base path: /api/v1/firm/email-config
- * Requires: FIRM_ADMIN role
- *
- * When configured and active, emails sent by the platform to this firm's
- * clients and employees will come FROM the firm's email address.
- * If not configured or inactive, falls back to platform global SMTP.
- */
+/** Firm admin configures their firm's SMTP settings. Falls back to platform global SMTP. */
 @RestController
 @RequestMapping("/api/v1/firm/email-config")
 @RequiredArgsConstructor
@@ -96,7 +87,7 @@ public class FirmEmailConfigController {
         return responseHandler.ok(null, "Email config deleted — falling back to platform SMTP");
     }
 
-    // ── DTOs ─────────────────────────────────────────────────────────────────
+    // DTOs
 
     @Data
     public static class FirmEmailConfigRequest {
@@ -144,7 +135,7 @@ public class FirmEmailConfigController {
         private final LocalDateTime testedAt;
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
+    // Helpers
 
     private FirmEmailConfigResponse toResponse(FirmEmailConfig config) {
         return new FirmEmailConfigResponse(

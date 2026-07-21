@@ -13,22 +13,14 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
 
-/**
- * AES-256 GCM encrypt/decrypt for sensitive config values (SMTP passwords).
- *
- * Key is read from application.properties: config.encryption.key
- * Must be a 32-byte Base64-encoded string (44 chars Base64).
- *
- * GCM mode provides authenticated encryption — tampered ciphertext is detected.
- * Each encryption generates a random 12-byte IV, prepended to the ciphertext.
- */
+/** AES-256 GCM encrypt/decrypt for sensitive config values (SMTP passwords). */
 @Slf4j
 @Component
 public class ConfigEncryptionUtil {
 
     private static final String AES_ALGORITHM = "AES/GCM/NoPadding";
-    private static final int GCM_IV_LENGTH = 12;     // 96-bit IV recommended for GCM
-    private static final int GCM_TAG_LENGTH = 128;    // 128-bit authentication tag
+    private static final int GCM_IV_LENGTH = 12;
+    private static final int GCM_TAG_LENGTH = 128;
 
     private final SecretKey secretKey;
 
@@ -49,10 +41,7 @@ public class ConfigEncryptionUtil {
         log.info("ConfigEncryptionUtil initialized with 256-bit AES key");
     }
 
-    /**
-     * Encrypt a plaintext string.
-     * Returns Base64( IV (12 bytes) + ciphertext ).
-     */
+    /** Returns Base64( IV (12 bytes) + ciphertext ). */
     public String encrypt(String plaintext) {
         try {
             byte[] iv = new byte[GCM_IV_LENGTH];
@@ -64,7 +53,7 @@ public class ConfigEncryptionUtil {
 
             byte[] ciphertext = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
 
-            // Prepend IV to ciphertext: IV (12) + ciphertext (variable)
+            // Prepend IV to ciphertext
             ByteBuffer buffer = ByteBuffer.allocate(iv.length + ciphertext.length);
             buffer.put(iv);
             buffer.put(ciphertext);
@@ -76,10 +65,7 @@ public class ConfigEncryptionUtil {
         }
     }
 
-    /**
-     * Decrypt a string previously encrypted by {@link #encrypt(String)}.
-     * Expects Base64( IV (12 bytes) + ciphertext ).
-     */
+    /** Expects Base64( IV (12 bytes) + ciphertext ). */
     public String decrypt(String encryptedData) {
         try {
             byte[] decoded = Base64.getDecoder().decode(encryptedData);

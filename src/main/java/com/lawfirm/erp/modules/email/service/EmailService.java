@@ -1,10 +1,13 @@
-package com.lawfirm.erp.common.service;
+package com.lawfirm.erp.modules.email.service;
 
+import com.lawfirm.erp.common.entity.SystemConfig;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.firm.entity.FirmEmailConfig;
 import com.lawfirm.erp.firm.service.FirmEmailConfigService;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
+import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,18 +24,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.UUID;
 
-/**
- * Single email service used by every other service.
- *
- * Key properties:
- *   1. Firm-aware — automatically picks the firm's SMTP config or falls back to global
- *   2. Async (@Async) — never blocks the main request thread
- *   3. Templated — uses Thymeleaf HTML templates with brand color injection
- *   4. Audited — logs success/failure but never throws to the caller
- *
- * Usage from any service:
- *   emailService.sendWelcomeEmployee(firmId, userEmail, userName, tempPassword);
- */
+/** Firm-aware async email sender. Resolves SMTP per-firm or falls back to global. Never throws. */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -43,13 +35,9 @@ public class EmailService {
     private final AuditService auditService;
     private final TemplateEngine templateEngine;
 
-    // Spring auto-configures this from application.yml spring.mail.* properties.
-    // Used as the ultimate fallback when no firm or global DB config is set.
     private final JavaMailSender defaultMailSender;
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // Public API — called by other services
-    // ═══════════════════════════════════════════════════════════════════════
+
 
     @Async
     public void sendWelcomeEmployee(UUID firmId, UUID triggeredByUserId, String toEmail, String fullName,
@@ -139,32 +127,17 @@ public class EmailService {
                 fullName, AuditEntity.USER);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // Core send logic
-    // ═══════════════════════════════════════════════════════════════════════
-
-    /**
-     * Core email sender — resolves SMTP config, renders template, sends async.
-     * Never throws — failures are logged and audited.
-     */
     private void sendHtmlEmail(UUID firmId, UUID triggeredByUserId, String toEmail, String subject,
                                String template, Context ctx, String recipientIdentifier,
                                AuditEntity auditEntity) {
         try {
-            // 1. Resolve SMTP config
             JavaMailSender mailSender = resolveMailSender(firmId);
-
-            // 2. Render HTML template
             String htmlContent = templateEngine.process(template, ctx);
-
-            // 3. Build and send
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
             helper.setTo(toEmail);
             helper.setSubject(subject);
             helper.setText(htmlContent, true);
-
-            // Set from address based on resolved config
             String fromAddress = resolveFromAddress(firmId);
             String fromName = resolveFromName(firmId);
             helper.setFrom(fromAddress, fromName);
@@ -186,20 +159,8 @@ public class EmailService {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // SMTP resolution
-    // ═══════════════════════════════════════════════════════════════════════
-
-    /**
-     * Resolve which SMTP server to use for a given firm.
-     *
-     * Priority:
-     *   1. Firm's own FirmEmailConfig (if active)
-     *   2. Global SystemConfig SMTP values (from DB, set via /super-admin/config)
-     *   3. Spring auto-configured JavaMailSender (from application.yml spring.mail.*)
-     */
+    /** Priority: firm config > global DB > Spring auto-configured. */
     private JavaMailSender resolveMailSender(UUID firmId) {
-        // 1. Firm-specific SMTP config
         Optional<FirmEmailConfig> firmConfig = firmEmailConfigService.getDecrypted(firmId);
         if (firmConfig.isPresent() && firmConfig.get().isActive()) {
             log.debug("Using firm SMTP config for firm: {}", firmId);
@@ -212,7 +173,6 @@ public class EmailService {
             );
         }
 
-        // 2. Global SMTP from DB (system_config GLOBAL scope)
         Optional<String> dbHost = systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_HOST);
         if (dbHost.isPresent()) {
             String host = dbHost.get();
@@ -227,23 +187,19 @@ public class EmailService {
             }
         }
 
-        // 3. Fallback to Spring auto-configured JavaMailSender (from application.yml spring.mail.*)
         log.debug("Using Spring auto-configured mail sender (no DB SMTP config found) for firm: {}", firmId);
         return defaultMailSender;
     }
 
     private String resolveFromAddress(UUID firmId) {
-        // 1. Firm-specific config
         Optional<FirmEmailConfig> firmConfig = firmEmailConfigService.getByFirmId(firmId);
         if (firmConfig.isPresent() && firmConfig.get().isActive()) {
             return firmConfig.get().getFromAddress();
         }
-        // 2. Global DB config
         Optional<String> dbFrom = systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_FROM_ADDRESS);
         if (dbFrom.isPresent()) {
             return dbFrom.get();
         }
-        // 3. From the auto-configured bean's username
         if (defaultMailSender instanceof JavaMailSenderImpl impl) {
             return impl.getUsername();
         }
@@ -251,17 +207,14 @@ public class EmailService {
     }
 
     private String resolveFromName(UUID firmId) {
-        // 1. Firm-specific config
         Optional<FirmEmailConfig> firmConfig = firmEmailConfigService.getByFirmId(firmId);
         if (firmConfig.isPresent() && firmConfig.get().isActive()) {
             return firmConfig.get().getFromName();
         }
-        // 2. Global DB config
         Optional<String> dbName = systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_FROM_NAME);
         if (dbName.isPresent()) {
             return dbName.get();
         }
-        // 3. Default
         return "NepalCRM Platform";
     }
 

@@ -12,15 +12,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Manages per-firm SMTP email configuration.
- *
- * Each firm can configure their own SMTP server so outgoing emails
- * come FROM the firm's domain. Falls back to platform global SMTP
- * if not configured or inactive.
- *
- * SMTP password is stored AES-256 encrypted and NEVER returned in API responses.
- */
+/** Per-firm SMTP config. Passwords AES-256 encrypted, never returned in API. */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -29,28 +21,16 @@ public class FirmEmailConfigService {
     private final FirmEmailConfigRepository firmEmailConfigRepository;
     private final ConfigEncryptionUtil configEncryptionUtil;
 
-    /**
-     * Get the email config for a firm.
-     * Returns null if not configured.
-     */
     public Optional<FirmEmailConfig> getByFirmId(UUID firmId) {
         return firmEmailConfigRepository.findByFirmId(firmId);
     }
 
-    /**
-     * Get the email config for a firm, with password decrypted for actual sending.
-     * Returns null if not configured.
-     */
+    /** Returns config with password decrypted for sending. */
     public Optional<FirmEmailConfig> getDecrypted(UUID firmId) {
         return firmEmailConfigRepository.findByFirmId(firmId)
                 .map(this::decryptPassword);
     }
 
-    /**
-     * Create or update firm email config.
-     * The smtpPassword is encrypted before storage.
-     * The response DTO never includes the actual password.
-     */
     @Transactional
     public FirmEmailConfig save(UUID firmId, FirmEmailConfig config) {
         FirmEmailConfig existing = firmEmailConfigRepository.findByFirmId(firmId)
@@ -79,10 +59,6 @@ public class FirmEmailConfigService {
         return saved;
     }
 
-    /**
-     * Test the SMTP connection for a firm's config.
-     * Updates testedAt and testPassed fields.
-     */
     @Transactional
     public boolean testConnection(UUID firmId) {
         FirmEmailConfig config = firmEmailConfigRepository.findByFirmId(firmId)
@@ -99,30 +75,37 @@ public class FirmEmailConfigService {
         return passed;
     }
 
-    /**
-     * Delete the email config for a firm (reset to platform SMTP).
-     */
     @Transactional
     public void delete(UUID firmId) {
         firmEmailConfigRepository.deleteByFirmId(firmId);
         log.info("Deleted email config for firm: {}", firmId);
     }
 
+    /** Returns unmanaged copy with decrypted password. Never mutate managed JPA entities in place. */
     private FirmEmailConfig decryptPassword(FirmEmailConfig config) {
         try {
             String decrypted = configEncryptionUtil.decrypt(config.getSmtpPassword());
-            config.setSmtpPassword(decrypted);
+
+            // Build a NEW, unmanaged FirmEmailConfig with decrypted password
+            FirmEmailConfig copy = FirmEmailConfig.builder()
+                    .id(config.getId())
+                    .firmId(config.getFirmId())
+                    .smtpHost(config.getSmtpHost())
+                    .smtpPort(config.getSmtpPort())
+                    .smtpUsername(config.getSmtpUsername())
+                    .smtpPassword(decrypted)
+                    .fromName(config.getFromName())
+                    .fromAddress(config.getFromAddress())
+                    .useTls(config.isUseTls())
+                    .isActive(config.isActive())
+                    .build();
+            return copy;
         } catch (Exception e) {
             log.error("Failed to decrypt SMTP password for firm {}: {}", config.getFirmId(), e.getMessage());
             throw new RuntimeException("Failed to decrypt SMTP password", e);
         }
-        return config;
     }
 
-    /**
-     * Attempt to connect to the SMTP server with the given credentials.
-     * This is a best-effort check — it tries to open a transport connection.
-     */
     private boolean tryConnect(FirmEmailConfig config) {
         try {
             java.util.Properties props = new java.util.Properties();
