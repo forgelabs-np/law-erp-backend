@@ -9,7 +9,10 @@ import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.dto.admin.request.PermissionRequest;
 import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.rbac.entity.Permission;
+import com.lawfirm.erp.rbac.entity.RolePermission;
 import com.lawfirm.erp.rbac.repository.PermissionRepository;
+import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
+import com.lawfirm.erp.rbac.repository.RoleRepository;
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +30,8 @@ import java.util.stream.Collectors;
 public class PermissionService {
 
     private final PermissionRepository permissionRepository;
+    private final RoleRepository roleRepository;
+    private final RolePermissionRepository rolePermissionRepository;
     private final CurrentUserResolver currentUserResolver;
     private final AuditService auditService;
 
@@ -61,6 +66,7 @@ public class PermissionService {
             permission = createPermission(request, generatedCode, adminId);
             log.info("Permission created: {} by admin: {}", permission.getCode(), adminId);
             permission = permissionRepository.save(permission);
+            assignToSystemRoles(permission);
 
             // ✅ AUDIT: Permission created
             auditService.log(
@@ -187,6 +193,20 @@ public class PermissionService {
         permission.setCreatedBy(adminId);
         permission.setCreatedAt(LocalDateTime.now());
         return permission;
+    }
+
+    private void assignToSystemRoles(Permission permission) {
+        roleRepository.findSystemRoleByCode("SUPER_ADMIN").ifPresent(superAdmin -> {
+            boolean alreadyAssigned = rolePermissionRepository.findPermissionsByRoleId(superAdmin.getId())
+                    .stream().anyMatch(p -> p.getId().equals(permission.getId()));
+            if (!alreadyAssigned) {
+                RolePermission rp = new RolePermission();
+                rp.setRole(superAdmin);
+                rp.setPermission(permission);
+                rolePermissionRepository.save(rp);
+                log.info("  Auto-assigned {} -> SUPER_ADMIN", permission.getCode());
+            }
+        });
     }
 
     private PermissionResponse toResponse(Permission entity) {

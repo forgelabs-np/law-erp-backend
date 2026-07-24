@@ -2,6 +2,7 @@ package com.lawfirm.erp.auth.security;
 
 import com.lawfirm.erp.dto.auth.AuthenticatedDetail;
 import com.lawfirm.erp.entity.User;
+import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -9,6 +10,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -25,7 +27,10 @@ import java.util.function.Function;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class JwtUtil {
+
+    private final RolePermissionRepository rolePermissionRepository;
 
     @Value("${jwt.secret}")
     private String secret;
@@ -60,6 +65,16 @@ public class JwtUtil {
         if (user.getFirm() != null) {
             claims.put("firmId", user.getFirm().getId().toString());
             claims.put("firmCode", user.getFirm().getLawFirmCode());
+        }
+
+        // FIX: Add permissions to JWT claims so JwtAuthFilter can populate them
+        if (user.getRole() != null) {
+            List<String> permissionCodes = rolePermissionRepository
+                    .findPermissionsByRoleId(user.getRole().getId())
+                    .stream()
+                    .map(p -> p.getCode())
+                    .toList();
+            claims.put("permissions", permissionCodes);
         }
 
         return Jwts.builder()

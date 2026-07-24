@@ -15,6 +15,7 @@ import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
+import com.lawfirm.erp.modules.email.service.EmailService;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.entity.UserRole;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
@@ -46,6 +47,7 @@ public class ClientService {
     private final PasswordEncoder passwordEncoder;
     private final CurrentUserResolver currentUserResolver;
     private final AuditService auditService;
+    private final EmailService emailService;
 
     @Transactional
     public ClientResponse createClient(CreateClientRequest request) {
@@ -96,6 +98,18 @@ public class ClientService {
         );
 
         log.info("Client created: {} in firm {}", user.getUsername(), firm.getLawFirmCode());
+
+        // Send welcome email (async, non-blocking)
+        UUID currentUserId = currentUserResolver.getCurrentUserId();
+        emailService.sendWelcomeClient(
+                firmId,
+                currentUserId,
+                user.getEmail(),
+                user.getFullName(),
+                user.getUsername(),
+                request.getPassword(), // raw password before encoding
+                firm.getName()
+        );
 
         return toResponse(user);
     }

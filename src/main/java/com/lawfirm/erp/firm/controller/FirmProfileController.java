@@ -33,6 +33,7 @@ public class FirmProfileController {
         );
     }
 
+    @PutMapping("/profile")
     @PostMapping("/profile")
     @Operation(summary = "Update firm profile")
     public ResponseEntity<ApiResponse<FirmProfileResponse>> updateProfile(

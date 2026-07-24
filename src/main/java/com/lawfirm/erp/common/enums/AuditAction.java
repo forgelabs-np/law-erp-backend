@@ -82,5 +82,16 @@ public enum AuditAction {
     MODULE_ACTIVATED,
     MODULE_DEACTIVATED,
     MODULE_UPDATED,
-    MODULE_DELETED
+    MODULE_DELETED,
+
+    // ── Email ────────────────────────────────
+    EMAIL_SENT,
+    EMAIL_FAILED,
+    EMAIL_CONFIG_UPDATED,
+    EMAIL_CONFIG_TESTED,
+    EMAIL_CONFIG_DELETED,
+
+    // ── System Config ─────────────────────────
+    CONFIG_UPDATED,
+    CONFIG_DELETED
 }
