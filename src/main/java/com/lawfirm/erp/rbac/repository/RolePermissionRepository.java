@@ -15,15 +15,12 @@ import java.util.UUID;
 @Repository
 public interface RolePermissionRepository extends JpaRepository<RolePermission, UUID> {
 
-    @Modifying
-    void deleteByRole(Role role);
-
     List<RolePermission> findByRole(Role role);
 
     @Query("SELECT rp.permission FROM RolePermission rp WHERE rp.role.id = :roleId AND rp.permission.active = true")
     List<Permission> findPermissionsByRoleId(@Param("roleId") UUID roleId);
 
-    @Modifying
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM RolePermission rp WHERE rp.role.id = :roleId")
     void deleteByRoleId(@Param("roleId") UUID roleId);
 }

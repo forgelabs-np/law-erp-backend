@@ -1,14 +1,11 @@
 package com.lawfirm.erp.modules.audit.service;
 
-import com.lawfirm.erp.modules.audit.entity.AuditLog;
-import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
-import com.lawfirm.erp.security.AuthenticatedUser;
+import com.lawfirm.erp.auth.security.AuthenticatedUser;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -22,7 +19,7 @@ import java.util.UUID;
 @Slf4j
 public class AuditService {
 
-    private final AuditLogRepository auditLogRepository;
+    private final AsyncAuditWriter asyncAuditWriter;
 
     /**
      * Primary log method — resolves current user from SecurityContext.
@@ -50,7 +47,7 @@ public class AuditService {
         String ip = getClientIp();
 
         // Pass resolved values to async write — no SecurityContext needed in that thread
-        writeAsync(
+        asyncAuditWriter.write(
                 currentUser.getFirmId(),
                 currentUser.getId(),
                 toUserTypeChar(currentUser),
@@ -71,31 +68,26 @@ public class AuditService {
     public void logExplicit(UUID firmId, UUID userId, String userTypeChar,
                             AuditAction action, AuditEntity entityType,
                             UUID entityId, String summary, String ipAddress) {
-        writeAsync(firmId, userId, userTypeChar, action, entityType, entityId,
+        asyncAuditWriter.write(firmId, userId, userTypeChar, action, entityType, entityId,
                 truncate(summary, 200), ipAddress);
     }
 
-    // ── Async write — safe because all args are plain values, no thread-local reads ──
-
-    @Async
-    protected void writeAsync(UUID firmId, UUID userId, String userTypeChar,
-                              AuditAction action, AuditEntity entityType,
-                              UUID entityId, String summary, String ipAddress) {
-        try {
-            AuditLog auditLog = AuditLog.of(
-                    firmId, userId, userTypeChar,
-                    action, entityType, entityId,
-                    summary, ipAddress
-            );
-            auditLogRepository.save(auditLog);
-        } catch (Exception e) {
-            log.error("Failed to write audit log: action={}, entity={}, entityId={} — {}",
-                    action, entityType, entityId, e.getMessage());
-        }
-    }
-
+    /** FIX: The auth principal from JwtAuthFilter is AuthenticatedDetail (wrapped in
+     *  UsernamePasswordAuthenticationToken), NOT AuthenticatedUser.
+     *  AuthenticatedUser is stored as a request attribute under key "authenticatedUser".
+     *  We must read from the request attribute instead of SecurityContext principal. */
     private AuthenticatedUser getCurrentUser() {
         try {
+            // First try: check request attribute (set by JwtAuthFilter)
+            ServletRequestAttributes attrs =
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attrs != null) {
+                AuthenticatedUser authUser = (AuthenticatedUser) attrs.getRequest()
+                        .getAttribute("authenticatedUser");
+                if (authUser != null) return authUser;
+            }
+
+            // Second try: SecurityContext principal (may be AuthenticatedDetail)
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.getPrincipal() instanceof AuthenticatedUser user) {
                 return user;

@@ -2,6 +2,7 @@ package com.lawfirm.erp.rbac.service;
 
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ForbiddenException;
+import com.lawfirm.erp.common.enums.PermissionScope;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
@@ -13,8 +14,8 @@ import com.lawfirm.erp.rbac.entity.RolePermission;
 import com.lawfirm.erp.rbac.repository.PermissionRepository;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
-import com.lawfirm.erp.security.CurrentUserResolver;
-import com.lawfirm.erp.security.PermissionEvaluator;
+import com.lawfirm.erp.auth.security.CurrentUserResolver;
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -60,19 +61,16 @@ public class RolePermissionService {
             Role parentRole = roleRepository.findById(role.getParentRoleId())
                     .orElseThrow(() -> new ResourceNotFoundException("Parent system role not found"));
 
-            Set<UUID> ceilingPermissionIds = rolePermissionRepository
-                    .findPermissionsByRoleId(parentRole.getId())
-                    .stream()
-                    .map(Permission::getId)
-                    .collect(Collectors.toSet());
+            PermissionScope maxScope = getMaxScopeForParent(parentRole.getRoleCode());
 
             for (UUID permId : request.getPermissionIds()) {
-                if (!ceilingPermissionIds.contains(permId)) {
-                    Permission perm = permissionRepository.findById(permId)
-                            .orElseThrow(() -> new ResourceNotFoundException("Permission not found"));
+                Permission perm = permissionRepository.findById(permId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Permission not found: " + permId));
+                if (!isScopeAllowed(perm.getScope(), maxScope)) {
                     throw new ForbiddenException(
-                            "Permission '" + perm.getCode() + "' exceeds your role's ceiling. " +
-                                    "This permission is not available for role type '" + parentRole.getRoleCode() + "'."
+                            "Permission '" + perm.getCode() + "' (scope: " + perm.getScope()
+                            + ") exceeds your role's ceiling. This scope is not available for role type '"
+                            + parentRole.getRoleCode() + "'."
                     );
                 }
             }
@@ -85,7 +83,7 @@ public class RolePermissionService {
         }
 
         // Remove existing permissions
-        rolePermissionRepository.deleteByRole(role);
+        rolePermissionRepository.deleteByRoleId(role.getId());
 
         // Assign new permissions
         List<RolePermission> rolePermissions = permissions.stream()
@@ -143,5 +141,23 @@ public class RolePermissionService {
                 .isActive(permission.isActive())
                 .createdAt(permission.getCreatedAt())
                 .build();
+    }
+
+    private static PermissionScope getMaxScopeForParent(String roleCode) {
+        return switch (roleCode) {
+            case "SUPER_ADMIN" -> PermissionScope.GLOBAL;
+            case "FIRM_ADMIN"  -> PermissionScope.TENANT;
+            case "ADVOCATE", "PARALEGAL" -> PermissionScope.ASSIGNED;
+            case "CLIENT"      -> PermissionScope.OWN;
+            default            -> PermissionScope.OWN;
+        };
+    }
+
+    private static boolean isScopeAllowed(PermissionScope permScope, PermissionScope maxScope) {
+        if (maxScope == PermissionScope.GLOBAL) return true;
+        if (maxScope == PermissionScope.TENANT) return permScope != PermissionScope.GLOBAL;
+        if (maxScope == PermissionScope.ASSIGNED)
+            return permScope == PermissionScope.ASSIGNED || permScope == PermissionScope.OWN;
+        return permScope == PermissionScope.OWN;
     }
 }

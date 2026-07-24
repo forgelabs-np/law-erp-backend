@@ -6,6 +6,7 @@ import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.DuplicateResourceException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
+import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
 import com.lawfirm.erp.dto.admin.request.RoleRequest;
 import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
@@ -13,7 +14,7 @@ import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
-import com.lawfirm.erp.security.CurrentUserResolver;
+import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,7 @@ public class RoleManagementService {
 
     private final RoleRepository roleRepository;
     private final RolePermissionRepository rolePermissionRepository;
+    private final RolePermissionService rolePermissionService;
     private final CurrentUserResolver currentUserResolver;
     private final AuditService auditService;
 
@@ -66,6 +68,13 @@ public class RoleManagementService {
                     role.getId(),
                     "Role created: " + role.getRoleCode() + " (" + role.getRoleName() + ")"
             );
+        }
+
+        if (request.getPermissionIds() != null && !request.getPermissionIds().isEmpty()) {
+            RolePermissionRequest permRequest = new RolePermissionRequest();
+            permRequest.setRoleId(role.getId());
+            permRequest.setPermissionIds(request.getPermissionIds());
+            rolePermissionService.assignPermissionsToRole(permRequest);
         }
 
         return convertToCompleteResponse(role);
@@ -141,14 +150,22 @@ public class RoleManagementService {
         return adminId;
     }
 
+    /** FIX: Use findAllByRoleCode with code lookup, then filter non-system roles.
+     *  Previously used findSystemRoleByCode() which only found system roles (firm IS NULL),
+     *  making the update-by-code path always fail for non-system roles.
+     *  Now uses findAllByRoleCode() and filters for non-system roles. */
     private Role findExistingRole(RoleRequest request) {
         if (request.getId() != null) {
             return roleRepository.findById(request.getId()).orElse(null);
         }
         if (request.getCode() != null && !request.getCode().isEmpty()) {
-            // System roles should not be found here — they can't be updated via this API
-            // Use findSystemRoleByCode to avoid NonUniqueResultException
-            return roleRepository.findSystemRoleByCode(request.getCode()).orElse(null);
+            List<Role> roles = roleRepository.findAllByRoleCode(request.getCode());
+            // Prefer non-system (firm-scoped) roles for update
+            // System roles can't be modified (will be caught by validateNotSystemRole)
+            return roles.stream()
+                    .filter(r -> !Boolean.TRUE.equals(r.getIsSystem()))
+                    .findFirst()
+                    .orElse(null);
         }
         return null;
     }

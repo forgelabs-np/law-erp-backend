@@ -7,7 +7,7 @@ import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResponseHandler;
-import com.lawfirm.erp.security.CurrentUserResolver;
+import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;

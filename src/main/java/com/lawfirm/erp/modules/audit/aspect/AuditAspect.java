@@ -4,7 +4,7 @@ import com.lawfirm.erp.modules.audit.annotation.Audit;
 import com.lawfirm.erp.modules.audit.entity.AuditLog;
 import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
 import com.lawfirm.erp.modules.audit.util.AuditSpelHelper;
-import com.lawfirm.erp.security.AuthenticatedUser;
+import com.lawfirm.erp.auth.security.AuthenticatedUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;

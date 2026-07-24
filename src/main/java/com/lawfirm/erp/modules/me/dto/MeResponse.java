@@ -36,6 +36,11 @@ public class MeResponse {
     // Frontend iterates this to build sidebar menu
     private List<ModuleAccess> modules;
 
+    // ── Brand config (from SystemConfig) ──────────────────────────────────
+    private String brandColorPrimary;
+    private String brandColorSecondary;
+    private String appName;
+
     // ── Status ────────────────────────────────────────────────────────────
     private boolean isActive;
     private LocalDateTime lastLoginAt;

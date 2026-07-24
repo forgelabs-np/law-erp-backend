@@ -11,6 +11,7 @@ import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.modules.audit.entity.AuditLog;
 import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
+import com.lawfirm.erp.modules.email.service.EmailService;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkDeactivateRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkRoleChangeRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
@@ -22,8 +23,8 @@ import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
-import com.lawfirm.erp.security.CurrentUserResolver;
-import com.lawfirm.erp.security.PermissionEvaluator;
+import com.lawfirm.erp.auth.security.CurrentUserResolver;
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -49,6 +50,7 @@ public class UserManagementService {
     private final PermissionEvaluator permissionEvaluator;
     private final CurrentUserResolver currentUserResolver;
     private final PasswordEncoder passwordEncoder;
+    private final EmailService emailService;
 
     // ═══════════════════════════════════════════════════════════════════════
     // LIST — unified employees + clients
@@ -235,6 +237,17 @@ public class UserManagementService {
         );
 
         log.info("Password reset for: {}", user.getUsername());
+
+        // Send password reset email (async, non-blocking)
+        UUID currentUserId = currentUserResolver.getCurrentUserId();
+        emailService.sendPasswordReset(
+                firmId,
+                currentUserId,
+                user.getEmail(),
+                user.getFullName(),
+                request.getNewPassword(),
+                user.getFirm() != null ? user.getFirm().getName() : "Your Firm"
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════

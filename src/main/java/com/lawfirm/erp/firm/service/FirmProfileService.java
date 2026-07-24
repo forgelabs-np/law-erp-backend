@@ -9,7 +9,7 @@ import com.lawfirm.erp.dto.firm.request.UpdateFirmProfileRequest;
 import com.lawfirm.erp.dto.firm.response.FirmProfileResponse;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
-import com.lawfirm.erp.security.CurrentUserResolver;
+import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

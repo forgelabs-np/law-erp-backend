@@ -19,9 +19,7 @@ import java.util.UUID;
 @Table(
         name = "users",
         uniqueConstraints = {
-                // username unique per firm — two firms can both have "john"
                 @UniqueConstraint(columnNames = {"username", "firm_id"}),
-                // email unique per firm — same logic
                 @UniqueConstraint(columnNames = {"email", "firm_id"})
         }
 )
@@ -77,6 +75,45 @@ public class User extends ActiveAuditableEntity implements UserDetails {
     @Builder.Default
     private Integer permissionVersion = 0;
 
+    // ── NEW: First-login password change ──────────────────────────────────────
+    /**
+     * Set true when admin creates account with a temp password.
+     * Login returns PASSWORD_CHANGE_REQUIRED until user changes it.
+     * Cleared to false after POST /auth/change-password succeeds.
+     */
+    @Column(name = "must_change_password", columnDefinition = "BOOLEAN DEFAULT FALSE")
+    @Builder.Default
+    private Boolean mustChangePassword = false;
+
+    // ── NEW: MFA (TOTP / Google Authenticator) ────────────────────────────────
+    /**
+     * Whether MFA is enabled for this account.
+     * - SUPER_ADMIN: forced true in code (always required)
+     * - FIRM_ADMIN:  forced true in code (always required)
+     * - ADVOCATE:    optional, firm admin can enable via bulk-enable-mfa
+     * - PARALEGAL / CLIENT: always false, never enforced
+     */
+    @Column(name = "mfa_enabled", columnDefinition = "BOOLEAN DEFAULT FALSE")
+    @Builder.Default
+    private Boolean mfaEnabled = false;
+
+    /**
+     * Base32-encoded TOTP secret — generated when MFA setup starts.
+     * NEVER returned in any API response.
+     * Null until user initiates setup.
+     */
+    @Column(name = "mfa_secret", length = 64)
+    private String mfaSecret;
+
+    /**
+     * True only after user successfully confirms they scanned the QR code.
+     * mfaEnabled=true + mfaVerified=false → force QR code setup screen.
+     * mfaEnabled=true + mfaVerified=true  → show 6-digit code input.
+     */
+    @Column(name = "mfa_verified", columnDefinition = "BOOLEAN DEFAULT FALSE")
+    @Builder.Default
+    private Boolean mfaVerified = false;
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority("ROLE_" + role.getRoleCode()));
@@ -93,5 +130,13 @@ public class User extends ActiveAuditableEntity implements UserDetails {
 
     public boolean isSuperAdmin() {
         return userType == UserType.SUPER_ADMIN;
+    }
+
+    public boolean requiresMfa() {
+        return Boolean.TRUE.equals(mfaEnabled);
+    }
+
+    public boolean isMfaSetupComplete() {
+        return Boolean.TRUE.equals(mfaEnabled) && Boolean.TRUE.equals(mfaVerified);
     }
 }

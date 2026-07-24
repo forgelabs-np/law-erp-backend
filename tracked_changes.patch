@@ -1,0 +1,1022 @@
+diff --git a/.gitignore b/.gitignore
+index 667aaef..6df9620 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -31,3 +31,6 @@ build/
+ 
+ ### VS Code ###
+ .vscode/
++
++### Freebuff ###
++.freebuff/
+diff --git a/pom.xml b/pom.xml
+index bfed0b5..f57d836 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -32,12 +32,12 @@
+     <dependencies>
+         <dependency>
+             <groupId>org.springframework.boot</groupId>
+-            <artifactId>spring-boot-starter-webmvc</artifactId>
++            <artifactId>spring-boot-starter-web</artifactId>
+         </dependency>
+ 
+         <dependency>
+             <groupId>org.springframework.boot</groupId>
+-            <artifactId>spring-boot-starter-webmvc-test</artifactId>
++            <artifactId>spring-boot-starter-test</artifactId>
+             <scope>test</scope>
+         </dependency>
+         <dependency>
+@@ -79,6 +79,10 @@
+             <groupId>org.springframework.boot</groupId>
+             <artifactId>spring-boot-starter-thymeleaf</artifactId>
+         </dependency>
++        <dependency>
++            <groupId>org.springframework.boot</groupId>
++            <artifactId>spring-boot-starter-mail</artifactId>
++        </dependency>
+         <dependency>
+             <groupId>org.projectlombok</groupId>
+             <artifactId>lombok</artifactId>
+diff --git a/src/main/java/com/lawfirm/erp/auth/security/JwtUtil.java b/src/main/java/com/lawfirm/erp/auth/security/JwtUtil.java
+index bb800c3..32083a0 100644
+--- a/src/main/java/com/lawfirm/erp/auth/security/JwtUtil.java
++++ b/src/main/java/com/lawfirm/erp/auth/security/JwtUtil.java
+@@ -2,6 +2,7 @@ package com.lawfirm.erp.auth.security;
+ 
+ import com.lawfirm.erp.dto.auth.AuthenticatedDetail;
+ import com.lawfirm.erp.entity.User;
++import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
+ import io.jsonwebtoken.Claims;
+ import io.jsonwebtoken.ExpiredJwtException;
+ import io.jsonwebtoken.JwtException;
+@@ -9,6 +10,7 @@ import io.jsonwebtoken.Jwts;
+ import io.jsonwebtoken.security.Keys;
+ import jakarta.annotation.PostConstruct;
+ import jakarta.servlet.http.HttpServletRequest;
++import lombok.RequiredArgsConstructor;
+ import lombok.extern.slf4j.Slf4j;
+ import org.springframework.beans.factory.annotation.Value;
+ import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+@@ -25,8 +27,11 @@ import java.util.function.Function;
+ 
+ @Slf4j
+ @Component
++@RequiredArgsConstructor
+ public class JwtUtil {
+ 
++    private final RolePermissionRepository rolePermissionRepository;
++
+     @Value("${jwt.secret}")
+     private String secret;
+ 
+@@ -62,6 +67,16 @@ public class JwtUtil {
+             claims.put("firmCode", user.getFirm().getLawFirmCode());
+         }
+ 
++        // FIX: Add permissions to JWT claims so JwtAuthFilter can populate them
++        if (user.getRole() != null) {
++            List<String> permissionCodes = rolePermissionRepository
++                    .findPermissionsByRoleId(user.getRole().getId())
++                    .stream()
++                    .map(p -> p.getCode())
++                    .toList();
++            claims.put("permissions", permissionCodes);
++        }
++
+         return Jwts.builder()
+                 .id(user.getId().toString())
+                 .claims(claims)
+diff --git a/src/main/java/com/lawfirm/erp/common/enums/AuditAction.java b/src/main/java/com/lawfirm/erp/common/enums/AuditAction.java
+index 406d858..0412821 100644
+--- a/src/main/java/com/lawfirm/erp/common/enums/AuditAction.java
++++ b/src/main/java/com/lawfirm/erp/common/enums/AuditAction.java
+@@ -82,5 +82,16 @@ public enum AuditAction {
+     MODULE_ACTIVATED,
+     MODULE_DEACTIVATED,
+     MODULE_UPDATED,
+-    MODULE_DELETED
++    MODULE_DELETED,
++
++    // ── Email ────────────────────────────────
++    EMAIL_SENT,
++    EMAIL_FAILED,
++    EMAIL_CONFIG_UPDATED,
++    EMAIL_CONFIG_TESTED,
++    EMAIL_CONFIG_DELETED,
++
++    // ── System Config ─────────────────────────
++    CONFIG_UPDATED,
++    CONFIG_DELETED
+ }
+\ No newline at end of file
+diff --git a/src/main/java/com/lawfirm/erp/common/enums/AuditEntity.java b/src/main/java/com/lawfirm/erp/common/enums/AuditEntity.java
+index cba1f99..e58b622 100644
+--- a/src/main/java/com/lawfirm/erp/common/enums/AuditEntity.java
++++ b/src/main/java/com/lawfirm/erp/common/enums/AuditEntity.java
+@@ -19,5 +19,7 @@ public enum AuditEntity {
+     PAYMENT,
+     HEARING,
+     DEPARTMENT,
+-    AUTH
++    AUTH,
++    EMAIL_CONFIG,
++    SYSTEM_CONFIG
+ }
+\ No newline at end of file
+diff --git a/src/main/java/com/lawfirm/erp/config/TenantHelper.java b/src/main/java/com/lawfirm/erp/config/TenantHelper.java
+deleted file mode 100644
+index 4ea8324..0000000
+--- a/src/main/java/com/lawfirm/erp/config/TenantHelper.java
++++ /dev/null
+@@ -1,35 +0,0 @@
+-//package com.lawfirm.erp.config;
+-//
+-//import com.lawfirm.erp.entity.User;
+-//
+-//@Deprecated
+-//public class TenantHelper {
+-//
+-//    private static final String SYSTEM_SUBDOMAIN = "SYSTEM";
+-//    private static final String SYSTEM_TYPE = "SYSTEM";
+-//
+-//    public static boolean isSystemUser(User user) {
+-//        return user.getTenant() == null;
+-//    }
+-//
+-//    public static String getTenantSubdomain(User user) {
+-//        if (user.getTenant() == null) {
+-//            return SYSTEM_SUBDOMAIN;
+-//        }
+-//        return user.getTenant().getSubdomain();
+-//    }
+-//
+-//    public static String getTenantType(User user) {
+-//        if (user.getTenant() == null) {
+-//            return SYSTEM_TYPE;
+-//        }
+-//        return user.getTenant().getTenantType().name();
+-//    }
+-//
+-//    public static Long getTenantId(User user) {
+-//        if (user.getTenant() == null) {
+-//            return null;
+-//        }
+-//        return user.getTenant().getId();
+-//    }
+-//}
+\ No newline at end of file
+diff --git a/src/main/java/com/lawfirm/erp/config/WebConfig.java b/src/main/java/com/lawfirm/erp/config/WebConfig.java
+deleted file mode 100644
+index 3b24e35..0000000
+--- a/src/main/java/com/lawfirm/erp/config/WebConfig.java
++++ /dev/null
+@@ -1,32 +0,0 @@
+-//package com.lawfirm.erp.config;
+-//
+-//import com.lawfirm.erp.security.FirmInterceptor;
+-////import com.lawfirm.erp.security.HibernateFilterEnabler;
+-//import lombok.RequiredArgsConstructor;
+-//import org.springframework.context.annotation.Configuration;
+-//import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+-//import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+-//
+-//@Configuration
+-//@RequiredArgsConstructor
+-//public class WebConfig implements WebMvcConfigurer {
+-//
+-//    private final FirmInterceptor firmInterceptor;
+-////    private final HibernateFilterEnabler hibernateFilterEnabler;
+-//
+-//    @Override
+-//    public void addInterceptors(InterceptorRegistry registry) {
+-//        registry.addInterceptor(firmInterceptor)
+-//                .addPathPatterns("/api/v1/**")
+-//                .excludePathPatterns(
+-//                        "/api/v1/auth/**",
+-//                        "/api/v1/super-admin/register",
+-//                        "/api/v1/super-admin/login",
+-//                        "/swagger-ui/**",
+-//                        "/v3/api-docs/**"
+-//                );
+-//
+-////        registry.addInterceptor(hibernateFilterEnabler)
+-//                .addPathPatterns("/api/v1/**");
+-//    }
+-//}
+\ No newline at end of file
+diff --git a/src/main/java/com/lawfirm/erp/dto/firm/request/DepartmentRequest.java b/src/main/java/com/lawfirm/erp/dto/firm/request/DepartmentRequest.java
+deleted file mode 100644
+index 2f84a2e..0000000
+--- a/src/main/java/com/lawfirm/erp/dto/firm/request/DepartmentRequest.java
++++ /dev/null
+@@ -1,28 +0,0 @@
+-package com.lawfirm.erp.dto.firm.request;
+-
+-import jakarta.validation.constraints.NotBlank;
+-import jakarta.validation.constraints.Pattern;
+-import jakarta.validation.constraints.Size;
+-import lombok.Data;
+-
+-import java.util.UUID;
+-
+-@Data
+-public class DepartmentRequest {
+-    private UUID id;
+-
+-    @NotBlank(message = "Department name is required")
+-    @Size(min = 2, max = 50)
+-    private String name;
+-
+-    @NotBlank(message = "Department code is required")
+-    @Pattern(regexp = "^[A-Z_]+$", message = "Code must be uppercase with underscores")
+-    @Size(min = 2, max = 30)
+-    private String code;
+-
+-    @Size(max = 200)
+-    private String description;
+-
+-    private Integer displayOrder;
+-    private Boolean isActive;
+-}
+diff --git a/src/main/java/com/lawfirm/erp/dto/firm/response/DepartmentResponse.java b/src/main/java/com/lawfirm/erp/dto/firm/response/DepartmentResponse.java
+deleted file mode 100644
+index 1d1d77d..0000000
+--- a/src/main/java/com/lawfirm/erp/dto/firm/response/DepartmentResponse.java
++++ /dev/null
+@@ -1,19 +0,0 @@
+-package com.lawfirm.erp.dto.firm.response;
+-
+-import lombok.Builder;
+-import lombok.Data;
+-
+-import java.time.LocalDateTime;
+-import java.util.UUID;
+-
+-@Data
+-@Builder
+-public class DepartmentResponse {
+-    private UUID id;
+-    private String name;
+-    private String code;
+-    private String description;
+-    private Integer displayOrder;
+-    private Boolean isActive;
+-    private LocalDateTime createdAt;
+-}
+\ No newline at end of file
+diff --git a/src/main/java/com/lawfirm/erp/encryption/RSAEncryptionUtil.java b/src/main/java/com/lawfirm/erp/encryption/RSAEncryptionUtil.java
+index 017334b..4a2607d 100644
+--- a/src/main/java/com/lawfirm/erp/encryption/RSAEncryptionUtil.java
++++ b/src/main/java/com/lawfirm/erp/encryption/RSAEncryptionUtil.java
+@@ -33,16 +33,26 @@ public class RSAEncryptionUtil {
+     private PrivateKey privateKey;
+     private PublicKey publicKey;
+ 
+-    // For testing - fallback keys if not in properties
+-    private static final String FALLBACK_PUBLIC_KEY = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlA31xNwr4uAW+qT7+3XNd7lLS0xn1W5tgNyJVpR86dWOhPotnQhnasQOode80+AFgPz1bAjTAWSZfxLScnq65lH1ZdQJFydFQawKSMcVmelrXmq51lE//n7yUTXkG8DUD1rf6QY2vrI44gY+sjXT844qeHU+L89Xjk7BOK2S5v8WdYugvqD3krToPEgZfMTbSP2Fxztc1biXFvyEGxPuEGlniW3U7JXYmI27nBRYf8X1XIE1Xfg6Xo7JHeK2Ey+f0lu9Zxin6KUcFz2K/E2KZ6mBvebeXkvQ6+jZojdclkieN9aJQVn7A6W95uksAG+BAUy98Ff/8K8m3beghJnHDQIDAQAB";
+-    private static final String FALLBACK_PRIVATE_KEY = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCUDfXE3Cvi4Bb6pPv7dc13uUtLTGfVbm2A3IlWlHzp1Y6E+i2dCGdqxA6h17zT4AWA/PVsCNMBZJl/EtJyerrmUfVl1AkXJ0VBrApIxxWZ6WtearnWUT/+fvJRNeQbwNQPWt/pBja+sjjiBj6yNdPzjip4dT4vz1eOTsE4rZLm/xZ1i6C+oPeStOg8SBl8xNtI/YXHO1zVuJcW/IQbE+4QaWeJbdTsldiYjbucFFh/xfVcgTVd+Dpejskd4rYTL5/SW71nGKfopRwXPYr8TYpnqYG95t5eS9Dr6NmiN1yWSJ431olBWfsDpb3m6SwAb4EBTL3wV//wrybdt6CEmccNAgMBAAECggEAC4UwkAJfydYNA7DNyKnIdJ3u7WuDEtj2XVYLu7hvJdTPs6ox3Wu3fFfIGbDLSSM/2mMUh7UCEjQtO3WP+YdyPpS3BxbiJDKSkYMdA7+1/xVqHN0qG7KTy64+FbKfTseI2K8GCEBLBzif83pv63cDyIpR5LCex6KXGgQnxcy/xwiI9Vh49V+t0v4t0Rs/wonLwOXD/LVapmwzsp2Ai2SJwgxJy/Qo49qxq/acidkg5YqlOSluL3SK1YWDE6bDMKQoIyA5Vvt04id7NixDn1EuclzD8fATZ44Op1tISZHoKZ7ediw96BMYFaabpByOdVXra4jsuxmO78YMUiqDPAVU4QKBgQDMuisiO8aqfJrUVyZ8+m9+ws34hO+FZDgjySB6HQda4jNjhhyKCeGtgAkrFnlXwQgYkjgHKnIRnzOuvzuIp+tOO/Luyxk5QeGqi358GeWlkgQCsY6juCvgkPNDLX2d1Ff6gdgUUi12jnnB61cLGtERal/SKQcUcFGTNEnFl12bcQKBgQC5IkreDSZLpaBZj0jGXMFUQaKktEKv3v9gqeSdidRkdtMNXQD6kDG4QMo35ODrrV634IRmdQzPD2i6Rt2nSWn7Bt3aOHWctIzoKcFT1NYY0MQtwznQsXJvCrdbOefEje4gFPBfFLlmBgrP2FHeIpGsCKnjq31/IDs8DOK6ZQ+/XQKBgEnelre4d9uGMFuTwphvyJEleypD1ST9X2BSLvzAwqmhWsd7WYrZO+vdefFpH4lxZhlvkPXM8/G1zvEroTCS3k2RRfuxnr1RLzrZMF9Y/Mq8H+RU6tHaH0LdKlk/7cZoGwKRnUTfzfWsPPSilPq1x2AQUNjE4wAV8uk5gbDhB+6RAoGBAJA8+3+NVyzQ2eFtFRIW6jku+fzAxMQpRWaWdxuWavfq6/wZXc3Z0iLvt51coTB9XrJ8Jit9PoGES9/1nnPbasq9StPd8SQqNy4aehlKVZP38yCEXeMOnU2OV9SnhL9KpSAxsCUkDF5Ejt/odcBPxpb2GQbccWY+QmhC0dLPMjmxAoGAdBHG+aWdXC5E/QUAhoTkqhHbtcgC97rtMkxWzkZTQjR17IcoIF6XvNVc6/sBEWoUDgLbuRusBv02iXdeOV3XhfBoQgMxy2+QGV9gy5HeSX/ZV/S90uTuQIQNXfmkB6A/N65dFF3lvxcGFYhaW9itolUed5tcp+iJ+2d3ylGuIio=";
++    // SECURITY FIX: Removed hardcoded fallback keys. RSA keys MUST be configured
++    // via application properties (encryption.rsa.public-key and encryption.rsa.private-key).
++    // If keys are not configured, initialization will fail at startup rather than
++    // silently using insecure defaults.
+ 
+     public RSAEncryptionUtil() {
+         try {
+-            String publicKeyToUse = (rsaPublicKey == null || rsaPublicKey.isEmpty())
+-                    ? FALLBACK_PUBLIC_KEY : rsaPublicKey;
+-            String privateKeyToUse = (rsaPrivateKey == null || rsaPrivateKey.isEmpty())
+-                    ? FALLBACK_PRIVATE_KEY : rsaPrivateKey;
++            if (rsaPublicKey == null || rsaPublicKey.isEmpty()) {
++                throw new IllegalArgumentException(
++                        "RSA public key not configured. Set 'encryption.rsa.public-key' in application properties."
++                );
++            }
++            if (rsaPrivateKey == null || rsaPrivateKey.isEmpty()) {
++                throw new IllegalArgumentException(
++                        "RSA private key not configured. Set 'encryption.rsa.private-key' in application properties."
++                );
++            }
++
++            String publicKeyToUse = rsaPublicKey;
++            String privateKeyToUse = rsaPrivateKey;
+ 
+             String cleanedPublicKey = cleanBase64Key(publicKeyToUse);
+             String cleanedPrivateKey = cleanBase64Key(privateKeyToUse);
+@@ -197,6 +207,9 @@ public class RSAEncryptionUtil {
+     }
+ 
+     public String getPublicKeyBase64() {
+-        return rsaPublicKey != null && !rsaPublicKey.isEmpty() ? rsaPublicKey : FALLBACK_PUBLIC_KEY;
++        if (rsaPublicKey == null || rsaPublicKey.isEmpty()) {
++            throw new IllegalStateException("RSA public key not configured");
++        }
++        return rsaPublicKey;
+     }
+ }
+\ No newline at end of file
+diff --git a/src/main/java/com/lawfirm/erp/firm/controller/DepartmentController.java b/src/main/java/com/lawfirm/erp/firm/controller/DepartmentController.java
+deleted file mode 100644
+index da0fbf7..0000000
+--- a/src/main/java/com/lawfirm/erp/firm/controller/DepartmentController.java
++++ /dev/null
+@@ -1,75 +0,0 @@
+-//package com.lawfirm.erp.firm.controller;
+-//
+-//import com.lawfirm.erp.common.dto.ApiRequest;
+-//import com.lawfirm.erp.common.dto.ApiResponse;
+-//import com.lawfirm.erp.common.exception.ResponseHandler;
+-//import com.lawfirm.erp.dto.firm.request.DepartmentRequest;
+-//import com.lawfirm.erp.dto.firm.response.DepartmentResponse;
+-//import com.lawfirm.erp.firm.service.DepartmentService;
+-//import io.swagger.v3.oas.annotations.Operation;
+-//import io.swagger.v3.oas.annotations.tags.Tag;
+-//import jakarta.validation.Valid;
+-//import lombok.RequiredArgsConstructor;
+-//import org.springframework.http.ResponseEntity;
+-//import org.springframework.security.access.prepost.PreAuthorize;
+-//import org.springframework.web.bind.annotation.*;
+-//
+-//import java.util.List;
+-//import java.util.UUID;
+-//
+-//@RestController
+-//@RequestMapping("/api/v1/firm/departments")
+-//@RequiredArgsConstructor
+-//@Tag(name = "Department Management", description = "Firm department/practice area APIs")
+-//@PreAuthorize("hasRole('FIRM_ADMIN')")
+-//public class DepartmentController {
+-//
+-//    private final DepartmentService departmentService;
+-//    private final ResponseHandler responseHandler;
+-//
+-//    @PostMapping
+-//    @Operation(summary = "Create department")
+-//    public ResponseEntity<ApiResponse<DepartmentResponse>> createDepartment(
+-//            @Valid @RequestBody ApiRequest<DepartmentRequest> request) {
+-//        return responseHandler.ok(
+-//                departmentService.createDepartment(request.getData()),
+-//                "Department created successfully"
+-//        );
+-//    }
+-//
+-//    @GetMapping
+-//    @Operation(summary = "Get all departments")
+-//    public ResponseEntity<ApiResponse<List<DepartmentResponse>>> getAllDepartments() {
+-//        return responseHandler.ok(
+-//                departmentService.getAllDepartments(),
+-//                "Departments fetched successfully"
+-//        );
+-//    }
+-//
+-//    @GetMapping("/{departmentId}")
+-//    @Operation(summary = "Get department by ID")
+-//    public ResponseEntity<ApiResponse<DepartmentResponse>> getDepartmentById(@PathVariable UUID departmentId) {
+-//        return responseHandler.ok(
+-//                departmentService.getDepartmentById(departmentId),
+-//                "Department fetched successfully"
+-//        );
+-//    }
+-//
+-//    @PutMapping("/{departmentId}")
+-//    @Operation(summary = "Update department")
+-//    public ResponseEntity<ApiResponse<DepartmentResponse>> updateDepartment(
+-//            @PathVariable UUID departmentId,
+-//            @Valid @RequestBody ApiRequest<DepartmentRequest> request) {
+-//        return responseHandler.ok(
+-//                departmentService.updateDepartment(departmentId, request.getData()),
+-//                "Department updated successfully"
+-//        );
+-//    }
+-//
+-//    @DeleteMapping("/{departmentId}")
+-//    @Operation(summary = "Delete department")
+-//    public ResponseEntity<ApiResponse<Void>> deleteDepartment(@PathVariable UUID departmentId) {
+-//        departmentService.deleteDepartment(departmentId);
+-//        return responseHandler.ok(null, "Department deleted successfully");
+-//    }
+-//}
+\ No newline at end of file
+diff --git a/src/main/java/com/lawfirm/erp/firm/controller/FirmProfileController.java b/src/main/java/com/lawfirm/erp/firm/controller/FirmProfileController.java
+index be12325..a47503d 100644
+--- a/src/main/java/com/lawfirm/erp/firm/controller/FirmProfileController.java
++++ b/src/main/java/com/lawfirm/erp/firm/controller/FirmProfileController.java
+@@ -33,6 +33,7 @@ public class FirmProfileController {
+         );
+     }
+ 
++    @PutMapping("/profile")
+     @PostMapping("/profile")
+     @Operation(summary = "Update firm profile")
+     public ResponseEntity<ApiResponse<FirmProfileResponse>> updateProfile(
+diff --git a/src/main/java/com/lawfirm/erp/firm/entity/Department.java b/src/main/java/com/lawfirm/erp/firm/entity/Department.java
+index 4466191..1a5b1a2 100644
+--- a/src/main/java/com/lawfirm/erp/firm/entity/Department.java
++++ b/src/main/java/com/lawfirm/erp/firm/entity/Department.java
+@@ -30,4 +30,4 @@ public class Department extends ActiveAuditableEntity {
+ 
+     @Column(name = "display_order")
+     private Integer displayOrder = 0;
+-}
+\ No newline at end of file
++}
+diff --git a/src/main/java/com/lawfirm/erp/firm/repository/DepartmentRepository.java b/src/main/java/com/lawfirm/erp/firm/repository/DepartmentRepository.java
+deleted file mode 100644
+index dcd9299..0000000
+--- a/src/main/java/com/lawfirm/erp/firm/repository/DepartmentRepository.java
++++ /dev/null
+@@ -1,24 +0,0 @@
+-//package com.lawfirm.erp.firm.repository;
+-//
+-//import com.lawfirm.erp.firm.entity.Department;
+-//import org.springframework.data.jpa.repository.JpaRepository;
+-//import org.springframework.data.jpa.repository.Query;
+-//import org.springframework.data.repository.query.Param;
+-//import org.springframework.stereotype.Repository;
+-//
+-//import java.util.List;
+-//import java.util.Optional;
+-//import java.util.UUID;
+-//
+-//@Repository
+-//public interface DepartmentRepository extends JpaRepository<Department, UUID> {
+-//
+-//    List<Department> findByFirmIdOrderByDisplayOrderAsc(UUID firmId);
+-//
+-//    Optional<Department> findByFirmIdAndCode(UUID firmId, String code);
+-//
+-//    boolean existsByFirmIdAndCode(UUID firmId, String code);
+-//
+-//    @Query("SELECT COUNT(e) FROM EmployeeProfile e WHERE e.department.id = :departmentId")
+-//    long countEmployeesByDepartmentId(@Param("departmentId") UUID departmentId);
+-//}
+\ No newline at end of file
+diff --git a/src/main/java/com/lawfirm/erp/firm/service/ClientService.java b/src/main/java/com/lawfirm/erp/firm/service/ClientService.java
+index a8a565b..8abf057 100644
+--- a/src/main/java/com/lawfirm/erp/firm/service/ClientService.java
++++ b/src/main/java/com/lawfirm/erp/firm/service/ClientService.java
+@@ -15,6 +15,7 @@ import com.lawfirm.erp.entity.User;
+ import com.lawfirm.erp.firm.entity.Firm;
+ import com.lawfirm.erp.firm.repository.FirmRepository;
+ import com.lawfirm.erp.modules.audit.service.AuditService;
++import com.lawfirm.erp.modules.email.service.EmailService;
+ import com.lawfirm.erp.rbac.entity.Role;
+ import com.lawfirm.erp.rbac.entity.UserRole;
+ import com.lawfirm.erp.rbac.repository.RoleRepository;
+@@ -46,6 +47,7 @@ public class ClientService {
+     private final PasswordEncoder passwordEncoder;
+     private final CurrentUserResolver currentUserResolver;
+     private final AuditService auditService;
++    private final EmailService emailService;
+ 
+     @Transactional
+     public ClientResponse createClient(CreateClientRequest request) {
+@@ -97,6 +99,18 @@ public class ClientService {
+ 
+         log.info("Client created: {} in firm {}", user.getUsername(), firm.getLawFirmCode());
+ 
++        // Send welcome email (async, non-blocking)
++        UUID currentUserId = currentUserResolver.getCurrentUserId();
++        emailService.sendWelcomeClient(
++                firmId,
++                currentUserId,
++                user.getEmail(),
++                user.getFullName(),
++                user.getUsername(),
++                request.getPassword(), // raw password before encoding
++                firm.getName()
++        );
++
+         return toResponse(user);
+     }
+ 
+diff --git a/src/main/java/com/lawfirm/erp/firm/service/DepartmentService.java b/src/main/java/com/lawfirm/erp/firm/service/DepartmentService.java
+deleted file mode 100644
+index 48478dc..0000000
+--- a/src/main/java/com/lawfirm/erp/firm/service/DepartmentService.java
++++ /dev/null
+@@ -1,142 +0,0 @@
+-//package com.lawfirm.erp.firm.service;
+-//
+-//import com.lawfirm.erp.common.exception.BusinessRuleException;
+-//import com.lawfirm.erp.common.exception.DuplicateResourceException;
+-//import com.lawfirm.erp.common.exception.ForbiddenException;
+-//import com.lawfirm.erp.common.exception.ResourceNotFoundException;
+-//import com.lawfirm.erp.dto.firm.request.DepartmentRequest;
+-//import com.lawfirm.erp.dto.firm.response.DepartmentResponse;
+-//import com.lawfirm.erp.firm.entity.Department;
+-//import com.lawfirm.erp.firm.entity.Firm;
+-//import com.lawfirm.erp.firm.repository.DepartmentRepository;
+-//import com.lawfirm.erp.firm.repository.FirmRepository;
+-//import com.lawfirm.erp.security.CurrentUserResolver;
+-//import lombok.RequiredArgsConstructor;
+-//import lombok.extern.slf4j.Slf4j;
+-//import org.springframework.stereotype.Service;
+-//import org.springframework.transaction.annotation.Transactional;
+-//
+-//import java.util.List;
+-//import java.util.UUID;
+-//import java.util.stream.Collectors;
+-//
+-//@Service
+-//@RequiredArgsConstructor
+-//@Slf4j
+-//public class DepartmentService {
+-//
+-//    private final DepartmentRepository departmentRepository;
+-//    private final FirmRepository firmRepository;
+-//    private final CurrentUserResolver currentUserResolver;
+-//
+-//    @Transactional
+-//    public DepartmentResponse createDepartment(DepartmentRequest request) {
+-//        UUID firmId = getCurrentFirmId();
+-//        Firm firm = firmRepository.findById(firmId)
+-//                .orElseThrow(() -> new ResourceNotFoundException("Firm not found"));
+-//
+-//        // Check unique code within firm
+-//        if (departmentRepository.existsByFirmIdAndCode(firmId, request.getCode())) {
+-//            throw new DuplicateResourceException("Department code already exists in your firm");
+-//        }
+-//
+-//        Department department = Department.builder()
+-//                .firm(firm)
+-//                .name(request.getName())
+-//                .code(request.getCode().toUpperCase())
+-//                .description(request.getDescription())
+-//                .displayOrder(request.getDisplayOrder() != null ? request.getDisplayOrder() : 0)
+-//                .build();
+-//        department.setActive(request.getIsActive() != null ? request.getIsActive() : true);
+-//
+-//        department = departmentRepository.save(department);
+-//        log.info("Department created: {} in firm {}", department.getCode(), firm.getLawFirmCode());
+-//
+-//        return toResponse(department);
+-//    }
+-//
+-//    public List<DepartmentResponse> getAllDepartments() {
+-//        UUID firmId = getCurrentFirmId();
+-//        return departmentRepository.findByFirmIdOrderByDisplayOrderAsc(firmId)
+-//                .stream()
+-//                .map(this::toResponse)
+-//                .collect(Collectors.toList());
+-//    }
+-//
+-//    public DepartmentResponse getDepartmentById(UUID departmentId) {
+-//        UUID firmId = getCurrentFirmId();
+-//        Department department = getDepartmentValidated(departmentId, firmId);
+-//        return toResponse(department);
+-//    }
+-//
+-//    @Transactional
+-//    public DepartmentResponse updateDepartment(UUID departmentId, DepartmentRequest request) {
+-//        UUID firmId = getCurrentFirmId();
+-//        Department department = getDepartmentValidated(departmentId, firmId);
+-//
+-//        if (request.getName() != null) department.setName(request.getName());
+-//        if (request.getDescription() != null) department.setDescription(request.getDescription());
+-//        if (request.getDisplayOrder() != null) department.setDisplayOrder(request.getDisplayOrder());
+-//        if (request.getIsActive() != null) department.setActive(request.getIsActive());
+-//
+-//        // Check code uniqueness if changed
+-//        if (request.getCode() != null && !request.getCode().equals(department.getCode())) {
+-//            if (departmentRepository.existsByFirmIdAndCode(firmId, request.getCode())) {
+-//                throw new DuplicateResourceException("Department code already exists");
+-//            }
+-//            department.setCode(request.getCode().toUpperCase());
+-//        }
+-//
+-//        department = departmentRepository.save(department);
+-//        log.info("Department updated: {} in firm {}", department.getCode(), firmId);
+-//
+-//        return toResponse(department);
+-//    }
+-//
+-//    @Transactional
+-//    public void deleteDepartment(UUID departmentId) {
+-//        UUID firmId = getCurrentFirmId();
+-//        Department department = getDepartmentValidated(departmentId, firmId);
+-//
+-//        // Check if department has employees
+-//        long employeeCount = departmentRepository.countEmployeesByDepartmentId(departmentId);
+-//        if (employeeCount > 0) {
+-//            throw new BusinessRuleException(
+-//                    "Cannot delete department with " + employeeCount + " employees. Reassign employees first."
+-//            );
+-//        }
+-//
+-//        departmentRepository.delete(department);
+-//        log.info("Department deleted: {} from firm {}", department.getCode(), firmId);
+-//    }
+-//
+-//    private UUID getCurrentFirmId() {
+-//        UUID firmId = currentUserResolver.getCurrentFirmId();
+-//        if (firmId == null) {
+-//            throw new ForbiddenException("This action requires a firm context");
+-//        }
+-//        return firmId;
+-//    }
+-//
+-//    private Department getDepartmentValidated(UUID departmentId, UUID firmId) {
+-//        Department department = departmentRepository.findById(departmentId)
+-//                .orElseThrow(() -> new ResourceNotFoundException("Department not found"));
+-//
+-//        if (!department.getFirm().getId().equals(firmId)) {
+-//            throw new ForbiddenException("Department does not belong to your firm");
+-//        }
+-//        return department;
+-//    }
+-//
+-//    private DepartmentResponse toResponse(Department department) {
+-//        return DepartmentResponse.builder()
+-//                .id(department.getId())
+-//                .name(department.getName())
+-//                .code(department.getCode())
+-//                .description(department.getDescription())
+-//                .displayOrder(department.getDisplayOrder())
+-//                .isActive(department.isActive())
+-//                .createdAt(department.getCreatedAt())
+-//                .build();
+-//    }
+-//}
+\ No newline at end of file
+diff --git a/src/main/java/com/lawfirm/erp/firm/service/EmployeeService.java b/src/main/java/com/lawfirm/erp/firm/service/EmployeeService.java
+index ac6f678..9d5428a 100644
+--- a/src/main/java/com/lawfirm/erp/firm/service/EmployeeService.java
++++ b/src/main/java/com/lawfirm/erp/firm/service/EmployeeService.java
+@@ -21,6 +21,7 @@ import com.lawfirm.erp.firm.entity.Firm;
+ import com.lawfirm.erp.firm.repository.EmployeeProfileRepository;
+ import com.lawfirm.erp.firm.repository.FirmRepository;
+ import com.lawfirm.erp.modules.audit.service.AuditService;
++import com.lawfirm.erp.modules.email.service.EmailService;
+ import com.lawfirm.erp.rbac.entity.Role;
+ import com.lawfirm.erp.rbac.entity.UserRole;
+ import com.lawfirm.erp.rbac.repository.RoleRepository;
+@@ -55,6 +56,7 @@ public class EmployeeService {
+     private final CurrentUserResolver currentUserResolver;
+     private final PermissionEvaluator permissionEvaluator;
+     private final AuditService auditService;
++    private final EmailService emailService;
+ 
+     @Transactional
+     public EmployeeResponse createEmployee(CreateEmployeeRequest request) {
+@@ -88,7 +90,10 @@ public class EmployeeService {
+                 .isBlocked(false)
+                 .loginAttempts(0)
+                 .mustChangePassword(true)
+-                .mfaEnabled("FIRM_ADMIN".equals(role.getRoleCode()))
++                // FIX: MFA is now configurable. FIRM_ADMIN always has MFA forced on.
++                // ADVOCATE and PARALEGAL can have MFA enabled by firm admin later.
++                // "FIRM_ADMIN" is blocked above, so this is always false for employees.
++                .mfaEnabled(false)
+                 .build();
+ 
+         user.setActive(true);
+@@ -129,6 +134,19 @@ public class EmployeeService {
+ 
+         log.info("Employee created: {} (code: {}) in firm {}", user.getUsername(), employeeCode, firm.getLawFirmCode());
+ 
++        // 8. Send welcome email (async, non-blocking)
++        UUID currentUserId = currentUserResolver.getCurrentUserId();
++        emailService.sendWelcomeEmployee(
++                firmId,
++                currentUserId,
++                user.getEmail(),
++                user.getFullName(),
++                user.getUsername(),
++                request.getPassword(), // raw password before encoding
++                firm.getName(),
++                firm.getLawFirmCode()
++        );
++
+         return toResponse(user, role, profile);
+     }
+ 
+diff --git a/src/main/java/com/lawfirm/erp/firm/service/FirmService.java b/src/main/java/com/lawfirm/erp/firm/service/FirmService.java
+index f054852..58bbd3e 100644
+--- a/src/main/java/com/lawfirm/erp/firm/service/FirmService.java
++++ b/src/main/java/com/lawfirm/erp/firm/service/FirmService.java
+@@ -1,6 +1,7 @@
+ package com.lawfirm.erp.firm.service;
+ 
+ import com.lawfirm.erp.modules.audit.service.AuditService;
++import com.lawfirm.erp.modules.email.service.EmailService;
+ import com.lawfirm.erp.common.enums.AuditAction;
+ import com.lawfirm.erp.common.enums.AuditEntity;
+ import com.lawfirm.erp.common.enums.FirmStatus;
+@@ -40,6 +41,7 @@ public class FirmService {
+     private final UserRoleRepository userRoleRepository;
+     private final PasswordEncoder passwordEncoder;
+     private final AuditService auditService;
++    private final EmailService emailService;
+ 
+     @Transactional
+     public FirmCreationResponse createFirm(CreateFirmRequest request) {
+@@ -112,6 +114,18 @@ public class FirmService {
+ 
+         log.info("Firm '{}' created with admin '{}'", firm.getLawFirmCode(), admin.getUsername());
+ 
++        // 7. Send welcome email to firm admin (async, non-blocking)
++        emailService.sendWelcomeFirmAdmin(
++                firm.getId(),
++                admin.getId(),           // triggered by the super admin creating this
++                admin.getEmail(),
++                admin.getFullName(),
++                admin.getUsername(),
++                request.getAdminPassword(), // raw password before encoding
++                firm.getName(),
++                firm.getLawFirmCode()
++        );
++
+         // 6. Audit — use logExplicit because this runs in SUPER_ADMIN context
+         //    where SecurityContext IS available, but we pass the values explicitly
+         //    so the async thread doesn't need to read SecurityContext at all
+diff --git a/src/main/java/com/lawfirm/erp/modules/audit/repository/AuditLogRepository.java b/src/main/java/com/lawfirm/erp/modules/audit/repository/AuditLogRepository.java
+index 83c70dd..61f444b 100644
+--- a/src/main/java/com/lawfirm/erp/modules/audit/repository/AuditLogRepository.java
++++ b/src/main/java/com/lawfirm/erp/modules/audit/repository/AuditLogRepository.java
+@@ -90,7 +90,8 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
+             Pageable pageable);
+ 
+ 
+-    @Query("SELECT a FROM AuditLog a WHERE a.action = :action " +
++    /** FIX: Use (:action IS NULL OR a.action = :action) so null action returns all rows */
++    @Query("SELECT a FROM AuditLog a WHERE (:action IS NULL OR a.action = :action) " +
+             "AND (a.createdAt >= COALESCE(:from, a.createdAt)) " +
+             "AND (a.createdAt <= COALESCE(:to, a.createdAt)) " +
+             "ORDER BY a.createdAt DESC")
+diff --git a/src/main/java/com/lawfirm/erp/modules/audit/service/AuditService.java b/src/main/java/com/lawfirm/erp/modules/audit/service/AuditService.java
+index b812973..25e8e7b 100644
+--- a/src/main/java/com/lawfirm/erp/modules/audit/service/AuditService.java
++++ b/src/main/java/com/lawfirm/erp/modules/audit/service/AuditService.java
+@@ -94,8 +94,22 @@ public class AuditService {
+         }
+     }
+ 
++    /** FIX: The auth principal from JwtAuthFilter is AuthenticatedDetail (wrapped in
++     *  UsernamePasswordAuthenticationToken), NOT AuthenticatedUser.
++     *  AuthenticatedUser is stored as a request attribute under key "authenticatedUser".
++     *  We must read from the request attribute instead of SecurityContext principal. */
+     private AuthenticatedUser getCurrentUser() {
+         try {
++            // First try: check request attribute (set by JwtAuthFilter)
++            ServletRequestAttributes attrs =
++                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
++            if (attrs != null) {
++                AuthenticatedUser authUser = (AuthenticatedUser) attrs.getRequest()
++                        .getAttribute("authenticatedUser");
++                if (authUser != null) return authUser;
++            }
++
++            // Second try: SecurityContext principal (may be AuthenticatedDetail)
+             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+             if (auth != null && auth.getPrincipal() instanceof AuthenticatedUser user) {
+                 return user;
+diff --git a/src/main/java/com/lawfirm/erp/modules/me/dto/MeResponse.java b/src/main/java/com/lawfirm/erp/modules/me/dto/MeResponse.java
+index 4f064b1..aa7f456 100644
+--- a/src/main/java/com/lawfirm/erp/modules/me/dto/MeResponse.java
++++ b/src/main/java/com/lawfirm/erp/modules/me/dto/MeResponse.java
+@@ -36,6 +36,11 @@ public class MeResponse {
+     // Frontend iterates this to build sidebar menu
+     private List<ModuleAccess> modules;
+ 
++    // ── Brand config (from SystemConfig) ──────────────────────────────────
++    private String brandColorPrimary;
++    private String brandColorSecondary;
++    private String appName;
++
+     // ── Status ────────────────────────────────────────────────────────────
+     private boolean isActive;
+     private LocalDateTime lastLoginAt;
+diff --git a/src/main/java/com/lawfirm/erp/modules/me/service/MeService.java b/src/main/java/com/lawfirm/erp/modules/me/service/MeService.java
+index 401fd87..b1550a9 100644
+--- a/src/main/java/com/lawfirm/erp/modules/me/service/MeService.java
++++ b/src/main/java/com/lawfirm/erp/modules/me/service/MeService.java
+@@ -3,6 +3,7 @@ package com.lawfirm.erp.modules.me.service;
+ import com.lawfirm.erp.common.exception.ResourceNotFoundException;
+ import com.lawfirm.erp.common.exception.UnauthorizedException;
+ import com.lawfirm.erp.common.repository.UserRepository;
++import com.lawfirm.erp.common.service.SystemConfigService;
+ import com.lawfirm.erp.entity.User;
+ import com.lawfirm.erp.firm.entity.Firm;
+ import com.lawfirm.erp.firm.entity.FirmModule;
+@@ -31,6 +32,7 @@ public class MeService {
+     private final FirmModuleRepository firmModuleRepository;
+     private final ModuleRepository moduleRepository;
+     private final CurrentUserResolver currentUserResolver;
++    private final SystemConfigService systemConfigService;
+ 
+     public MeResponse getMe() {
+         UUID userId = currentUserResolver.getCurrentUserId();
+@@ -63,6 +65,9 @@ public class MeService {
+                 .role(buildRoleInfo(user.getRole()))
+                 .permissions(permCodes)
+                 .modules(moduleAccess)
++                .brandColorPrimary(resolveBrandPrimary(user))
++                .brandColorSecondary(resolveBrandSecondary(user))
++                .appName(resolveAppName())
+                 .isActive(user.isActive())
+                 .lastLoginAt(user.getLastLoginAt())
+                 .build();
+@@ -123,6 +128,27 @@ public class MeService {
+                 .collect(Collectors.toList());
+     }
+ 
++    private String resolveBrandPrimary(User user) {
++        if (user.isSuperAdmin() || user.getFirm() == null) {
++            return "#1A237E"; // default
++        }
++        return systemConfigService.getFirm(user.getFirm().getId(),
++                SystemConfigService.KEY_BRAND_COLOR_PRIMARY).orElse("#1A237E");
++    }
++
++    private String resolveBrandSecondary(User user) {
++        if (user.isSuperAdmin() || user.getFirm() == null) {
++            return "#E3F2FD"; // default
++        }
++        return systemConfigService.getFirm(user.getFirm().getId(),
++                SystemConfigService.KEY_BRAND_COLOR_SECONDARY).orElse("#E3F2FD");
++    }
++
++    private String resolveAppName() {
++        return systemConfigService.getGlobal(SystemConfigService.KEY_APP_NAME)
++                .orElse("NepalCRM");
++    }
++
+     private MeResponse.FirmInfo buildFirmInfo(Firm firm) {
+         if (firm == null) return null;
+         return MeResponse.FirmInfo.builder()
+diff --git a/src/main/java/com/lawfirm/erp/modules/usermanagement/service/UserManagementService.java b/src/main/java/com/lawfirm/erp/modules/usermanagement/service/UserManagementService.java
+index 75efa5e..17d73b7 100644
+--- a/src/main/java/com/lawfirm/erp/modules/usermanagement/service/UserManagementService.java
++++ b/src/main/java/com/lawfirm/erp/modules/usermanagement/service/UserManagementService.java
+@@ -11,6 +11,7 @@ import com.lawfirm.erp.entity.User;
+ import com.lawfirm.erp.modules.audit.entity.AuditLog;
+ import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
+ import com.lawfirm.erp.modules.audit.service.AuditService;
++import com.lawfirm.erp.modules.email.service.EmailService;
+ import com.lawfirm.erp.modules.usermanagement.dto.request.BulkDeactivateRequest;
+ import com.lawfirm.erp.modules.usermanagement.dto.request.BulkRoleChangeRequest;
+ import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
+@@ -49,6 +50,7 @@ public class UserManagementService {
+     private final PermissionEvaluator permissionEvaluator;
+     private final CurrentUserResolver currentUserResolver;
+     private final PasswordEncoder passwordEncoder;
++    private final EmailService emailService;
+ 
+     // ═══════════════════════════════════════════════════════════════════════
+     // LIST — unified employees + clients
+@@ -235,6 +237,17 @@ public class UserManagementService {
+         );
+ 
+         log.info("Password reset for: {}", user.getUsername());
++
++        // Send password reset email (async, non-blocking)
++        UUID currentUserId = currentUserResolver.getCurrentUserId();
++        emailService.sendPasswordReset(
++                firmId,
++                currentUserId,
++                user.getEmail(),
++                user.getFullName(),
++                request.getNewPassword(),
++                user.getFirm() != null ? user.getFirm().getName() : "Your Firm"
++        );
+     }
+ 
+     // ═══════════════════════════════════════════════════════════════════════
+diff --git a/src/main/java/com/lawfirm/erp/rbac/controller/RoleController.java b/src/main/java/com/lawfirm/erp/rbac/controller/RoleController.java
+index eeedbf6..f6806a8 100644
+--- a/src/main/java/com/lawfirm/erp/rbac/controller/RoleController.java
++++ b/src/main/java/com/lawfirm/erp/rbac/controller/RoleController.java
+@@ -30,6 +30,7 @@ public class RoleController {
+     private final RoleManagementService roleManagementService;
+     private final RolePermissionService rolePermissionService;
+     private final ResponseHandler responseHandler;
++    private final CurrentUserResolver currentUserResolver;
+ 
+     @PostMapping
+     @Operation(summary = "Create or update role")
+diff --git a/src/main/java/com/lawfirm/erp/rbac/service/RoleManagementService.java b/src/main/java/com/lawfirm/erp/rbac/service/RoleManagementService.java
+index 29c05a5..d8a8c1b 100644
+--- a/src/main/java/com/lawfirm/erp/rbac/service/RoleManagementService.java
++++ b/src/main/java/com/lawfirm/erp/rbac/service/RoleManagementService.java
+@@ -141,14 +141,22 @@ public class RoleManagementService {
+         return adminId;
+     }
+ 
++    /** FIX: Use findAllByRoleCode with code lookup, then filter non-system roles.
++     *  Previously used findSystemRoleByCode() which only found system roles (firm IS NULL),
++     *  making the update-by-code path always fail for non-system roles.
++     *  Now uses findAllByRoleCode() and filters for non-system roles. */
+     private Role findExistingRole(RoleRequest request) {
+         if (request.getId() != null) {
+             return roleRepository.findById(request.getId()).orElse(null);
+         }
+         if (request.getCode() != null && !request.getCode().isEmpty()) {
+-            // System roles should not be found here — they can't be updated via this API
+-            // Use findSystemRoleByCode to avoid NonUniqueResultException
+-            return roleRepository.findSystemRoleByCode(request.getCode()).orElse(null);
++            List<Role> roles = roleRepository.findAllByRoleCode(request.getCode());
++            // Prefer non-system (firm-scoped) roles for update
++            // System roles can't be modified (will be caught by validateNotSystemRole)
++            return roles.stream()
++                    .filter(r -> !Boolean.TRUE.equals(r.getIsSystem()))
++                    .findFirst()
++                    .orElse(null);
+         }
+         return null;
+     }
+diff --git a/src/main/java/com/lawfirm/erp/tenant/controller/TenantTypeController.java b/src/main/java/com/lawfirm/erp/tenant/controller/TenantTypeController.java
+index cd9b47b..a53c0f5 100644
+--- a/src/main/java/com/lawfirm/erp/tenant/controller/TenantTypeController.java
++++ b/src/main/java/com/lawfirm/erp/tenant/controller/TenantTypeController.java
+@@ -1,10 +1,12 @@
+ package com.lawfirm.erp.tenant.controller;
++
+ import com.lawfirm.erp.common.dto.ApiRequest;
+ import com.lawfirm.erp.common.dto.ApiResponse;
+ import com.lawfirm.erp.common.exception.ResponseHandler;
+ import com.lawfirm.erp.dto.Tenant.request.TenantTypeRequest;
+ import com.lawfirm.erp.dto.Tenant.response.TenantTypeResponse;
+ import com.lawfirm.erp.tenant.service.TenantTypeService;
++import com.lawfirm.erp.auth.security.CurrentUserResolver;
+ import io.swagger.v3.oas.annotations.Operation;
+ import io.swagger.v3.oas.annotations.tags.Tag;
+ import jakarta.validation.Valid;
+@@ -25,12 +27,13 @@ public class TenantTypeController {
+ 
+     private final TenantTypeService tenantTypeService;
+     private final ResponseHandler responseHandler;
++    private final CurrentUserResolver currentUserResolver;
+ 
+     @PostMapping
+     @Operation(summary = "Create tenant type", description = "Create a new tenant type (SOLO, LAW_FIRM, etc.)")
+     public ResponseEntity<ApiResponse<TenantTypeResponse>> createTenantType(
+-            @Valid @RequestBody ApiRequest<TenantTypeRequest> request,
+-            @RequestAttribute("userId") UUID adminId) {
++            @Valid @RequestBody ApiRequest<TenantTypeRequest> request) {
++        UUID adminId = currentUserResolver.getCurrentUserId();
+         return responseHandler.ok(
+                 tenantTypeService.createTenantType(request.getData(), adminId),
+                 "Tenant type created successfully"
+@@ -54,4 +57,43 @@ public class TenantTypeController {
+                 "Active tenant types fetched successfully"
+         );
+     }
++
++    @GetMapping("/{id}")
++    @Operation(summary = "Get tenant type by ID")
++    public ResponseEntity<ApiResponse<TenantTypeResponse>> getTenantTypeById(@PathVariable UUID id) {
++        return responseHandler.ok(
++                tenantTypeService.getTenantTypeById(id),
++                "Tenant type fetched successfully"
++        );
++    }
++
++    @PutMapping("/{id}")
++    @Operation(summary = "Update tenant type")
++    public ResponseEntity<ApiResponse<TenantTypeResponse>> updateTenantType(
++            @PathVariable UUID id,
++            @Valid @RequestBody ApiRequest<TenantTypeRequest> request) {
++        UUID adminId = currentUserResolver.getCurrentUserId();
++        return responseHandler.ok(
++                tenantTypeService.updateTenantType(id, request.getData(), adminId),
++                "Tenant type updated successfully"
++        );
++    }
++
++    @DeleteMapping("/{id}")
++    @Operation(summary = "Delete tenant type")
++    public ResponseEntity<ApiResponse<Void>> deleteTenantType(@PathVariable UUID id) {
++        UUID adminId = currentUserResolver.getCurrentUserId();
++        tenantTypeService.deleteTenantType(id, adminId);
++        return responseHandler.ok(null, "Tenant type deleted successfully");
++    }
++
++    @PatchMapping("/{id}/toggle")
++    @Operation(summary = "Toggle tenant type status")
++    public ResponseEntity<ApiResponse<TenantTypeResponse>> toggleTenantType(@PathVariable UUID id) {
++        UUID adminId = currentUserResolver.getCurrentUserId();
++        return responseHandler.ok(
++                tenantTypeService.toggleTenantTypeStatus(id, adminId),
++                "Tenant type status toggled successfully"
++        );
++    }
+ }
+diff --git a/src/main/resources/application.yml b/src/main/resources/application.yml
+index 4e4b9ef..b4caa99 100644
+--- a/src/main/resources/application.yml
++++ b/src/main/resources/application.yml
+@@ -42,5 +42,11 @@ mybatis:
+     default-statement-timeout: 30
+     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+ 
++# Config encryption key for AES-256 (32 bytes, Base64-encoded)
++# Generate with: openssl rand -base64 32
++config:
++  encryption:
++    key: ${CONFIG_ENCRYPTION_KEY:}
++
+ security:
+   max-login-attempts: 5
+\ No newline at end of file

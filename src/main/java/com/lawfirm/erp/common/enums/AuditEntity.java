@@ -19,5 +19,7 @@ public enum AuditEntity {
     PAYMENT,
     HEARING,
     DEPARTMENT,
-    AUTH
+    AUTH,
+    EMAIL_CONFIG,
+    SYSTEM_CONFIG
 }

@@ -23,7 +23,7 @@ public class PermissionRequest {
     private PermissionScope scope = PermissionScope.TENANT;
 
     @NotBlank(message = "Permission code is required")
-    private String code;  // Will be auto-generated if not provided
+    private String code;
 
     private String description;
     private Boolean isActive;
