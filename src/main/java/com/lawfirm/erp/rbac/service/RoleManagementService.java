@@ -6,6 +6,7 @@ import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.DuplicateResourceException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
+import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
 import com.lawfirm.erp.dto.admin.request.RoleRequest;
 import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
@@ -31,6 +32,7 @@ public class RoleManagementService {
 
     private final RoleRepository roleRepository;
     private final RolePermissionRepository rolePermissionRepository;
+    private final RolePermissionService rolePermissionService;
     private final CurrentUserResolver currentUserResolver;
     private final AuditService auditService;
 
@@ -66,6 +68,13 @@ public class RoleManagementService {
                     role.getId(),
                     "Role created: " + role.getRoleCode() + " (" + role.getRoleName() + ")"
             );
+        }
+
+        if (request.getPermissionIds() != null && !request.getPermissionIds().isEmpty()) {
+            RolePermissionRequest permRequest = new RolePermissionRequest();
+            permRequest.setRoleId(role.getId());
+            permRequest.setPermissionIds(request.getPermissionIds());
+            rolePermissionService.assignPermissionsToRole(permRequest);
         }
 
         return convertToCompleteResponse(role);

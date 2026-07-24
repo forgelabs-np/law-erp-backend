@@ -4,6 +4,8 @@ import com.lawfirm.erp.dto.firm.response.FirmRolePermissionsResponse;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
+import com.lawfirm.erp.common.enums.PermissionScope;
+import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
@@ -45,13 +47,25 @@ public class FirmRoleService {
 
     // ═══════════════════════════════════════════════════════════════════════
     // GET /api/v1/firm/roles
-    // List all firm-scoped roles — read only, no system templates
+    // List all firm-scoped roles + system roles applicable to FIRM_USER
     // ═══════════════════════════════════════════════════════════════════════
     public List<RoleResponse> getFirmRoles() {
         UUID firmId = getRequiredFirmId();
 
-        return roleRepository.findByFirmIdAndIsSystemFalse(firmId)
+        List<Role> firmRoles = roleRepository.findByFirmIdAndIsSystemFalse(firmId);
+
+        if (!firmRoles.isEmpty()) {
+            // Firm has cloned roles — return those only (preferred path)
+            return firmRoles.stream()
+                    .map(this::toRoleResponse)
+                    .collect(Collectors.toList());
+        }
+
+        // Fallback for firms created before the role-cloning feature:
+        // show system roles that are applicable to FIRM_USER
+        return roleRepository.findByFirmIsNullAndIsSystemTrue()
                 .stream()
+                .filter(r -> r.getApplicableTo() == UserType.FIRM_USER)
                 .map(this::toRoleResponse)
                 .collect(Collectors.toList());
     }
@@ -114,19 +128,19 @@ public class FirmRoleService {
         // Firm admin cannot assign permissions beyond what the parent system
         // role has. parentRoleId was set when the role was cloned at firm creation.
         if (role.getParentRoleId() != null) {
-            Set<UUID> ceilingIds = rolePermissionRepository
-                    .findPermissionsByRoleId(role.getParentRoleId())
-                    .stream()
-                    .map(Permission::getId)
-                    .collect(Collectors.toSet());
+            Role parentRole = roleRepository.findById(role.getParentRoleId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Parent system role not found"));
+
+            PermissionScope maxScope = getMaxScopeForParent(parentRole.getRoleCode());
 
             for (UUID permId : request.getPermissionIds()) {
-                if (!ceilingIds.contains(permId)) {
-                    Permission p = permissionRepository.findById(permId)
-                            .orElseThrow(() -> new ResourceNotFoundException("Permission not found: " + permId));
+                Permission p = permissionRepository.findById(permId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Permission not found: " + permId));
+                if (!isScopeAllowed(p.getScope(), maxScope)) {
                     throw new ForbiddenException(
-                            "Permission '" + p.getCode() + "' is not allowed for role type '"
-                                    + role.getRoleCode() + "'. Exceeds system ceiling."
+                            "Permission '" + p.getCode() + "' (scope: " + p.getScope()
+                            + ") is not allowed for role type '" + parentRole.getRoleCode()
+                            + "'. Exceeds system ceiling."
                     );
                 }
             }
@@ -139,7 +153,7 @@ public class FirmRoleService {
         }
 
         // ── Replace permissions ───────────────────────────────────────────
-        rolePermissionRepository.deleteByRole(role);
+        rolePermissionRepository.deleteByRoleId(role.getId());
 
         List<RolePermission> newRolePermissions = permissions.stream()
                 .map(p -> {
@@ -238,5 +252,23 @@ public class FirmRoleService {
                 .isActive(p.isActive())
                 .createdAt(p.getCreatedAt())
                 .build();
+    }
+
+    private static PermissionScope getMaxScopeForParent(String roleCode) {
+        return switch (roleCode) {
+            case "SUPER_ADMIN" -> PermissionScope.GLOBAL;
+            case "FIRM_ADMIN"  -> PermissionScope.TENANT;
+            case "ADVOCATE", "PARALEGAL" -> PermissionScope.ASSIGNED;
+            case "CLIENT"      -> PermissionScope.OWN;
+            default            -> PermissionScope.OWN;
+        };
+    }
+
+    private static boolean isScopeAllowed(PermissionScope permScope, PermissionScope maxScope) {
+        if (maxScope == PermissionScope.GLOBAL) return true;
+        if (maxScope == PermissionScope.TENANT) return permScope != PermissionScope.GLOBAL;
+        if (maxScope == PermissionScope.ASSIGNED)
+            return permScope == PermissionScope.ASSIGNED || permScope == PermissionScope.OWN;
+        return permScope == PermissionScope.OWN;
     }
 }
