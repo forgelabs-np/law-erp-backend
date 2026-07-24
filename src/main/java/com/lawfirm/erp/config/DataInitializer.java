@@ -5,6 +5,8 @@ import com.lawfirm.erp.common.enums.FirmType;
 import com.lawfirm.erp.common.enums.PermissionAction;
 import com.lawfirm.erp.common.enums.PermissionScope;
 import com.lawfirm.erp.common.enums.UserType;
+import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.rbac.entity.Module;
@@ -63,6 +65,7 @@ public class DataInitializer implements CommandLineRunner {
     private final RolePermissionRepository rolePermissionRepository;
     private final TenantTypeRepository tenantTypeRepository;
     private final FirmRepository firmRepository;
+    private final UserRepository userRepository;
 
     private static final String FULL      = "FULL";
     private static final String READ_ONLY = "READ_ONLY";
@@ -76,6 +79,7 @@ public class DataInitializer implements CommandLineRunner {
 
         createTenantTypes();
         createSystemFirmForSuperAdmin();
+        migrateExistingSuperAdminMfa();
         createSystemRoles();
         createModulesAndPermissions();
         assignPermissionsToRoles();
@@ -117,6 +121,20 @@ public class DataInitializer implements CommandLineRunner {
                     .build();
             firmRepository.save(systemFirm);
             log.info("  + System firm created");
+        }
+    }
+
+    // ========================================================================
+    // Migrate existing SUPER_ADMIN users — force MFA
+    // ========================================================================
+    private void migrateExistingSuperAdminMfa() {
+        List<User> superAdmins = userRepository.findByUserType(UserType.SUPER_ADMIN);
+        for (User sa : superAdmins) {
+            if (!Boolean.TRUE.equals(sa.getMfaEnabled())) {
+                sa.setMfaEnabled(true);
+                userRepository.save(sa);
+                log.info("  + MFA enabled for existing super admin: {}", sa.getUsername());
+            }
         }
     }
 
