@@ -3,6 +3,7 @@ package com.lawfirm.erp.superadmin.service;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
+import com.lawfirm.erp.common.enums.AuthStatus;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
@@ -15,6 +16,7 @@ import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
 import com.lawfirm.erp.auth.security.JwtUtil;
+import com.lawfirm.erp.auth.security.TotpUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +38,7 @@ public class SuperAdminService {
 
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
+    private final TotpUtil totpUtil;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final FirmRepository firmRepository;
@@ -83,6 +86,7 @@ public class SuperAdminService {
         user.setFirm(systemFirm);
         user.setRole(superAdminRole);
         user.setUserType(UserType.SUPER_ADMIN);
+        user.setMfaEnabled(true);
         user.setActive(true);
         user = userRepository.save(user);
 
@@ -120,18 +124,45 @@ public class SuperAdminService {
             );
 
             User authenticatedUser = (User) authentication.getPrincipal();
+
+            // ── MFA Flow ──────────────────────────────────────────────────────
+            if (Boolean.TRUE.equals(authenticatedUser.getMfaEnabled())) {
+
+                if (!Boolean.TRUE.equals(authenticatedUser.getMfaVerified())) {
+                    // First-time MFA setup — generate secret, return QR code
+                    return buildMfaSetupResponse(authenticatedUser);
+                }
+
+                // MFA already set up — require TOTP code
+                if (request.getTotpCode() == null || request.getTotpCode().isBlank()) {
+                    return buildMfaChallengeResponse(authenticatedUser);
+                }
+
+                // Validate the provided code
+                if (!totpUtil.verify(authenticatedUser.getMfaSecret(), request.getTotpCode())) {
+                    auditService.log(
+                            AuditAction.LOGIN_FAILED,
+                            AuditEntity.AUTH,
+                            authenticatedUser.getId(),
+                            "Invalid MFA code on super admin login: " + authenticatedUser.getUsername()
+                    );
+                    throw new BadCredentialsException("Invalid authenticator code");
+                }
+            }
+
+            // ── Issue full tokens ────────────────────────────────────────────
             String accessToken = jwtUtil.generateAccessToken(authenticatedUser);
             String refreshToken = jwtUtil.generateRefreshToken(authenticatedUser);
 
-            // ✅ AUDIT: Super Admin login
             auditService.log(
                     AuditAction.LOGIN,
                     AuditEntity.AUTH,
-                    user.getId(),
-                    "Super Admin logged in: " + user.getUsername()
+                    authenticatedUser.getId(),
+                    "Super Admin logged in: " + authenticatedUser.getUsername()
             );
 
             return LoginResponse.builder()
+                    .status(AuthStatus.SUCCESS)
                     .accessToken(accessToken)
                     .refreshToken(refreshToken)
                     .expiresIn(86400000L)
@@ -150,5 +181,38 @@ public class SuperAdminService {
             log.error("Super admin login failed - authentication error: {}", e.getMessage());
             throw new BadCredentialsException("Invalid username or password");
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // MFA Helpers
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private LoginResponse buildMfaSetupResponse(User user) {
+        String mfaToken = jwtUtil.generateMfaToken(user);
+
+        String secret = user.getMfaSecret();
+        if (secret == null) {
+            secret = totpUtil.generateSecret();
+            user.setMfaSecret(secret);
+            userRepository.save(user);
+        }
+
+        String qrUri = totpUtil.buildQrCodeUri(secret, user.getUsername(), "SYSTEM");
+
+        return LoginResponse.builder()
+                .status(AuthStatus.MFA_SETUP_REQUIRED)
+                .mfaToken(mfaToken)
+                .mfaQrCodeUri(qrUri)
+                .mfaManualKey(totpUtil.formatSecretForDisplay(secret))
+                .build();
+    }
+
+    private LoginResponse buildMfaChallengeResponse(User user) {
+        String mfaToken = jwtUtil.generateMfaToken(user);
+
+        return LoginResponse.builder()
+                .status(AuthStatus.MFA_REQUIRED)
+                .mfaToken(mfaToken)
+                .build();
     }
 }
