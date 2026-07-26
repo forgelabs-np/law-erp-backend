@@ -1,7 +1,7 @@
 package com.lawfirm.erp.firm.service;
 
-import com.lawfirm.erp.common.util.ConfigEncryptionUtil;
 import com.lawfirm.erp.firm.entity.FirmEmailConfig;
+import com.lawfirm.erp.common.util.ConfigEncryptionUtil;
 import com.lawfirm.erp.firm.repository.FirmEmailConfigRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
