@@ -1,6 +1,5 @@
 package com.lawfirm.erp.rbac.controller;
 
-import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -31,7 +30,6 @@ public class RoleController {
     private final RoleManagementService roleManagementService;
     private final RolePermissionService rolePermissionService;
     private final ResponseHandler responseHandler;
-    private final CurrentUserResolver currentUserResolver;
 
     @PostMapping
     @Operation(summary = "Create or update role")
