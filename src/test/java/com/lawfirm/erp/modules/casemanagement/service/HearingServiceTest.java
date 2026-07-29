@@ -12,6 +12,7 @@ import com.lawfirm.erp.modules.casemanagement.enums.HearingStatus;
 import com.lawfirm.erp.modules.casemanagement.enums.HearingType;
 import com.lawfirm.erp.modules.casemanagement.repository.CaseRepository;
 import com.lawfirm.erp.modules.casemanagement.repository.CaseTimelineRepository;
+import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.modules.casemanagement.repository.HearingRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,12 +43,13 @@ class HearingServiceTest {
     @Mock private HearingRepository hearingRepository;
     @Mock private CaseRepository caseRepository;
     @Mock private CaseTimelineRepository caseTimelineRepository;
+    @Mock private AuditService auditService;
 
     private HearingService hearingService;
 
     @BeforeEach
     void setUp() {
-        hearingService = new HearingService(hearingRepository, caseRepository, caseTimelineRepository);
+        hearingService = new HearingService(hearingRepository, caseRepository, caseTimelineRepository, auditService);
     }
 
     @AfterEach
@@ -56,7 +58,7 @@ class HearingServiceTest {
     }
 
     private void setFirmContext() {
-        FirmContextHolder.setFirmId(FIRM_ID);
+        FirmContextHolder.set(FIRM_ID, null);
     }
 
     private Case createCase() {
@@ -193,10 +195,6 @@ class HearingServiceTest {
             h.setStatus(HearingStatus.SCHEDULED);
             when(hearingRepository.findByIdAndFirmId(HEARING_ID, FIRM_ID))
                     .thenReturn(Optional.of(h));
-
-            Case c = createCase();
-            when(caseRepository.findByIdAndFirmId(CASE_ID, FIRM_ID))
-                    .thenReturn(Optional.of(c));
             when(hearingRepository.save(any())).thenReturn(h);
 
             UpdateHearingRequest request = new UpdateHearingRequest();

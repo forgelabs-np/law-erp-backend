@@ -12,6 +12,7 @@ import com.lawfirm.erp.modules.casemanagement.entity.Case;
 import com.lawfirm.erp.modules.casemanagement.entity.CaseParty;
 import com.lawfirm.erp.modules.casemanagement.entity.CaseTimelineEvent;
 import com.lawfirm.erp.modules.casemanagement.entity.Hearing;
+import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.modules.casemanagement.enums.*;
 import com.lawfirm.erp.modules.casemanagement.repository.CasePartyRepository;
 import com.lawfirm.erp.modules.casemanagement.repository.CaseRepository;
@@ -52,13 +53,14 @@ class CaseServiceTest {
     @Mock private CaseTimelineRepository caseTimelineRepository;
     @Mock private HearingRepository hearingRepository;
     @Mock private CaseNumberGenerator caseNumberGenerator;
+    @Mock private AuditService auditService;
 
     private CaseService caseService;
 
     @BeforeEach
     void setUp() {
         caseService = new CaseService(caseRepository, casePartyRepository,
-                caseTimelineRepository, hearingRepository, caseNumberGenerator);
+                caseTimelineRepository, hearingRepository, caseNumberGenerator, auditService);
     }
 
     @AfterEach
@@ -80,8 +82,7 @@ class CaseServiceTest {
     }
 
     private void setFirmContext() {
-        FirmContextHolder.setFirmId(FIRM_ID);
-        FirmContextHolder.setFirmCode(FIRM_CODE);
+        FirmContextHolder.set(FIRM_ID, FIRM_CODE);
     }
 
     @Nested
