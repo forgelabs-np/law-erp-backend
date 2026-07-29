@@ -43,8 +43,6 @@ public class CreateEmployeeRequest {
     @Size(max = 100)
     private String designation;      // "Senior Advocate", "Paralegal" etc.
 
-    private UUID departmentId;       // Optional — link to departments table
-
     @Size(max = 50)
     private String barCouncilNo;     // Required for advocates, optional for others
 

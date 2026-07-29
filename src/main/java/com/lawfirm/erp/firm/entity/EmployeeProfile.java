@@ -47,10 +47,6 @@ public class EmployeeProfile extends AuditableEntity {
     @Column(length = 100)
     private String designation;    // "Senior Advocate", "Junior Advocate", "Paralegal"
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "department_id")
-    private Department department;
-
     @Column(name = "bar_council_no", length = 50)
     private String barCouncilNo;   // e.g. "KTM-12345" — for advocates only
 
