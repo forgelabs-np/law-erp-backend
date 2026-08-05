@@ -11,6 +11,9 @@ import java.util.UUID;
 @Builder
 public class TimelineEventResponse {
     private UUID id;
+    private UUID caseId;
+    private String caseNumber;
+    private String caseTitle;
     private TimelineEventType eventType;
     private String title;
     private String description;

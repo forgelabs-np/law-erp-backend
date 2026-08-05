@@ -15,6 +15,8 @@ import java.util.UUID;
 public class HearingResponse {
     private UUID id;
     private UUID caseId;
+    private String caseNumber;
+    private String caseTitle;
     private String title;
     private LocalDate date;
     private LocalTime time;

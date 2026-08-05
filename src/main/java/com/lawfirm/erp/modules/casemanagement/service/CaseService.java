@@ -232,6 +232,9 @@ public class CaseService {
                 .stream()
                 .map(e -> TimelineEventResponse.builder()
                         .id(e.getId())
+                        .caseId(c.getId())
+                        .caseNumber(c.getCaseNumber())
+                        .caseTitle(c.getTitle())
                         .eventType(e.getEventType())
                         .title(e.getTitle())
                         .description(e.getDescription())
@@ -266,7 +269,7 @@ public class CaseService {
         auditService.log(AuditAction.CASE_UPDATED, AuditEntity.CASE, c.getId(),
                 "Party added to case " + caseNumber + ": " + request.getFullName() + " (" + request.getPartyType() + ")");
 
-        return toPartyResponse(saved);
+        return toPartyResponse(saved, c);
     }
 
     @Transactional
@@ -284,7 +287,7 @@ public class CaseService {
         cp.setClientId(request.getClientId());
         cp.setOurClient(request.isOurClient());
         CaseParty saved = casePartyRepository.save(cp);
-        return toPartyResponse(saved);
+        return toPartyResponse(saved, c);
     }
 
     @Transactional
@@ -344,7 +347,7 @@ public class CaseService {
         UUID firmId = c.getFirmId();
         List<PartyResponse> parties = casePartyRepository.findByCaseIdAndFirmId(c.getId(), firmId)
                 .stream()
-                .map(this::toPartyResponse)
+                .map(p -> toPartyResponse(p, c))
                 .collect(Collectors.toList());
 
         int hearingCount = (int) hearingRepository.findByCaseIdOrderByDateDesc(c.getId())
@@ -382,9 +385,12 @@ public class CaseService {
                 .build();
     }
 
-    private PartyResponse toPartyResponse(CaseParty cp) {
+    private PartyResponse toPartyResponse(CaseParty cp, Case c) {
         return PartyResponse.builder()
                 .id(cp.getId())
+                .caseId(c.getId())
+                .caseNumber(c.getCaseNumber())
+                .caseTitle(c.getTitle())
                 .partyType(cp.getPartyType())
                 .representation(cp.getRepresentation())
                 .fullName(cp.getFullName())

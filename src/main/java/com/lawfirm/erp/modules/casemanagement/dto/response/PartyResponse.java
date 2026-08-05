@@ -11,6 +11,9 @@ import java.util.UUID;
 @Builder
 public class PartyResponse {
     private UUID id;
+    private UUID caseId;
+    private String caseNumber;
+    private String caseTitle;
     private PartyType partyType;
     private PartyRepresentation representation;
     private String fullName;

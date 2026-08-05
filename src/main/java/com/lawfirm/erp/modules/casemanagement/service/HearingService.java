@@ -79,7 +79,7 @@ public class HearingService {
         auditService.log(AuditAction.HEARING_SCHEDULED, AuditEntity.HEARING, saved.getId(),
                 "Hearing scheduled: " + request.getTitle() + " for case " + caseNumber);
 
-        return toResponse(saved);
+        return toResponse(saved, c);
     }
 
     public List<HearingResponse> getCaseHearings(String caseNumber) {
@@ -90,7 +90,7 @@ public class HearingService {
 
         return hearingRepository.findByCaseIdOrderByDateDesc(c.getId())
                 .stream()
-                .map(this::toResponse)
+                .map(h -> toResponse(h, c))
                 .collect(Collectors.toList());
     }
 
@@ -98,7 +98,8 @@ public class HearingService {
         UUID firmId = getRequiredFirmId();
         Hearing h = hearingRepository.findByIdAndFirmId(hearingId, firmId)
                 .orElseThrow(() -> new ResourceNotFoundException("Hearing not found: " + hearingId));
-        return toResponse(h);
+        Case c = findCase(h.getCaseId(), firmId);
+        return toResponse(h, c);
     }
 
     @Transactional
@@ -106,6 +107,7 @@ public class HearingService {
         UUID firmId = getRequiredFirmId();
         Hearing h = hearingRepository.findByIdAndFirmId(hearingId, firmId)
                 .orElseThrow(() -> new ResourceNotFoundException("Hearing not found: " + hearingId));
+        Case c = findCase(h.getCaseId(), firmId);
 
         if (request.getTitle() != null) h.setTitle(request.getTitle());
         if (request.getDate() != null) h.setDate(request.getDate());
@@ -124,8 +126,9 @@ public class HearingService {
             h.setStatus(request.getStatus());
 
             // Record timeline events for status changes
-            Case c = caseRepository.findByIdAndFirmId(h.getCaseId(), firmId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Case not found"));
+            if (c == null) {
+                throw new ResourceNotFoundException("Case not found");
+            }
 
             if (request.getStatus() == HearingStatus.HELD && oldStatus != HearingStatus.HELD) {
                 recordTimeline(c, TimelineEventType.HEARING_HELD,
@@ -143,7 +146,7 @@ public class HearingService {
         auditService.log(AuditAction.HEARING_UPDATED, AuditEntity.HEARING, saved.getId(),
                 "Hearing updated: " + (saved.getTitle() != null ? saved.getTitle() : ""));
 
-        return toResponse(saved);
+        return toResponse(saved, c);
     }
 
     @Transactional
@@ -166,10 +169,17 @@ public class HearingService {
         return firmId;
     }
 
-    private HearingResponse toResponse(Hearing h) {
+    private Case findCase(UUID caseId, UUID firmId) {
+        if (caseId == null) return null;
+        return caseRepository.findByIdAndFirmId(caseId, firmId).orElse(null);
+    }
+
+    private HearingResponse toResponse(Hearing h, Case c) {
         return HearingResponse.builder()
                 .id(h.getId())
                 .caseId(h.getCaseId())
+                .caseNumber(c != null ? c.getCaseNumber() : null)
+                .caseTitle(c != null ? c.getTitle() : null)
                 .title(h.getTitle())
                 .date(h.getDate())
                 .time(h.getTime())

@@ -4,8 +4,10 @@ import com.lawfirm.erp.customer.entity.CustomerProfile;
 import com.lawfirm.erp.customer.repository.CustomerProfileRepository;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.modules.casemanagement.dto.response.PartyMatchResult;
+import com.lawfirm.erp.modules.casemanagement.entity.Case;
 import com.lawfirm.erp.modules.casemanagement.entity.CaseParty;
 import com.lawfirm.erp.modules.casemanagement.repository.CasePartyRepository;
+import com.lawfirm.erp.modules.casemanagement.repository.CaseRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,7 @@ class PartyMatchServiceTest {
 
     @Mock private CustomerProfileRepository customerProfileRepository;
     @Mock private CasePartyRepository casePartyRepository;
+    @Mock private CaseRepository caseRepository;
 
     private PartyMatchService partyMatchService;
 
@@ -59,7 +62,7 @@ class PartyMatchServiceTest {
 
     @BeforeEach
     void setUp() {
-        partyMatchService = new PartyMatchService(customerProfileRepository, casePartyRepository);
+        partyMatchService = new PartyMatchService(customerProfileRepository, casePartyRepository, caseRepository);
     }
 
     @Test
@@ -127,16 +130,32 @@ class PartyMatchServiceTest {
     @DisplayName("Matches both clients and case parties")
     void matchesBothSources() {
         User user = makeUser("Sita Devi", "9800000002", null);
+        CaseParty party = makeParty("Sita Devi", "9800000002", null);
+        UUID caseId = UUID.randomUUID();
+        party.setCaseId(caseId);
+
+        Case c = new Case();
+        c.setId(caseId);
+        c.setCaseNumber("APX-CIV-2026-00001");
+
         when(customerProfileRepository.findMatches(eq(FIRM_ID), any(), any(), any()))
                 .thenReturn(List.of(makeClient(user)));
         when(casePartyRepository.findMatches(eq(FIRM_ID), any(), any(), any()))
-                .thenReturn(List.of(makeParty("Sita Devi", "9800000002", null)));
+                .thenReturn(List.of(party));
+        when(caseRepository.findAllById(anyCollection()))
+                .thenReturn(List.of(c));
 
         List<PartyMatchResult.Match> matches = partyMatchService.match(
                 FIRM_ID, "Sita Devi", "9800000002", null);
 
         assertEquals(2, matches.size());
         assertTrue(matches.stream().allMatch(m -> "HIGH".equals(m.getConfidence())));
+
+        // CASE_PARTY match must carry the case number
+        PartyMatchResult.Match casePartyMatch = matches.stream()
+                .filter(m -> "CASE_PARTY".equals(m.getSourceType()))
+                .findFirst().orElseThrow();
+        assertEquals("APX-CIV-2026-00001", casePartyMatch.getCaseNumber());
     }
 
     @Test

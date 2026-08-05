@@ -19,6 +19,7 @@ public class PartyMatchResult {
     public static class Match {
         private String sourceType; // CLIENT or CASE_PARTY
         private UUID sourceId;
+        private String caseNumber; // populated for CASE_PARTY matches
         private String fullName;
         private String mobileNo;
         private String email;

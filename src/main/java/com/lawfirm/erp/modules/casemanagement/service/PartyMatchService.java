@@ -3,14 +3,18 @@ package com.lawfirm.erp.modules.casemanagement.service;
 import com.lawfirm.erp.customer.entity.CustomerProfile;
 import com.lawfirm.erp.customer.repository.CustomerProfileRepository;
 import com.lawfirm.erp.modules.casemanagement.dto.response.PartyMatchResult;
+import com.lawfirm.erp.modules.casemanagement.entity.Case;
 import com.lawfirm.erp.modules.casemanagement.entity.CaseParty;
 import com.lawfirm.erp.modules.casemanagement.repository.CasePartyRepository;
+import com.lawfirm.erp.modules.casemanagement.repository.CaseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -18,6 +22,7 @@ public class PartyMatchService {
 
     private final CustomerProfileRepository customerProfileRepository;
     private final CasePartyRepository casePartyRepository;
+    private final CaseRepository caseRepository;
 
     public List<PartyMatchResult.Match> match(UUID firmId, String name, String mobileNo, String email) {
         List<PartyMatchResult.Match> results = new ArrayList<>();
@@ -40,10 +45,21 @@ public class PartyMatchService {
 
         // Match against existing case parties
         List<CaseParty> parties = casePartyRepository.findMatches(firmId, name, mobileNo, email);
+
+        // Batch-resolve case numbers for the matched parties (single query, no N+1)
+        Map<UUID, String> caseNumbers = parties.isEmpty() ? Map.of()
+                : caseRepository.findAllById(parties.stream()
+                        .map(CaseParty::getCaseId)
+                        .distinct()
+                        .collect(Collectors.toList()))
+                .stream()
+                .collect(Collectors.toMap(Case::getId, Case::getCaseNumber));
+
         for (CaseParty p : parties) {
             results.add(PartyMatchResult.Match.builder()
                     .sourceType("CASE_PARTY")
                     .sourceId(p.getId())
+                    .caseNumber(caseNumbers.get(p.getCaseId()))
                     .fullName(p.getFullName())
                     .mobileNo(p.getMobileNo())
                     .email(p.getEmail())

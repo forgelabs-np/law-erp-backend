@@ -1,5 +1,6 @@
 package com.lawfirm.erp.modules.casemanagement.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.lawfirm.erp.modules.casemanagement.enums.HearingType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -18,6 +19,7 @@ public class CreateHearingRequest {
     @NotNull(message = "Date is required")
     private LocalDate date;
 
+    @JsonAlias({"startTime", "startingTime", "start"})
     private LocalTime time;
     private LocalTime endTime;
     private String courtRoom;
