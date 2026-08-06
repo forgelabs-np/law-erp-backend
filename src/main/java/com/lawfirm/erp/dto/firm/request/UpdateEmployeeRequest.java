@@ -23,8 +23,6 @@ public class UpdateEmployeeRequest {
     @Size(max = 100)
     private String designation;
 
-    private UUID departmentId;
-
     @Size(max = 50)
     private String barCouncilNo;
 
