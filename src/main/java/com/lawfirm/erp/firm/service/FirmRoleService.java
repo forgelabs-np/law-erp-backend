@@ -13,7 +13,9 @@ import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
 import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
+import com.lawfirm.erp.dto.firm.response.RoleUserResponse;
 import com.lawfirm.erp.rbac.entity.Permission;
+import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.entity.RolePermission;
 import com.lawfirm.erp.rbac.repository.PermissionRepository;
@@ -27,9 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -55,18 +55,46 @@ public class FirmRoleService {
         List<Role> firmRoles = roleRepository.findByFirmIdAndIsSystemFalse(firmId);
 
         if (!firmRoles.isEmpty()) {
-            // Firm has cloned roles — return those only (preferred path)
+            // Firm has cloned roles — batch-load user counts and names in 2 queries
+            List<UUID> roleIds = firmRoles.stream().map(Role::getId).collect(Collectors.toList());
+
+            // Count users per role: returns [roleId, count] pairs
+            Map<UUID, Integer> userCountMap = new HashMap<>();
+            for (Object[] row : userRepository.countUsersByRoleIds(firmId)) {
+                userCountMap.put((UUID) row[0], ((Number) row[1]).intValue());
+            }
+
+            // Map roleId -> list of user full names
+            Map<UUID, List<String>> userNamesMap = new HashMap<>();
+            for (Object[] row : userRepository.findUserNamesByRoleIds(firmId, roleIds)) {
+                UUID roleId = (UUID) row[0];
+                String name = (String) row[1];
+                userNamesMap.computeIfAbsent(roleId, k -> new ArrayList<>()).add(name);
+            }
+
             return firmRoles.stream()
-                    .map(this::toRoleResponse)
+                    .map(r -> toRoleResponse(r, userCountMap, userNamesMap))
                     .collect(Collectors.toList());
         }
 
         // Fallback for firms created before the role-cloning feature:
         // show system roles that are applicable to FIRM_USER
+        // System fallback roles have no firm association — userCount is always 0
         return roleRepository.findByFirmIsNullAndIsSystemTrue()
                 .stream()
                 .filter(r -> r.getApplicableTo() == UserType.FIRM_USER)
-                .map(this::toRoleResponse)
+                .map(r -> RoleResponse.builder()
+                        .id(r.getId())
+                        .name(r.getRoleName())
+                        .code(r.getRoleCode())
+                        .description(r.getDescription())
+                        .isSystem(r.getIsSystem())
+                        .isActive(r.isActive())
+                        .userCount(0)
+                        .assignedUserNames(List.of())
+                        .createdAt(r.getCreatedAt())
+                        .updatedAt(r.getUpdatedAt())
+                        .build())
                 .collect(Collectors.toList());
     }
 
@@ -229,7 +257,33 @@ public class FirmRoleService {
 
     // ─── Mappers ──────────────────────────────────────────────────────────
 
-    private RoleResponse toRoleResponse(Role role) {
+    // ═══════════════════════════════════════════════════════════════════════
+    // GET /api/v1/firm/roles/{roleId}/users
+    // List all users assigned to this role within the firm
+    // ═══════════════════════════════════════════════════════════════════════
+    public List<RoleUserResponse> getRoleUsers(UUID roleId) {
+        UUID firmId = getRequiredFirmId();
+        Role role = getValidatedFirmRole(roleId, firmId);
+
+        return userRepository.findByFirmIdAndRoleId(firmId, role.getId())
+                .stream()
+                .map(this::toUserResponse)
+                .collect(Collectors.toList());
+    }
+
+    private RoleUserResponse toUserResponse(User user) {
+        return RoleUserResponse.builder()
+                .id(user.getId())
+                .fullName(user.getFullName())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .mobileNo(user.getMobileNo())
+                .isActive(user.isActive())
+                .build();
+    }
+
+    private RoleResponse toRoleResponse(Role role, Map<UUID, Integer> userCountMap,
+                                         Map<UUID, List<String>> userNamesMap) {
         return RoleResponse.builder()
                 .id(role.getId())
                 .name(role.getRoleName())
@@ -237,6 +291,8 @@ public class FirmRoleService {
                 .description(role.getDescription())
                 .isSystem(role.getIsSystem())
                 .isActive(role.isActive())
+                .userCount(userCountMap.getOrDefault(role.getId(), 0))
+                .assignedUserNames(userNamesMap.getOrDefault(role.getId(), List.of()))
                 .createdAt(role.getCreatedAt())
                 .updatedAt(role.getUpdatedAt())
                 .build();

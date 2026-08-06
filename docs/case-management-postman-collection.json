@@ -1,0 +1,769 @@
+{
+  "info": {
+    "name": "Case Management Module",
+    "description": "Complete API collection for the Case Management module. Uses caseNumber (e.g. APX-CIV-2026-00001) instead of UUID as the primary case identifier in all paths.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "nepalcrm"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:6969",
+      "type": "string"
+    },
+    {
+      "key": "access_token_superAdmin",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "access_token_firmAdmin",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "caseNumber",
+      "value": "APX-CIV-2026-00001",
+      "type": "string"
+    },
+    {
+      "key": "partyId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "hearingId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Cases",
+      "description": "Create, list, get, update, delete cases. Manage stage transitions and timeline.",
+      "item": [
+        {
+          "name": "Create Civil Case",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.caseNumber) {",
+                  "    pm.collectionVariables.set('caseNumber', jsonData.data.caseNumber);",
+                  "    console.log('Case created: ' + jsonData.data.caseNumber);",
+                  "}",
+                  "if (jsonData.data && jsonData.data.parties && jsonData.data.parties.length > 0) {",
+                  "    pm.collectionVariables.set('partyId', jsonData.data.parties[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"data\": {\n        \"caseType\": \"CIVIL\",\n        \"title\": \"Land Dispute: Sharma vs. Patel\",\n        \"courtName\": \"Supreme Court\",\n        \"courtCaseNumber\": \"CIV-2026-1234\",\n        \"judgeName\": \"Hon'ble Justice Khan\",\n        \"filingDate\": \"2026-07-28\",\n        \"filingNumber\": \"FIL-2026-0456\",\n        \"assignedTo\": null,\n        \"description\": \"Property boundary dispute between two parties\",\n        \"parties\": [\n            {\n                \"partyType\": \"PLAINTIFF\",\n                \"fullName\": \"Ram Sharma\",\n                \"mobileNo\": \"9800000001\",\n                \"email\": \"ram.sharma@email.com\",\n                \"address\": \"Kathmandu, Nepal\",\n                \"ourClient\": true\n            },\n            {\n                \"partyType\": \"DEFENDANT\",\n                \"fullName\": \"Hari Patel\",\n                \"mobileNo\": \"9800000002\",\n                \"address\": \"Lalitpur, Nepal\",\n                \"ourClient\": false\n            }\n        ]\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases"]
+            },
+            "description": "Creates a new civil case with parties. Case number is auto-generated as FIRMCODE-CIV-YYYY-00001. Response includes party matches for dedup."
+          }
+        },
+        {
+          "name": "Create Criminal Case",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.caseNumber) {",
+                  "    pm.collectionVariables.set('caseNumber', jsonData.data.caseNumber);",
+                  "    console.log('Criminal case created: ' + jsonData.data.caseNumber);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"data\": {\n        \"caseType\": \"CRIMINAL\",\n        \"title\": \"Theft Case: State vs. Gurung\",\n        \"courtName\": \"District Court\",\n        \"judgeName\": \"Hon'ble Judge Thapa\",\n        \"filingDate\": \"2026-07-28\",\n        \"firNumber\": \"FIR-2026-0789\",\n        \"firDate\": \"2026-07-25\",\n        \"policeStation\": \"Hanuman Dhoka Police Station\",\n        \"investigationAuthority\": \"CID Kathmandu\",\n        \"arrestDate\": \"2026-07-26\",\n        \"description\": \"Alleged theft of jewelry from shop\",\n        \"parties\": [\n            {\n                \"partyType\": \"ACCUSED\",\n                \"fullName\": \"Binod Gurung\",\n                \"mobileNo\": \"9800000005\",\n                \"ourClient\": true\n            },\n            {\n                \"partyType\": \"VICTIM\",\n                \"fullName\": \"Sita Tamang\",\n                \"mobileNo\": \"9800000006\",\n                \"ourClient\": false\n            }\n        ]\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases"]
+            },
+            "description": "Creates a new criminal case with FIR details and parties. Initial stage is FIR_REGISTERED."
+          }
+        },
+        {
+          "name": "List Cases",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases?caseType=CIVIL&caseStage=FILED&status=ACTIVE&page=0&size=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases"],
+              "query": [
+                { "key": "caseType", "value": "CIVIL", "description": "Filter by CIVIL or CRIMINAL" },
+                { "key": "caseStage", "value": "FILED", "description": "Filter by current stage" },
+                { "key": "status", "value": "ACTIVE", "description": "Filter by ACTIVE, CLOSED, DORMANT" },
+                { "key": "assignedTo", "value": "", "description": "Filter by advocate UUID" },
+                { "key": "courtName", "value": "", "description": "Search by court name" },
+                { "key": "dateFrom", "value": "", "description": "Filing date from (YYYY-MM-DD)" },
+                { "key": "dateTo", "value": "", "description": "Filing date to (YYYY-MM-DD)" },
+                { "key": "search", "value": "", "description": "Search by title, caseNumber, or filingNumber" },
+                { "key": "page", "value": "0", "description": "Page number (0-based)" },
+                { "key": "size", "value": "20", "description": "Items per page" }
+              ]
+            },
+            "description": "Paginated list of cases with optional filters. All filters are optional."
+          }
+        },
+        {
+          "name": "Get Case Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/{{caseNumber}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "{{caseNumber}}"]
+            },
+            "description": "Get full case details including parties. Uses caseNumber as identifier."
+          }
+        },
+        {
+          "name": "Update Case",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"data\": {\n        \"title\": \"Land Dispute: Sharma vs. Patel (Updated)\",\n        \"description\": \"Updated case description with new evidence details\",\n        \"courtName\": \"Supreme Court, Kathmandu\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/{{caseNumber}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "{{caseNumber}}"]
+            },
+            "description": "Update case fields. Only provided fields are updated (partial update)."
+          }
+        },
+        {
+          "name": "Update Case Stage",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"data\": {\n        \"stage\": \"UNDER_SUMMONS\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/{{caseNumber}}/stage",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "{{caseNumber}}", "stage"]
+            },
+            "description": "Transition case to next stage. Validates allowed transitions per case type. Invalid transitions return 400 BusinessRuleException."
+          }
+        },
+        {
+          "name": "Get Case Timeline",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/{{caseNumber}}/timeline",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "{{caseNumber}}", "timeline"]
+            },
+            "description": "Full event history for the case — created, stage changes, hearings, parties added."
+          }
+        },
+        {
+          "name": "Delete Case",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/{{caseNumber}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "{{caseNumber}}"]
+            },
+            "description": "Delete a case. Throws 400 if the case has parties — remove parties first."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Parties",
+      "description": "Manage parties on a case — add, update, link to client, remove, and match against existing records.",
+      "item": [
+        {
+          "name": "Add Party to Case",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.id) {",
+                  "    pm.collectionVariables.set('partyId', jsonData.data.id);",
+                  "    console.log('Party added: ' + jsonData.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"data\": {\n        \"partyType\": \"WITNESS\",\n        \"fullName\": \"Krishna Dhakal\",\n        \"mobileNo\": \"9800000010\",\n        \"email\": \"krishna.dhakal@email.com\",\n        \"address\": \"Pokhara, Nepal\",\n        \"ourClient\": false,\n        \"notes\": \"Eye witness to the incident\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/{{caseNumber}}/parties",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "{{caseNumber}}", "parties"]
+            }
+          }
+        },
+        {
+          "name": "Update Party",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"data\": {\n        \"partyType\": \"WITNESS\",\n        \"fullName\": \"Krishna Dhakal (Updated)\",\n        \"mobileNo\": \"9800000010\",\n        \"email\": \"krishna.dhakal@newemail.com\",\n        \"ourClient\": true,\n        \"notes\": \"Updated contact information\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/{{caseNumber}}/parties/{{partyId}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "{{caseNumber}}", "parties", "{{partyId}}"]
+            },
+            "description": "Delete and re-add party with updated fields. Party ID changes after update."
+          }
+        },
+        {
+          "name": "Link Party to Client",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"data\": {\n        \"clientId\": \"CLIENT_UUID_HERE\",\n        \"ourClient\": true\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/{{caseNumber}}/parties/{{partyId}}/link",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "{{caseNumber}}", "parties", "{{partyId}}", "link"]
+            },
+            "description": "Link a party to an existing ClientProfile record. Set ourClient=true if the firm represents this party."
+          }
+        },
+        {
+          "name": "Remove Party from Case",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/{{caseNumber}}/parties/{{partyId}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "{{caseNumber}}", "parties", "{{partyId}}"]
+            },
+            "description": "Remove a party from the case."
+          }
+        },
+        {
+          "name": "Match Parties (Dedup Check)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"data\": {\n        \"fullName\": \"Ram Sharma\",\n        \"mobileNo\": \"9800000001\",\n        \"email\": \"ram.sharma@email.com\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/parties/match",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "parties", "match"]
+            },
+            "description": "Check if a party matches existing ClientProfile or CaseParty records. Returns confidence level: HIGH (name+phone/email), MEDIUM (exact name or partial+phone), LOW (partial name only)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Hearings",
+      "description": "Schedule, update, list, and cancel hearings (court dates / tarikh). Conflict detection for advocate schedules.",
+      "item": [
+        {
+          "name": "Schedule Hearing",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.id) {",
+                  "    pm.collectionVariables.set('hearingId', jsonData.data.id);",
+                  "    console.log('Hearing scheduled: ' + jsonData.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"data\": {\n        \"title\": \"First Hearing - Case Management Conference\",\n        \"date\": \"2026-08-15\",\n        \"time\": \"10:00:00\",\n        \"endTime\": \"11:30:00\",\n        \"courtRoom\": \"Court Room 3\",\n        \"judgeName\": \"Hon'ble Justice Khan\",\n        \"hearingType\": \"FIRST_HEARING\",\n        \"notes\": \"Initial case management conference to set hearing schedule\",\n        \"attendees\": \"Ram Sharma (Plaintiff), Hari Patel (Defendant)\",\n        \"advocateId\": null\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/{{caseNumber}}/hearings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "{{caseNumber}}", "hearings"]
+            },
+            "description": "Schedule a hearing with conflict detection. If advocateId is set and there's a time overlap, returns 409. Uses caseNumber as case identifier."
+          }
+        },
+        {
+          "name": "List Hearings for Case",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/{{caseNumber}}/hearings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "{{caseNumber}}", "hearings"]
+            },
+            "description": "List all hearings for a case, ordered by date descending."
+          }
+        },
+        {
+          "name": "Get Hearing Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/hearings/{{hearingId}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "hearings", "{{hearingId}}"]
+            },
+            "description": "Get details of a specific hearing by its UUID."
+          }
+        },
+        {
+          "name": "Mark Hearing as Held",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"data\": {\n        \"status\": \"HELD\",\n        \"outcome\": \"Case management conference completed. Next hearing scheduled for evidence presentation.\",\n        \"notes\": \"Plaintiff counsel present. Defendant counsel present. Court ordered document exchange within 2 weeks.\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/hearings/{{hearingId}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "hearings", "{{hearingId}}"]
+            },
+            "description": "Mark a hearing as HELD and record outcome. Creates a HEARING_HELD timeline event on the case."
+          }
+        },
+        {
+          "name": "Adjourn Hearing",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"data\": {\n        \"status\": \"ADJOURNED\",\n        \"outcome\": \"Adjourned due to absence of plaintiff counsel. Next date to be fixed.\",\n        \"date\": \"2026-09-01\",\n        \"time\": \"10:00:00\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/hearings/{{hearingId}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "hearings", "{{hearingId}}"]
+            },
+            "description": "Mark a hearing as ADJOURNED with new date. Creates a HEARING_ADJOURNED timeline event."
+          }
+        },
+        {
+          "name": "Cancel Hearing",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/hearings/{{hearingId}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "hearings", "{{hearingId}}"]
+            },
+            "description": "Cancel a hearing — sets status to CANCELED."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Calendar",
+      "description": "View hearings on a calendar — date range, today's hearings, upcoming hearings.",
+      "item": [
+        {
+          "name": "Get Calendar (Date Range)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/calendar?from=2026-08-01&to=2026-08-31",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "calendar"],
+              "query": [
+                { "key": "from", "value": "2026-08-01", "description": "Start date (YYYY-MM-DD)" },
+                { "key": "to", "value": "2026-08-31", "description": "End date (YYYY-MM-DD)" },
+                { "key": "advocateId", "value": "", "description": "Filter by advocate UUID (optional)" }
+              ]
+            },
+            "description": "Get hearings in a date range. Optionally filter by advocate. Returns enriched data with caseNumber and caseTitle."
+          }
+        },
+        {
+          "name": "Today's Hearings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/calendar/today?advocateId=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "calendar", "today"],
+              "query": [
+                { "key": "advocateId", "value": "", "description": "Filter by advocate UUID (optional)" }
+              ]
+            },
+            "description": "All hearings scheduled for today. Optionally filter by advocate."
+          }
+        },
+        {
+          "name": "Upcoming Hearings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/calendar/upcoming?days=7",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "calendar", "upcoming"],
+              "query": [
+                { "key": "days", "value": "7", "description": "Number of days ahead (default 7)" },
+                { "key": "advocateId", "value": "", "description": "Filter by advocate UUID (optional)" }
+              ]
+            },
+            "description": "Upcoming hearings in the next N days. Default 7 days."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Error Examples",
+      "description": "Examples of error scenarios to test validation",
+      "item": [
+        {
+          "name": "Invalid Stage Transition (400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"data\": {\n        \"stage\": \"JUDGMENT_DELIVERED\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/{{caseNumber}}/stage",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "{{caseNumber}}", "stage"]
+            },
+            "description": "Trying to go from FILED directly to JUDGMENT_DELIVERED. Should return 400 BusinessRuleException: 'Invalid stage transition'."
+          }
+        },
+        {
+          "name": "Missing Title on Create (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"data\": {\n        \"caseType\": \"CIVIL\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases"]
+            },
+            "description": "Missing required 'title' field. Should return 400 validation error."
+          }
+        },
+        {
+          "name": "Delete Case With Parties (400)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/{{caseNumber}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "{{caseNumber}}"]
+            },
+            "description": "Trying to delete a case that has parties. Should return 400 BusinessRuleException: 'Cannot delete case with existing parties. Remove parties first.'"
+          }
+        },
+        {
+          "name": "Case Not Found (404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token_firmAdmin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/firm/cases/NONEXISTENT-FOO-2026-99999",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "firm", "cases", "NONEXISTENT-FOO-2026-99999"]
+            },
+            "description": "Trying to get a case that doesn't exist. Should return 404 ResourceNotFoundException."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -76,6 +76,12 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query("SELECT u FROM User u WHERE u.role.roleCode = 'FIRM_ADMIN' AND u.firm IS NOT NULL")
     List<User> findAllFirmAdmins();
 
+    @Query("SELECT u.role.id as roleId, COUNT(u) as cnt FROM User u WHERE u.firm.id = :firmId GROUP BY u.role.id")
+    List<Object[]> countUsersByRoleIds(@Param("firmId") UUID firmId);
+
+    @Query("SELECT u.role.id as roleId, u.fullName as fullName FROM User u WHERE u.firm.id = :firmId AND u.role.id IN :roleIds")
+    List<Object[]> findUserNamesByRoleIds(@Param("firmId") UUID firmId, @Param("roleIds") List<UUID> roleIds);
+
     // Or scoped to one firm:
     @Query("SELECT u FROM User u WHERE u.role.roleCode = 'FIRM_ADMIN' AND u.firm.id = :firmId")
     List<User> findFirmAdminsByFirmId(@Param("firmId") UUID firmId);

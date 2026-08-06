@@ -7,6 +7,7 @@ import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
 import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
 import com.lawfirm.erp.dto.firm.response.FirmRolePermissionsResponse;
+import com.lawfirm.erp.dto.firm.response.RoleUserResponse;
 import com.lawfirm.erp.firm.service.FirmRoleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -57,6 +58,19 @@ public class FirmRoleController {
         return responseHandler.ok(
                 firmRoleService.getRolePermissions(roleId),
                 "Role permissions fetched successfully"
+        );
+    }
+
+    @GetMapping("/{roleId}/users")
+    @Operation(
+            summary = "Get users assigned to this role",
+            description = "Lists all users within the firm who hold this role."
+    )
+    public ResponseEntity<ApiResponse<List<RoleUserResponse>>> getRoleUsers(
+            @PathVariable UUID roleId) {
+        return responseHandler.ok(
+                firmRoleService.getRoleUsers(roleId),
+                "Role users fetched successfully"
         );
     }
 
