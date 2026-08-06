@@ -17,7 +17,7 @@ public interface CasePartyRepository extends JpaRepository<CaseParty, UUID> {
     List<CaseParty> findByCaseIdAndFirmId(UUID caseId, UUID firmId);
 
     @Query("SELECT cp FROM CaseParty cp WHERE cp.firmId = :firmId " +
-           "AND (:fullName IS NULL OR LOWER(cp.fullName) LIKE LOWER(CONCAT('%', :fullName, '%'))) " +
+           "AND (:fullName IS NULL OR LOWER(cp.fullName) LIKE LOWER(CONCAT('%', CAST(:fullName AS string), '%'))) " +
            "AND (:mobileNo IS NULL OR cp.mobileNo = :mobileNo) " +
            "AND (:email IS NULL OR cp.email = :email)")
     List<CaseParty> findMatches(@Param("firmId") UUID firmId,

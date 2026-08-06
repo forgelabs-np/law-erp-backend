@@ -3,7 +3,9 @@ package com.lawfirm.erp.superadmin.controller;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.enums.Message;
+import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.exception.ResponseHandler;
+import com.lawfirm.erp.dto.admin.response.AdminUserResponse;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
 import com.lawfirm.erp.dto.auth.request.RegisterSuperAdminRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
@@ -14,7 +16,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/super-admin")
@@ -44,6 +49,24 @@ public class SuperAdminController {
                 superAdminService.loginSuperAdmin(request.getData()),
                 Message.SUCCESS,
                 "Authenticated"
+        );
+    }
+
+    @GetMapping("/users")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(
+            summary = "Get all users with their roles",
+            description = "User-first view for the super admin: returns every user with its role " +
+                    "(name/code) and firm (code/name). Optional filters: userType, " +
+                    "search (partial username match, case-insensitive), firmCode."
+    )
+    public ResponseEntity<ApiResponse<List<AdminUserResponse>>> getAllUsersWithRoles(
+            @RequestParam(required = false) UserType userType,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String firmCode) {
+        return responseHandler.ok(
+                superAdminService.getAllUsersWithRoles(userType, search, firmCode),
+                "Users with roles fetched successfully"
         );
     }
 }

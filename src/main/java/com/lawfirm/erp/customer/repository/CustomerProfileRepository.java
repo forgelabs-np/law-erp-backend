@@ -15,7 +15,7 @@ public interface CustomerProfileRepository extends JpaRepository<CustomerProfile
     Optional<CustomerProfile> findByNationalId(String nationalId);
 
     @Query("SELECT c FROM CustomerProfile c JOIN c.user u WHERE c.firm.id = :firmId " +
-           "AND (:fullName IS NULL OR LOWER(u.fullName) LIKE LOWER(CONCAT('%', :fullName, '%'))) " +
+           "AND (:fullName IS NULL OR LOWER(u.fullName) LIKE LOWER(CONCAT('%', CAST(:fullName AS string), '%'))) " +
            "AND (:mobileNo IS NULL OR u.mobileNo = :mobileNo) " +
            "AND (:email IS NULL OR u.email = :email)")
     List<CustomerProfile> findMatches(@Param("firmId") UUID firmId,
