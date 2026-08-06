@@ -76,6 +76,30 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query("SELECT u FROM User u WHERE u.role.roleCode = 'FIRM_ADMIN' AND u.firm IS NOT NULL")
     List<User> findAllFirmAdmins();
 
+    /**
+     * All users with their role and firm eagerly loaded (join fetch — no N+1),
+     * optionally filtered for the super-admin "users with roles" view.
+     * Every filter is nullable — a null filter is ignored.
+     * NOTE: params are CAST to string so Hibernate binds them as varchar even
+     * when null — without the CAST, null params are sent as bytea by pgjdbc
+     * and "lower(bytea)" blows up on Postgres. Only params inside LOWER/CONCAT need the CAST —
+     * the userType enum and plain-equality params bind fine without it (do NOT re-add CAST there,
+     * it breaks enum binding).
+     */
+    @Query("""
+            SELECT u FROM User u
+            LEFT JOIN FETCH u.role
+            LEFT JOIN FETCH u.firm
+            WHERE (:userType IS NULL OR u.userType = :userType)
+              AND (:search IS NULL OR LOWER(u.username) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+                   OR LOWER(u.fullName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))
+              AND (:firmCode IS NULL OR u.firm.lawFirmCode = CAST(:firmCode AS string))
+            ORDER BY u.createdAt DESC
+            """)
+    List<User> findAllWithRoleAndFirm(@Param("userType") UserType userType,
+                                      @Param("search") String search,
+                                      @Param("firmCode") String firmCode);
+
     @Query("SELECT u.role.id as roleId, COUNT(u) as cnt FROM User u WHERE u.firm.id = :firmId GROUP BY u.role.id")
     List<Object[]> countUsersByRoleIds(@Param("firmId") UUID firmId);
 

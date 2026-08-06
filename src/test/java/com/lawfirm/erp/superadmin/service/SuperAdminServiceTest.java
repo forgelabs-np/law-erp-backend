@@ -6,6 +6,7 @@ import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.AuthStatus;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.dto.admin.response.AdminUserResponse;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
 import com.lawfirm.erp.entity.User;
@@ -31,6 +32,7 @@ import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -283,6 +285,124 @@ class SuperAdminServiceTest {
 
             assertThrows(BadCredentialsException.class,
                     () -> login(USERNAME, "wrong-pass", null));
+        }
+    }
+
+    @Nested
+    @DisplayName("User → Role view (getAllUsersWithRoles)")
+    class UserRoleView {
+
+        @Test
+        @DisplayName("Returns every user with its role and firm mapped")
+        void returnsUsersWithRoles() {
+            Role firmAdminRole = new Role();
+            firmAdminRole.setId(UUID.randomUUID());
+            firmAdminRole.setRoleName("FIRM_ADMIN");
+            firmAdminRole.setRoleCode("FIRM_ADMIN");
+
+            Firm firm = new Firm();
+            firm.setId(UUID.randomUUID());
+            firm.setLawFirmCode("APX");
+            firm.setName("Apex Law");
+
+            User firmAdmin = User.builder()
+                    .username("ram.sharma")
+                    .fullName("Ram Sharma")
+                    .email("ram@apex.com")
+                    .mobileNo("9841234567")
+                    .userType(UserType.FIRM_USER)
+                    .firm(firm)
+                    .role(firmAdminRole)
+                    .build();
+            firmAdmin.setId(UUID.randomUUID());
+            firmAdmin.setActive(true);
+
+            when(userRepository.findAllWithRoleAndFirm(null, null, null))
+                    .thenReturn(List.of(superAdmin, firmAdmin));
+
+            List<AdminUserResponse> result = superAdminService.getAllUsersWithRoles(null, null, null);
+
+            assertEquals(2, result.size());
+
+            // Firm admin user → its firm-scoped role + firm
+            AdminUserResponse ram = result.stream()
+                    .filter(r -> "ram.sharma".equals(r.getUsername()))
+                    .findFirst().orElseThrow();
+            assertEquals("Ram Sharma", ram.getFullName());
+            assertEquals(UserType.FIRM_USER, ram.getUserType());
+            assertTrue(ram.isActive());
+            assertEquals(firmAdminRole.getId(), ram.getRoleId());
+            assertEquals("FIRM_ADMIN", ram.getRoleCode());
+            assertEquals("APX", ram.getFirmCode());
+            assertEquals("Apex Law", ram.getFirmName());
+
+            // Super admin user → SUPER_ADMIN role + SYSTEM firm
+            AdminUserResponse sa = result.stream()
+                    .filter(r -> USERNAME.equals(r.getUsername()))
+                    .findFirst().orElseThrow();
+            assertEquals("SUPER_ADMIN", sa.getRoleCode());
+            assertEquals("SYSTEM", sa.getFirmCode());
+
+            verify(userRepository).findAllWithRoleAndFirm(null, null, null);
+        }
+
+        @Test
+        @DisplayName("Handles users without role or firm gracefully")
+        void handlesNullRoleAndFirm() {
+            User orphan = User.builder()
+                    .username("ghost.user")
+                    .fullName("Ghost User")
+                    .userType(UserType.CLIENT)
+                    .build();
+            orphan.setId(UUID.randomUUID());
+
+            when(userRepository.findAllWithRoleAndFirm(null, null, null))
+                    .thenReturn(List.of(orphan));
+
+            List<AdminUserResponse> result = superAdminService.getAllUsersWithRoles(null, null, null);
+
+            assertEquals(1, result.size());
+            assertNull(result.get(0).getRoleId());
+            assertNull(result.get(0).getRoleName());
+            assertNull(result.get(0).getFirmId());
+            assertNull(result.get(0).getFirmCode());
+        }
+
+        @Test
+        @DisplayName("Passes userType/search/firmCode filters to the repository (trimmed)")
+        void passesFiltersToRepository() {
+            when(userRepository.findAllWithRoleAndFirm(UserType.FIRM_USER, "ram", "APX"))
+                    .thenReturn(List.of(superAdmin));
+
+            List<AdminUserResponse> result =
+                    superAdminService.getAllUsersWithRoles(UserType.FIRM_USER, "  ram  ", " APX ");
+
+            assertEquals(1, result.size());
+            verify(userRepository).findAllWithRoleAndFirm(UserType.FIRM_USER, "ram", "APX");
+        }
+
+        @Test
+        @DisplayName("Uppercases firmCode before passing it to the repository")
+        void uppercasesFirmCode() {
+            when(userRepository.findAllWithRoleAndFirm(UserType.CLIENT, "ram", "APX"))
+                    .thenReturn(List.of(superAdmin));
+
+            List<AdminUserResponse> result =
+                    superAdminService.getAllUsersWithRoles(UserType.CLIENT, "ram", " apx ");
+
+            assertEquals(1, result.size());
+            verify(userRepository).findAllWithRoleAndFirm(UserType.CLIENT, "ram", "APX");
+        }
+
+        @Test
+        @DisplayName("Blank search/firmCode are normalized to null filters")
+        void blankFiltersBecomeNull() {
+            when(userRepository.findAllWithRoleAndFirm(null, null, null))
+                    .thenReturn(List.of(superAdmin));
+
+            superAdminService.getAllUsersWithRoles(null, "   ", "");
+
+            verify(userRepository).findAllWithRoleAndFirm(null, null, null);
         }
     }
 

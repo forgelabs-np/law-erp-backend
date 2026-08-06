@@ -6,6 +6,7 @@ import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.AuthStatus;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.dto.admin.response.AdminUserResponse;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
 import com.lawfirm.erp.dto.auth.request.RegisterSuperAdminRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
@@ -16,6 +17,9 @@ import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
 import com.lawfirm.erp.auth.security.JwtUtil;
+
+import java.util.List;
+import java.util.stream.Collectors;
 import com.lawfirm.erp.auth.security.TotpUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -181,6 +185,54 @@ public class SuperAdminService {
             log.error("Super admin login failed - authentication error: {}", e.getMessage());
             throw new BadCredentialsException("Invalid username or password");
         }
+    }
+
+    /**
+     * User-first view for the super admin: every user in the system with its
+     * role and firm, so the UI can list users and show who holds which role
+     * without the cluttered all-roles list.
+     * All filters are optional — a null/blank filter is ignored.
+     */
+    public List<AdminUserResponse> getAllUsersWithRoles(UserType userType, String search, String firmCode) {
+        return userRepository.findAllWithRoleAndFirm(userType, normalize(search), normalizeFirmCode(firmCode)).stream()
+                .map(this::toAdminUserResponse)
+                .collect(Collectors.toList());
+    }
+
+    private String normalize(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    // Firm codes are stored uppercase — force it so "apx" still matches "APX".
+    private String normalizeFirmCode(String value) {
+        String normalized = normalize(value);
+        return normalized == null ? null : normalized.toUpperCase();
+    }
+
+    private AdminUserResponse toAdminUserResponse(User user) {
+        Role role = user.getRole();
+        Firm firm = user.getFirm();
+        return AdminUserResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .mobileNo(user.getMobileNo())
+                .userType(user.getUserType())
+                .isActive(user.isActive())
+                .isBlocked(user.getIsBlocked())
+                .lastLoginAt(user.getLastLoginAt())
+                .createdAt(user.getCreatedAt())
+                .roleId(role != null ? role.getId() : null)
+                .roleName(role != null ? role.getRoleName() : null)
+                .roleCode(role != null ? role.getRoleCode() : null)
+                .firmId(firm != null ? firm.getId() : null)
+                .firmCode(firm != null ? firm.getLawFirmCode() : null)
+                .firmName(firm != null ? firm.getName() : null)
+                .build();
     }
 
     // ═══════════════════════════════════════════════════════════════════════

@@ -29,17 +29,20 @@ public interface CaseRepository extends JpaRepository<Case, UUID> {
 
     Page<Case> findByFirmIdAndAssignedTo(UUID firmId, UUID assignedTo, Pageable pageable);
 
+    // NOTE: courtName/search are CAST to string so Hibernate binds them as varchar even when
+    // null — without the CAST, null params inside LOWER(CONCAT(...)) are sent as bytea by pgjdbc
+    // and Postgres fails with 'function lower(bytea) does not exist'.
     @Query("SELECT c FROM Case c WHERE c.firmId = :firmId " +
            "AND (:caseType IS NULL OR c.caseType = :caseType) " +
            "AND (:caseStage IS NULL OR c.caseStage = :caseStage) " +
            "AND (:status IS NULL OR c.status = :status) " +
            "AND (:assignedTo IS NULL OR c.assignedTo = :assignedTo) " +
-           "AND (:courtName IS NULL OR LOWER(c.courtName) LIKE LOWER(CONCAT('%', :courtName, '%'))) " +
+           "AND (:courtName IS NULL OR LOWER(c.courtName) LIKE LOWER(CONCAT('%', CAST(:courtName AS string), '%'))) " +
            "AND (:dateFrom IS NULL OR c.filingDate >= :dateFrom) " +
            "AND (:dateTo IS NULL OR c.filingDate <= :dateTo) " +
-           "AND (:search IS NULL OR LOWER(c.title) LIKE LOWER(CONCAT('%', :search, '%')) " +
-           "     OR LOWER(c.caseNumber) LIKE LOWER(CONCAT('%', :search, '%'))" +
-           "     OR LOWER(c.filingNumber) LIKE LOWER(CONCAT('%', :search, '%')))")
+           "AND (:search IS NULL OR LOWER(c.title) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) " +
+           "     OR LOWER(c.caseNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))" +
+           "     OR LOWER(c.filingNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))")
     Page<Case> findByFilters(@Param("firmId") UUID firmId,
                              @Param("caseType") CaseType caseType,
                              @Param("caseStage") CaseStage caseStage,
