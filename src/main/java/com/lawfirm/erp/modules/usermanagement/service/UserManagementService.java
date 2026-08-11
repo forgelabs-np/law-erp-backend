@@ -328,6 +328,11 @@ public class UserManagementService {
         if (!newRole.isActive()) {
             throw new BusinessRuleException("Cannot assign an inactive role");
         }
+        // FIRM_ADMIN can only be created by the SUPER_ADMIN — a firm admin
+        // must never be able to promote a user to FIRM_ADMIN via bulk role change
+        if ("FIRM_ADMIN".equals(newRole.getRoleCode())) {
+            throw new ForbiddenException("Cannot assign FIRM_ADMIN role. Only Super Admin can create Firm Admins.");
+        }
 
         List<String> failed = new ArrayList<>();
         int succeeded = 0;

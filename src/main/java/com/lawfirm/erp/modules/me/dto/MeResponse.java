@@ -1,5 +1,6 @@
 package com.lawfirm.erp.modules.me.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
 import lombok.Data;
 
@@ -78,5 +79,11 @@ public class MeResponse {
         private String path;         // "/cases" — frontend route
         private boolean enabled;     // is module enabled for this firm?
         private List<String> actions;// ["VIEW","CREATE","EDIT"] — what this user can do
+        // ── Sub-modules ─────────────────────────────────────────────────────
+        // Nested under this module (Module > SubModule). Only present when this
+        // module actually has children — leaf modules omit the field entirely.
+        // Frontend renders children as expandable items.
+        @JsonInclude(JsonInclude.Include.NON_EMPTY)
+        private List<ModuleAccess> subModules;
     }
 }

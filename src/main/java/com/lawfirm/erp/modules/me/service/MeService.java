@@ -9,6 +9,7 @@ import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.entity.FirmModule;
 import com.lawfirm.erp.firm.repository.FirmModuleRepository;
 import com.lawfirm.erp.modules.me.dto.MeResponse;
+import com.lawfirm.erp.rbac.entity.Module;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.repository.ModuleRepository;
@@ -75,7 +76,7 @@ public class MeService {
 
     private List<MeResponse.ModuleAccess> buildModuleAccess(User user, List<Permission> permissions) {
 
-        // Group permissions by moduleCode
+        // Group permissions by moduleCode (first segment of MODULE:ACTION)
         Map<String, List<String>> permsByModule = new LinkedHashMap<>();
         for (Permission p : permissions) {
             if (p.getCode() == null || !p.getCode().contains(":")) continue;
@@ -83,49 +84,89 @@ public class MeService {
             permsByModule.computeIfAbsent(parts[0], k -> new ArrayList<>()).add(parts[1]);
         }
 
-        //   FIX: Use isActive() not getActive()
-        // For SUPER_ADMIN — all modules, always enabled
-        if (user.isSuperAdmin()) {
-            return moduleRepository.findAll().stream()
-                    .filter(m -> m.isActive())  //   Use isActive()
-                    .map(m -> MeResponse.ModuleAccess.builder()
-                            .moduleCode(m.getCode())
-                            .moduleName(m.getName())
-                            .icon(m.getIcon())
-                            .path(m.getPath())
-                            .enabled(true)
-                            .actions(permsByModule.getOrDefault(m.getCode(), List.of()))
-                            .build())
-                    .collect(Collectors.toList());
+        boolean superAdmin = user.isSuperAdmin();
+
+        // FIRM_USER / CLIENT without a firm context have nothing to show
+        if (!superAdmin && user.getFirm() == null) return List.of();
+
+        // All modules (parent join-fetched to build the tree without N+1)
+        List<Module> allModules = moduleRepository.findAllWithParentOrderByDisplayOrder();
+
+        // Which module codes may this user see?
+        //   SUPER_ADMIN -> every active module
+        //   FIRM_USER/CLIENT -> active modules the user has at least one permission for
+        Set<String> accessibleCodes = new LinkedHashSet<>();
+        for (Module m : allModules) {
+            if (!m.isActive()) continue;
+            if (superAdmin || permsByModule.containsKey(m.getCode())) {
+                accessibleCodes.add(m.getCode());
+            }
         }
 
-        // For FIRM_USER and CLIENT — check which modules are enabled for the firm
-        if (user.getFirm() == null) return List.of();
+        // Promote parents of accessible sub-modules so sub-modules can nest
+        // under their module even when the parent has no direct permission.
+        boolean promoted;
+        do {
+            promoted = false;
+            for (Module m : allModules) {
+                if (!accessibleCodes.contains(m.getCode())) continue;
+                Module parent = m.getParent();
+                if (parent != null && parent.isActive() && !accessibleCodes.contains(parent.getCode())) {
+                    accessibleCodes.add(parent.getCode());
+                    promoted = true;
+                }
+            }
+        } while (promoted);
 
-        //   FIX: Get enabled modules for this firm - use correct method
-        List<FirmModule> firmModules = firmModuleRepository.findByFirmIdWithModule(user.getFirm().getId());
+        // Enabled module codes for this firm (SUPER_ADMIN: everything enabled)
+        Set<String> enabledModuleCodes = new HashSet<>();
+        if (!superAdmin && user.getFirm() != null) {
+            enabledModuleCodes = firmModuleRepository.findByFirmIdWithModule(user.getFirm().getId()).stream()
+                    .filter(fm -> Boolean.TRUE.equals(fm.getIsEnabled()))
+                    .filter(fm -> fm.getExpiresAt() == null ||
+                            fm.getExpiresAt().isAfter(LocalDateTime.now()))
+                    .map(fm -> fm.getModule().getCode())
+                    .collect(Collectors.toSet());
+        }
 
-        //   FIX: Check isEnabled and expiresAt
-        Set<String> enabledModuleCodes = firmModules.stream()
-                .filter(fm -> Boolean.TRUE.equals(fm.getIsEnabled()))  
-                .filter(fm -> fm.getExpiresAt() == null ||
-                        fm.getExpiresAt().isAfter(LocalDateTime.now()))  
-                .map(fm -> fm.getModule().getCode())  //   getModule()
-                .collect(Collectors.toSet());
+        // Build a ModuleAccess for every accessible module (code -> access)
+        Map<String, MeResponse.ModuleAccess> accessByCode = new LinkedHashMap<>();
+        for (Module m : allModules) {
+            if (!accessibleCodes.contains(m.getCode())) continue;
+            accessByCode.put(m.getCode(), MeResponse.ModuleAccess.builder()
+                    .moduleCode(m.getCode())
+                    .moduleName(m.getName())
+                    .icon(m.getIcon())
+                    .path(m.getPath())
+                    .enabled(superAdmin || enabledModuleCodes.contains(m.getCode()))
+                    .actions(permsByModule.getOrDefault(m.getCode(), List.of()))
+                    .subModules(new ArrayList<>())
+                    .build());
+        }
 
-        // Build module access — only modules the user has at least one permission for
-        return moduleRepository.findAll().stream()
-                .filter(m -> m.isActive())  //   Use isActive()
-                .filter(m -> permsByModule.containsKey(m.getCode()))
-                .map(m -> MeResponse.ModuleAccess.builder()
-                        .moduleCode(m.getCode())
-                        .moduleName(m.getName())
-                        .icon(m.getIcon())
-                        .path(m.getPath())
-                        .enabled(enabledModuleCodes.contains(m.getCode()))
-                        .actions(permsByModule.getOrDefault(m.getCode(), List.of()))
-                        .build())
-                .collect(Collectors.toList());
+        // Nest sub-modules under their parent module (Module > SubModule)
+        List<MeResponse.ModuleAccess> roots = new ArrayList<>();
+        for (Module m : allModules) {
+            MeResponse.ModuleAccess access = accessByCode.get(m.getCode());
+            if (access == null) continue;
+
+            Module parent = m.getParent();
+            MeResponse.ModuleAccess parentAccess =
+                    parent != null ? accessByCode.get(parent.getCode()) : null;
+
+            if (parentAccess != null) {
+                // Sub-modules inherit the parent's enabled state (firm modules
+                // are tracked at the top-level module, not per sub-module)
+                if (parentAccess.isEnabled()) {
+                    access.setEnabled(true);
+                }
+                parentAccess.getSubModules().add(access);
+            } else {
+                roots.add(access);
+            }
+        }
+
+        return roots;
     }
 
     private String resolveBrandPrimary(User user) {
