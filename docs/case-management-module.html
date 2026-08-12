@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Case Management Module — Design &amp; API Guide</title>
+<style>
+  :root{
+    --ink:#1a2332; --muted:#5b6b7f; --accent:#0b6bcb; --accent2:#7c3aed;
+    --line:#d8e0ea; --bg:#ffffff; --codebg:#f4f6fa; --ok:#0e9f6e; --warn:#b45309; --bad:#c81e1e;
+  }
+  *{box-sizing:border-box}
+  body{font-family:"Segoe UI",Arial,sans-serif;color:var(--ink);font-size:11px;line-height:1.5;margin:0}
+  .cover{height:95vh;display:flex;flex-direction:column;justify-content:center;page-break-after:always;border-bottom:6px solid var(--accent)}
+  .cover .kicker{color:var(--accent);font-weight:700;letter-spacing:.2em;text-transform:uppercase;font-size:13px}
+  .cover h1{font-size:34px;line-height:1.15;margin:10px 0 6px}
+  .cover h2{font-size:17px;color:var(--muted);font-weight:400;margin:0 0 26px}
+  .cover .meta{color:var(--muted);font-size:12px;line-height:1.7}
+  h1{font-size:22px;border-bottom:2px solid var(--accent);padding-bottom:6px;margin:34px 0 12px}
+  h2{font-size:15px;margin:26px 0 8px;color:#0f3a63}
+  h3{font-size:12.5px;margin:18px 0 6px;color:#12406e}
+  p{margin:6px 0}
+  ul,ol{margin:6px 0;padding-left:22px}
+  li{margin:3px 0}
+  table{border-collapse:collapse;width:100%;margin:10px 0;font-size:10.5px}
+  th{background:#eef2f8;text-align:left;padding:6px 8px;border:1px solid var(--line);font-size:10.5px}
+  td{padding:6px 8px;border:1px solid var(--line);vertical-align:top}
+  code{font-family:Consolas,"Courier New",monospace;font-size:10px;background:var(--codebg);padding:1px 4px;border-radius:3px}
+  pre{background:var(--codebg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow:auto;font-size:10px;line-height:1.45;page-break-inside:avoid}
+  pre code{background:none;padding:0}
+  .endpoint{background:#0f3a63;color:#fff;font-family:Consolas,monospace;font-size:10.5px;padding:5px 10px;border-radius:4px;margin:14px 0 4px;page-break-inside:avoid}
+  .method{display:inline-block;font-weight:700;padding:1px 8px;border-radius:3px;margin-right:8px;color:#fff}
+  .GET{background:var(--ok)} .POST{background:var(--accent)} .PUT{background:var(--accent2)} .DELETE{background:var(--bad)}
+  .note{background:#fff8e6;border-left:4px solid var(--warn);padding:8px 12px;margin:10px 0;border-radius:0 4px 4px 0}
+  .okbox{background:#eafaf2;border-left:4px solid var(--ok);padding:8px 12px;margin:10px 0;border-radius:0 4px 4px 0}
+  .grid{display:flex;gap:18px} .col{flex:1}
+  .tag{display:inline-block;background:#eef2f8;border:1px solid var(--line);border-radius:10px;padding:1px 8px;font-size:9.5px;color:var(--muted)}
+  .footer{margin-top:30px;color:var(--muted);font-size:10px;border-top:1px solid var(--line);padding-top:8px}
+  @page{size:A4;margin:16mm 14mm}
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <div class="kicker">Law ERP · Freebuff Desktop</div>
+  <h1>Case Management Module</h1>
+  <h2>Matter → Court Case → Court Event — design, business logic, API reference &amp; frontend guide</h2>
+  <div class="meta">
+    <p><b>Module:</b> <code>com.lawfirm.erp.modules.casemanagement</code></p>
+    <p><b>Base path:</b> <code>/api/v1/firm</code> &nbsp;·&nbsp; <b>Auth:</b> Bearer JWT (firm-scoped, roles FIRM_ADMIN / ADVOCATE / PARALEGAL)</p>
+    <p><b>Audience:</b> backend developers, frontend developers, product owners</p>
+    <p><b>Version:</b> v1 (Matter/CourtCase/CourtEvent redesign)</p>
+  </div>
+</div>
+
+<!-- ============ 1. OVERVIEW ============ -->
+<h1>1 · Overview &amp; Architecture</h1>
+
+<p>The module models a law-firm dispute the way it really moves through the courts. A dispute is a
+<b>Matter</b>; every court instance it is registered in is a <b>CourtCase</b>; every diary date
+(Tarik) or hearing (Peshi) is a <b>CourtEvent</b>. The three layers form a chain that can be
+traced end-to-end: District → High → Supreme, remands back down, writs, revisions, reviews.</p>
+
+<div class="grid">
+  <div class="col">
+    <h3>Entities</h3>
+    <table>
+      <tr><th>Entity</th><th>Meaning</th></tr>
+      <tr><td><code>Matter</code></td><td>The dispute. One record, forever. Owns the CourtCase chain.</td></tr>
+      <tr><td><code>CourtCase</code></td><td>One row per court instance (per level/registration). Linked by <code>parentCourtCaseId</code>.</td></tr>
+      <tr><td><code>CourtEvent</code></td><td>One row per Tarik/Peshi. Sequenced per CourtCase; chained by <code>nextEventId</code>.</td></tr>
+      <tr><td><code>MatterParty</code></td><td>Party identity at Matter level (dedup-able).</td></tr>
+      <tr><td><code>CourtCaseRole</code></td><td>Party's role on a specific CourtCase (roles flip on appeal).</td></tr>
+      <tr><td><code>MatterTimelineEvent</code></td><td>Immutable event log entry, tagged with matter + optional court case.</td></tr>
+      <tr><td><code>AppealDeadlineRule</code></td><td>Statutory appeal window per level/type/state-party.</td></tr>
+    </table>
+  </div>
+  <div class="col">
+    <h3>Cross-cutting conventions</h3>
+    <ul>
+      <li><b>Multi-tenancy:</b> every row carries <code>firmId</code>; firm context comes from the JWT / subdomain (<code>FirmContextHolder</code>).</li>
+      <li><b>Audit:</b> every mutation writes an audit log (<code>AuditService</code>) and a timeline event.</li>
+      <li><b>Envelope:</b> all responses wrap in <code>ApiResponse</code>, all request bodies in <code>ApiRequest</code>.</li>
+      <li><b>Ids:</b> UUIDs; human references are generated (<code>matterNumber</code>, <code>ourCourtCaseRef</code>).</li>
+      <li><b>Soft state:</b> entities extend <code>ActiveAuditableEntity</code> (is_active, createdAt/updatedAt).</li>
+    </ul>
+  </div>
+</div>
+
+<div class="note"><b>Key idea — one chain per dispute.</b> A dispute that goes District → High → Supreme
+is <i>one Matter</i> with <i>three CourtCase rows</i> (ORIGINAL, APPEAL, FURTHER_APPEAL). The Matter
+always points at its current leaf via <code>currentCourtCaseId</code> — the row the UI should open by default.</div>
+
+<!-- ============ 2. BUSINESS LOGIC ============ -->
+<h1>2 · Business Logic — how everything processes</h1>
+
+<h2>2.1 Create a Matter</h2>
+<ol>
+  <li>Server generates <code>matterNumber</code> (<code>{firmCode}-MAT-{year}-{n}</code>, e.g. <code>APX-MAT-2026-00001</code>).</li>
+  <li>A <code>Matter</code> row is created (status <code>ACTIVE</code>).</li>
+  <li>An <b>ORIGINAL</b> <code>CourtCase</code> is created at the originating court level with its own ref
+      (<code>{matterNumber}-DC1</code> etc.) and the initial stage for that level/type.</li>
+  <li>Parties are created as <code>MatterParty</code> and given a <code>CourtCaseRole</code> on the original case.</li>
+  <li>The Matter's <code>currentCourtCaseId</code> is set to the new case; timeline + audit entries are written.</li>
+</ol>
+<div class="okbox"><b>Ref format:</b> internal court-case ref is always populated — the official
+<code>courtCaseNumber</code> may be null until the registry assigns it.</div>
+
+<h2>2.2 The CourtCase chain (appeal / remand / writ / revision / review)</h2>
+<p><code>RelationType</code> decides how the new instance attaches and how the parent is marked:</p>
+<table>
+  <tr><th>Relation</th><th>Parent handling</th><th>Notes</th></tr>
+  <tr><td><code>ORIGINAL</code></td><td>—</td><td>Only created via create-matter.</td></tr>
+  <tr><td><code>APPEAL</code> / <code>CROSS_APPEAL</code> / <code>REVISION</code></td><td>parent → <code>APPEALED</code></td><td>Roles are created fresh (appellant/respondent).</td></tr>
+  <tr><td><code>REMAND</code></td><td>parent → <code>REMANDED</code></td><td>Case comes back to a lower level; level counter increments (DC2).</td></tr>
+  <tr><td><code>REVIEW</code></td><td>parent untouched</td><td>Exempt from the closed-parent guard: a review petition is filed <i>after</i> the judgment has gone final, so the parent is CLOSED by design and stays exactly as it is.</td></tr>
+  <tr><td><code>WRIT</code></td><td>no parent</td><td>Cannot be filed at District level (business rule).</td></tr>
+</table>
+<ul>
+  <li>The child's ref = <code>{matterNumber}-{levelCode}{n}</code> where <code>n</code> counts instances at that level (DC1, HC1, DC2 after remand, SC1…).</li>
+  <li>The Matter leaf (<code>currentCourtCaseId</code>) moves to the child; matter returns to <code>ACTIVE</code>.</li>
+  <li>You cannot attach a proceeding to a closed parent — <b>except REVIEW</b>, which is the one relation that lives on a closed/final parent.</li>
+</ul>
+
+<h2>2.3 Parties &amp; roles</h2>
+<ul>
+  <li><b>Identity</b> lives on <code>MatterParty</code> (name, phone, email, address, optional linked <code>clientId</code>).</li>
+  <li><b>Role</b> lives on <code>CourtCaseRole</code> (PLAINTIFF/DEFENDANT/ACCUSED/APPELLANT/RESPONDENT/APPLICANT + criminal-side COMPLAINANT/INFORMANT + REPRESENTED/OPPOSING/SELF + per-instance advocate).</li>
+  <li>On appeal the roles flip — the District defendant becomes the High-Court appellant — which is why roles are per-instance.</li>
+  <li><b>Party matching</b> (<code>POST /matters/parties/match</code>) dedupes a new party against existing clients and matter parties, ranked HIGH / MEDIUM / LOW by name/phone/email overlap.</li>
+</ul>
+
+<h2>2.4 The Tarik/Peshi loop (CourtEvent)</h2>
+<p>This is the digital diary. An event is <code>TARIK</code> (administrative date) or <code>PESHI</code> (actual hearing).</p>
+<ol>
+  <li><b>Schedule:</b> create an event with date/time, courtroom, judge, attending advocate. A firm-wide advocate-overlap check runs — <b>Peshi (hearing) conflicts hard-block with a 400</b>; <b>Tarik (administrative) conflicts warn and are allowed</b> (they're often handled by a junior/clerk), surfaced via <code>conflictWarning</code> on the response.</li>
+  <li><b>Mark held:</b> <code>POST /court-events/{id}/held</code> requires the answer to <i>“what did the court give next?”</i>:
+    <ul>
+      <li><code>nextEventType=TARIK|PESHI</code> → the server creates the next event row and links it via <code>nextEventId</code> — the loop continues.</li>
+      <li><code>nextEventType=JUDGMENT</code> → no event row; the judgment is recorded <b>inline in this same call</b> (see below).</li>
+      <li><code>nextEventType=NONE</code> → the matter is closed at this event.</li>
+    </ul>
+  </li>
+  <li><b>Outcome side-effects:</b>
+    <ul>
+      <li><code>JUDGMENT_DELIVERED</code> → the event <b>requires <code>judgmentDate</code> + <code>judgmentSummary</code> inline</b> and routes through the <i>same</i> judgment path as the judgment endpoint: stage → <code>JUDGMENT_DELIVERED</code>, status → <code>DECIDED</code>, <code>appealDeadline</code> computed. The two paths share one implementation, so a case can <b>never</b> become <code>DECIDED</code> without the judgment on record. Omitting the inline fields is rejected with a 400.</li>
+      <li><code>WITHDRAWN</code> → case status <code>WITHDRAWN</code>.</li>
+      <li><code>ADJOURNED_NO_PROGRESS</code> → event marked <code>ADJOURNED</code>.</li>
+    </ul>
+  </li>
+</ol>
+
+<h2>2.5 Stage machine</h2>
+<p>Stages are level/type/relation aware (<code>CourtCaseStage</code>): civil flow (FILED → SUMMONS_ISSUED →
+RESPONSE_PENDING → MEDIATION → HEARING_STAGE → JUDGMENT_AWAITED → JUDGMENT_DELIVERED → EXECUTION/CLOSED),
+criminal flow (FIR_REGISTERED → UNDER_INVESTIGATION → CHARGE_SHEET_FILED → … → SENTENCING), appeal flow
+(APPEAL_FILED → ADMITTED → … → FURTHER_APPEALED), writ flow (WRIT_FILED → NOTICE_ISSUED → ORDER_ISSUED).</p>
+<ul>
+  <li><code>updateStage</code> validates: not terminal, valid for level/type/relation, and in <code>allowedTransitions()</code>.</li>
+  <li><b>Frontends never need to duplicate the machine:</b> <code>GET /court-cases/{ourCourtCaseRef}/allowed-stages</code> returns the legal next moves (transitions filtered by level/type/relation) for the dropdown.</li>
+  <li>Special moves: <code>EXECUTION</code> clears <code>appealLapsed</code>; leaving <code>MEDIATION</code> logs MEDIATION_SUCCEEDED/FAILED; <code>CLOSED</code> closes the case.</li>
+</ul>
+
+<h2>2.6 Judgment &amp; appeal deadlines (AppealDeadlineEngine)</h2>
+<p>Recording a judgment computes the statutory appeal window from seeded rules (NCPC 2074):</p>
+<table>
+  <tr><th>Appealed from</th><th>Type</th><th>State party</th><th>Window</th><th>Extension</th></tr>
+  <tr><td>District</td><td>Civil</td><td>—</td><td>30 days</td><td>+15</td></tr>
+  <tr><td>District</td><td>Criminal</td><td>yes</td><td>70 days</td><td>+30</td></tr>
+  <tr><td>District</td><td>Criminal</td><td>no</td><td>30 days</td><td>+30</td></tr>
+  <tr><td>High</td><td>Civil</td><td>—</td><td>35 days</td><td>+15</td></tr>
+  <tr><td>High</td><td>Criminal</td><td>—</td><td>35 days</td><td>+30</td></tr>
+  <tr><td>High</td><td>Criminal</td><td>yes</td><td>70 days</td><td>+30</td></tr>
+</table>
+<ul>
+  <li><code>partyIsState</code> is recorded <b>once</b>, at court-case creation — the deadline engine always trusts the stored value, never a flag re-sent at judgment time.</li>
+  <li><b>Leave to appeal:</b> the High → Supreme rows are flagged <code>requiresLeave</code> — a further appeal to the Supreme Court is a <i>leave-petition</i> process, not an automatic appeal, so the deadline on a High Court judgment carries <code>appealRequiresLeave=true</code> and the UI should present it as a leave application, not a plain appeal.</li>
+  <li>A nightly scheduled job (<code>closeLapsedAppeals</code>, 03:00) finds <code>DECIDED</code> cases whose window lapsed with no appeal filed and no child case → marks <code>appealLapsed=true</code> (judgment final) and nudges the Matter to <code>DORMANT</code>.</li>
+  <li>If the firm later moves the case to <code>EXECUTION</code>, <code>appealLapsed</code> is cleared.</li>
+  <li><b>Watch list:</b> <code>GET /court-cases/appeal-deadlines?withinDays=30</code> — every decided, not-lapsed case whose deadline closes within N days and no appeal has been filed. The natural pair to <code>/matters/stale</code> and arguably the highest-value proactive flag in the system.</li>
+</ul>
+
+<h2>2.7 Stale matters</h2>
+<p><code>GET /matters/stale</code> lists matters whose current leaf hasn't had a real (non-cancelled)
+Peshi in N days (default 90) — the long-pending Tarik chains — with <code>daysSinceLastPeshi</code>.</p>
+
+<h2>2.8 Timeline — per matter and overall</h2>
+<ul>
+  <li><b>Per matter:</b> <code>GET /matters/{matterNumber}/timeline</code> — every event across all of the matter's court cases, newest first, each tagged with its <code>ourCourtCaseRef</code>.</li>
+  <li><b>Overall (firm-wide):</b> <code>GET /matters/timeline</code> — the aggregate activity feed of <i>every</i> matter in the firm, newest first, filterable by matter type, matter status, and date window. This is the “everything working” overview screen. Events carry <code>matterNumber</code>, <code>matterTitle</code>, <code>ourCourtCaseRef</code> and <code>eventType</code> so the UI can render a grouped, filterable feed.</li>
+</ul>
+<p>Every meaningful mutation writes a <code>MatterTimelineEvent</code>: MATTER_CREATED, COURT_CASE_ADDED,
+STAGE_CHANGE, MEDIATION_FAILED/SUCCEEDED, COURT_EVENT_SCHEDULED/HELD/ADJOURNED/CANCELLED, PARTY_ADDED,
+JUDGMENT_RECORDED, APPEAL_FILED, MATTER_NOTE_ADDED.</p>
+
+<h2>2.9 Calendar</h2>
+<p>The calendar is a read-only projection of <code>CourtEvent</code> (the single source of truth) across
+all court cases: date range, today, and upcoming N days, optionally filtered by advocate.</p>
+
+<!-- ============ 3. API REFERENCE ============ -->
+<h1>3 · API Reference</h1>
+
+<h2>3.0 Conventions</h2>
+<p><b>Base:</b> <code>/api/v1/firm</code> · <b>Headers:</b> <code>Authorization: Bearer &lt;JWT&gt;</code> (+ firm context via subdomain/firm code).</p>
+<p><b>Request envelope:</b> <code>POST/PUT</code> bodies are <code>{ "data": { … } }</code>.</p>
+<pre><code>// Success envelope
+{ "success": true, "responseCode": 200, "message": "Matter created successfully", "data": { … } }
+
+// Error envelope (HTTP status matches the error type)
+{ "success": false, "responseCode": 400, "message": "Cannot transition from 'FILED' to 'CLOSED'", "data": null }</code></pre>
+<p><b>Pagination:</b> list endpoints return a Spring <code>Page</code>:
+<code>content[], totalElements, totalPages, number, size, first, last, empty, sort</code>.</p>
+
+<h3>Endpoint map</h3>
+<table>
+  <tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
+  <tr><td>POST</td><td><code>/matters</code></td><td>Create matter + original court case + parties</td></tr>
+  <tr><td>GET</td><td><code>/matters</code></td><td>List matters (filters: matterType, status, search)</td></tr>
+  <tr><td>GET</td><td><code>/matters/{matterNumber}</code></td><td>Full matter detail (chain, roles, parties)</td></tr>
+  <tr><td>PUT</td><td><code>/matters/{matterNumber}</code></td><td>Update matter details/status</td></tr>
+  <tr><td>GET</td><td><code>/matters/{matterNumber}/timeline</code></td><td>Timeline for one matter</td></tr>
+  <tr><td>GET</td><td><code>/matters/timeline</code></td><td><b>Overall firm-wide timeline</b> (filters: matterType, status, from, to)</td></tr>
+  <tr><td>GET</td><td><code>/matters/stale</code></td><td>Matters with no real Peshi in N days</td></tr>
+  <tr><td>POST</td><td><code>/matters/{matterNumber}/court-cases</code></td><td>Attach appeal/remand/writ/review court case</td></tr>
+  <tr><td>POST</td><td><code>/matters/{matterNumber}/parties</code></td><td>Add a party to the matter</td></tr>
+  <tr><td>POST</td><td><code>/matters/parties/match</code></td><td>Dedup match against clients/matter parties</td></tr>
+  <tr><td>GET</td><td><code>/court-cases/{ourCourtCaseRef}</code></td><td>Court case detail</td></tr>
+  <tr><td>PUT</td><td><code>/court-cases/{ourCourtCaseRef}</code></td><td>Update court case fields</td></tr>
+  <tr><td>PUT</td><td><code>/court-cases/{ourCourtCaseRef}/stage</code></td><td>Advance/change stage (validated)</td></tr>
+  <tr><td>PUT</td><td><code>/court-cases/{ourCourtCaseRef}/judgment</code></td><td>Record judgment + appeal deadline</td></tr>
+  <tr><td>GET</td><td><code>/court-cases/{ourCourtCaseRef}/allowed-stages</code></td><td>Legal next stages for the dropdown (filtered by level/type/relation)</td></tr>
+  <tr><td>GET</td><td><code>/court-cases/appeal-deadlines</code></td><td>Watch list — deadlines closing within N days, no appeal filed</td></tr>
+  <tr><td>POST</td><td><code>/court-cases/{ourCourtCaseRef}/events</code></td><td>Schedule Tarik/Peshi event</td></tr>
+  <tr><td>GET</td><td><code>/court-cases/{ourCourtCaseRef}/events</code></td><td>Event stream for a court case</td></tr>
+  <tr><td>GET</td><td><code>/court-events/{eventId}</code></td><td>Event detail</td></tr>
+  <tr><td>PUT</td><td><code>/court-events/{eventId}</code></td><td>Update event</td></tr>
+  <tr><td>POST</td><td><code>/court-events/{eventId}/held</code></td><td>Mark held → outcome + next event</td></tr>
+  <tr><td>DELETE</td><td><code>/court-events/{eventId}</code></td><td>Cancel event</td></tr>
+  <tr><td>GET</td><td><code>/calendar</code></td><td>Events in a date range (default −30d…+90d)</td></tr>
+  <tr><td>GET</td><td><code>/calendar/today</code></td><td>Today's events</td></tr>
+  <tr><td>GET</td><td><code>/calendar/upcoming</code></td><td>Next N days (1–365)</td></tr>
+</table>
+
+<!-- Matters -->
+<h2>3.1 Matters</h2>
+
+<div class="endpoint"><span class="method POST">POST</span><code>/api/v1/firm/matters</code> — create a matter</div>
+<p>Creates the Matter, its ORIGINAL CourtCase at the originating level, and the parties (each with a role on the original case).</p>
+<pre><code>{
+  "data": {
+    "matterType": "CIVIL",
+    "title": "Ram vs Shyam — land boundary dispute",
+    "originatingCourtLevel": "DISTRICT",
+    "courtName": "Kathmandu District Court",
+    "courtCaseNumber": "C-123/082",
+    "filingDate": "2026-08-01",
+    "assignedPartnerId": "…uuid…",
+    "advocateId": "…uuid…",
+    "description": "Boundary dispute over plot no. 45",
+    "parties": [
+      { "fullName": "Ram Sharma", "mobileNo": "9800000001", "email": "ram@mail.com",
+        "clientId": "…uuid…", "isOurClient": true, "roleType": "PLAINTIFF", "representation": "REPRESENTED" },
+      { "fullName": "Shyam Thapa", "mobileNo": "9800000002", "roleType": "DEFENDANT", "representation": "OPPOSING" }
+    ]
+  }
+}</code></pre>
+<p><b>Returns:</b> <code>MatterResponse</code> (full: court cases + roles + parties). Note the generated <code>matterNumber</code> and <code>ourCourtCaseRef</code> — save them; they are the primary lookups for every other call.</p>
+
+<div class="endpoint"><span class="method GET">GET</span><code>/api/v1/firm/matters?matterType=&amp;status=&amp;search=&amp;page=&amp;size=</code> — list matters</div>
+<p>Paginated, filtered. <code>search</code> matches title or matter number (case-insensitive). List mode returns summary (no nested chain).</p>
+
+<div class="endpoint"><span class="method GET">GET</span><code>/api/v1/firm/matters/{matterNumber}</code> — matter detail</div>
+<p>Full tree: all <code>courtCases[]</code> (each with <code>roles[]</code>, <code>eventCount</code>, refs, stage/status, judgment fields, criminal/civil fields), plus <code>parties[]</code> and <code>currentCourtCaseId</code>. Use this for the matter detail screen.</p>
+
+<div class="endpoint"><span class="method PUT">PUT</span><code>/api/v1/firm/matters/{matterNumber}</code> — update matter</div>
+<p>Partial update: <code>title, description, assignedPartnerId, status</code> (ACTIVE/DORMANT/CLOSED).</p>
+
+<div class="endpoint"><span class="method GET">GET</span><code>/api/v1/firm/matters/{matterNumber}/timeline</code> — one matter's timeline</div>
+<pre><code>{
+  "success": true, "responseCode": 200, "message": "Timeline fetched successfully",
+  "data": [
+    { "id": "…", "matterId": "…", "matterNumber": "APX-MAT-2026-00001", "matterTitle": "Ram vs Shyam…",
+      "courtCaseId": "…", "ourCourtCaseRef": "APX-MAT-2026-00001-DC1",
+      "eventType": "COURT_EVENT_HELD", "title": "Event held: …-DC1 #3", "description": "…",
+      "createdAt": "2026-08-05T14:32:00", "createdBy": "…uuid…" }
+  ]
+}</code></pre>
+
+<div class="endpoint"><span class="method GET">GET</span><code>/api/v1/firm/matters/timeline?matterType=&amp;status=&amp;from=&amp;to=&amp;page=&amp;size=</code> — <b>overall timeline</b></div>
+<p>Firm-wide activity feed across all matters (newest first). <code>from</code>/<code>to</code> are <code>YYYY-MM-DD</code>.
+Response items are identical to the per-matter timeline above (including <code>matterTitle</code>), paginated.
+Recommended for the dashboard / “everything working” overview.</p>
+
+<div class="endpoint"><span class="method GET">GET</span><code>/api/v1/firm/matters/stale?days=&amp;page=&amp;size=</code> — stale matters</div>
+<p>Matters whose current leaf has no real Peshi in <code>days</code> (default 90). Item shape:
+<code>{ id, matterNumber, title, matterType, status, currentCourtCaseRef, daysSinceLastPeshi }</code>.</p>
+
+<div class="endpoint"><span class="method POST">POST</span><code>/api/v1/firm/matters/{matterNumber}/court-cases</code> — attach a court case</div>
+<pre><code>{
+  "data": {
+    "relationType": "APPEAL",
+    "courtLevel": "HIGH",
+    "courtName": "High Court, Patan",
+    "courtCaseNumber": "HC-555/083",
+    "filingDate": "2026-08-10",
+    "advocateId": "…uuid…",
+    "judgeName": "Justice A. Poudel",
+    "parentCourtCaseId": "…uuid of the DC1 case…",   // optional — defaults to current leaf
+    "partyIsState": false,
+    "roles": [
+      { "matterPartyId": "…uuid…", "roleType": "APPELLANT", "representation": "REPRESENTED" },
+      { "matterPartyId": "…uuid…", "roleType": "RESPONDENT", "representation": "OPPOSING" }
+    ]
+  }
+}</code></pre>
+<p>New parties may be created inline by sending <code>fullName/mobileNo/email/clientId</code> instead of <code>matterPartyId</code>.
+<code>WRIT</code> at <code>DISTRICT</code> is rejected. The parent is marked APPEALED/REMANDED and the matter leaf moves.</p>
+
+<div class="endpoint"><span class="method POST">POST</span><code>/api/v1/firm/matters/{matterNumber}/parties</code> — add party</div>
+<p>Body: <code>PartyEntryRequest</code> (same shape as the party objects above, including <code>roleType</code>/<code>representation</code>).
+The party is also given a role on the current leaf court case.</p>
+
+<div class="endpoint"><span class="method POST">POST</span><code>/api/v1/firm/matters/parties/match</code> — party dedup</div>
+<pre><code>{ "data": { "fullName": "Ram Sharma", "mobileNo": "9800000001", "email": "ram@mail.com" } }
+
+→ data: [ { "sourceType": "CLIENT", "sourceId": "…", "fullName": "…", "mobileNo": "…", "email": "…", "confidence": "HIGH" },
+          { "sourceType": "MATTER_PARTY", "sourceId": "…", "caseNumber": "APX-MAT-2026-00001", "fullName": "…", "confidence": "MEDIUM" } ]</code></pre>
+
+<!-- Court cases -->
+<h2>3.2 Court cases</h2>
+
+<div class="endpoint"><span class="method GET">GET</span><code>/api/v1/firm/court-cases/{ourCourtCaseRef}</code> — court case detail</div>
+<p>Ref format: <code>APX-MAT-2026-00001-DC1</code>. Returns the full <code>CourtCaseResponse</code> (same shape as the nested objects in matter detail): ref, relation, level, court, filing date, stage/status, advocate/judge, judgment + appeal fields, criminal/civil fields, roles, eventCount.</p>
+
+<div class="endpoint"><span class="method PUT">PUT</span><code>/api/v1/firm/court-cases/{ourCourtCaseRef}</code> — update fields</div>
+<p>Partial: <code>courtCaseNumber, courtName, advocateId, judgeName</code> + criminal fields (<code>firNumber, firDate, policeStation, investigationAuthority, arrestDate, chargeSheetDate, bailStatus</code>) + civil fields (<code>mediationDate, mediationOutcome, writtenStatementDeadline</code>).</p>
+
+<div class="endpoint"><span class="method PUT">PUT</span><code>/api/v1/firm/court-cases/{ourCourtCaseRef}/stage</code> — change stage</div>
+<pre><code>{ "data": { "stage": "JUDGMENT_AWAITED" } }</code></pre>
+<p>Validates legality + transitions. Rejects changes on terminal (closed) cases.</p>
+
+<div class="endpoint"><span class="method PUT">PUT</span><code>/api/v1/firm/court-cases/{ourCourtCaseRef}/judgment</code> — record judgment</div>
+<pre><code>{
+  "data": {
+    "judgmentDate": "2026-09-01",
+    "judgmentSummary": "Boundary fixed in favor of the plaintiff…",
+    "decisionInFavorOfPartyId": "…uuid of MatterParty…"
+  }
+}</code></pre>
+<p>Moves the case to <code>JUDGMENT_DELIVERED</code>/<code>DECIDED</code>, clears <code>appealLapsed</code>, and computes <code>appealDeadline</code> from the seeded statutory rules. <code>partyIsState</code> is <i>not</i> accepted here — it was recorded at court-case creation and the engine reuses it. High Court judgments return <code>appealRequiresLeave=true</code>.</p>
+
+<div class="endpoint"><span class="method GET">GET</span><code>/api/v1/firm/court-cases/{ourCourtCaseRef}/allowed-stages</code> — legal next moves</div>
+<p>Returns <code>List&lt;CourtCaseStage&gt;</code> — the current stage's transitions filtered by court level / matter type / relation. Render the stage dropdown from this, never from a hard-coded list.</p>
+
+<div class="endpoint"><span class="method GET">GET</span><code>/api/v1/firm/court-cases/appeal-deadlines?withinDays=30</code> — appeal-deadline watch</div>
+<p>Decided, not-lapsed cases whose statutory window closes within N days, with no appeal filed. Items: <code>{ id, ourCourtCaseRef, courtLevel, courtName, judgmentDate, appealDeadline, partyIsState, appealRequiresLeave, matterNumber, matterTitle }</code>.</p>
+
+<!-- Events -->
+<h2>3.3 Court events (Tarik/Peshi)</h2>
+
+<div class="endpoint"><span class="method POST">POST</span><code>/api/v1/firm/court-cases/{ourCourtCaseRef}/events</code> — schedule event</div>
+<pre><code>{
+  "data": {
+    "eventType": "PESHI",
+    "scheduledDate": "2026-08-15",
+    "scheduledTime": "10:30:00",
+    "endTime": "11:30:00",
+    "attendingAdvocateId": "…uuid…",
+    "judgeName": "Judge B. Karki",
+    "courtRoom": "Court 3",
+    "notes": "Cross-examination of DW-1"
+  }
+}</code></pre>
+<p>Sequence number is auto-assigned. Advocate time conflicts (firm-wide): <b>Peshi hard-blocks with a 400</b>; <b>Tarik is allowed</b> with <code>conflictWarning</code> on the response.</p>
+
+<div class="endpoint"><span class="method GET">GET</span><code>/api/v1/firm/court-cases/{ourCourtCaseRef}/events</code> — event stream</div>
+<p>All events in sequence order; each carries <code>nextEventId</code> so the frontend can render the Tarik/Peshi chain.</p>
+
+<div class="endpoint"><span class="method GET">GET</span><code>/api/v1/firm/court-events/{eventId}</code> · <span class="method PUT">PUT</span><code>…/court-events/{eventId}</code> · <span class="method DELETE">DELETE</span><code>…/court-events/{eventId}</code></div>
+<p>Detail; partial update (<code>scheduledDate/time, endTime, judgeName, courtRoom, notes, attendingAdvocateId</code> — re-checks conflicts); cancel (held events cannot be cancelled).</p>
+
+<div class="endpoint"><span class="method POST">POST</span><code>/api/v1/firm/court-events/{eventId}/held</code> — mark held (the loop)</div>
+<pre><code>{
+  "data": {
+    "outcome": "Both sides heard; court adjourned to next hearing",
+    "outcomeType": "ADJOURNED_NO_PROGRESS",
+    "nextEventType": "PESHI",
+    "nextEventDate": "2026-09-02",
+    "nextEventTime": "11:00:00",
+    "notes": "Next date given in open court"
+  }
+}</code></pre>
+<ul>
+  <li><code>nextEventType=TARIK|PESHI</code> + <code>nextEventDate</code> (required) → server creates the next event and links it.</li>
+  <li><code>nextEventType=JUDGMENT</code> → no next event row; the judgment is recorded <b>inline</b> — include <code>judgmentDate</code> + <code>judgmentSummary</code> (and optional <code>decisionInFavorOfPartyId</code>) in the same payload.</li>
+  <li><code>nextEventType=NONE</code> → the case is closed at this event.</li>
+  <li>Outcome side-effects: <code>JUDGMENT_DELIVERED</code> without the inline judgment fields is rejected (400) — the case can only become <code>DECIDED</code> with the judgment on record; <code>WITHDRAWN</code> sets status <code>WITHDRAWN</code>.</li>
+</ul>
+
+<!-- Calendar -->
+<h2>3.4 Calendar</h2>
+<div class="endpoint"><span class="method GET">GET</span><code>/api/v1/firm/calendar?from=&amp;to=&amp;advocateId=</code></div>
+<p>Date range (defaults −30d…+90d). Accepts <code>YYYY-MM-DD</code> or ISO datetime. Items: <code>{ id, courtCaseId, ourCourtCaseRef, matterNumber, matterTitle, eventType, scheduledDate, scheduledTime, endTime, courtRoom, status, attendingAdvocateId }</code>.</p>
+<div class="endpoint"><span class="method GET">GET</span><code>/api/v1/firm/calendar/today?advocateId=</code> · <span class="method GET">GET</span><code>/api/v1/firm/calendar/upcoming?days=&amp;advocateId=</code></div>
+<p>Today's events; next <code>days</code> (1–365, default 7).</p>
+
+<!-- ============ 4. FRONTEND GUIDE ============ -->
+<h1>4 · Frontend consumption guide — step by step</h1>
+
+<h2>Step 0 — Authentication &amp; context</h2>
+<ol>
+  <li>Login via the auth endpoints and store the JWT.</li>
+  <li>Send <code>Authorization: Bearer &lt;JWT&gt;</code> on every request; the firm is derived from the token/subdomain — you don't send firmId.</li>
+  <li>Only FIRM_ADMIN, ADVOCATE and PARALEGAL roles can call these endpoints (enforced server-side).</li>
+</ol>
+
+<h2>Step 1 — Create a matter (first screen)</h2>
+<ol>
+  <li>Optional: call <code>POST /matters/parties/match</code> while typing a party name to surface existing clients (HIGH/MEDIUM/LOW) and offer “link to client”.</li>
+  <li>Call <code>POST /matters</code> with the payload from §3.1.</li>
+  <li>From the response, store <code>matterNumber</code> (e.g. <code>APX-MAT-2026-00001</code>) and the original case's <code>ourCourtCaseRef</code> (e.g. <code>…-DC1</code>) — they are the IDs for every later call.</li>
+</ol>
+
+<h2>Step 2 — Case diary: schedule events</h2>
+<ol>
+  <li>On the court-case screen, call <code>GET /court-cases/{ref}</code> to load detail, then <code>GET /court-cases/{ref}/events</code> for the existing Tarik/Peshi stream.</li>
+  <li>Schedule the first date: <code>POST /court-cases/{ref}/events</code> with <code>eventType=TARIK|PESHI</code>, date, time, advocate.</li>
+  <li>On the day: <code>POST /court-events/{eventId}/held</code>. The form MUST ask “what did the court give next?” — the next event is created automatically. The event list now shows the chain (<code>nextEventId</code>).</li>
+  <li>Update/cancel dates freely with <code>PUT/DELETE /court-events/{eventId}</code>.</li>
+</ol>
+
+<h2>Step 3 — Judgment &amp; appeal</h2>
+<ol>
+  <li>Move the case to <code>JUDGMENT_AWAITED</code> (<code>PUT /court-cases/{ref}/stage</code>) when arguments close.</li>
+  <li>When the court delivers: <code>PUT /court-cases/{ref}/judgment</code> — the response includes the computed <code>appealDeadline</code>. Show it on the case header.</li>
+  <li>To appeal: <code>POST /matters/{matterNumber}/court-cases</code> with <code>relationType=APPEAL</code>, the new level, and roles. The matter detail now shows both cases (DC1 + HC1) and the leaf moves.</li>
+</ol>
+
+<h2>Step 4 — Overview screens (read side)</h2>
+<ul>
+  <li><b>Dashboard / firm-wide activity:</b> <code>GET /matters/timeline?matterType=CIVIL&amp;status=ACTIVE&amp;from=2026-08-01&amp;to=2026-08-31</code> — render newest-first with matter number + title + court-case ref + eventType badge + time.</li>
+  <li><b>Matter detail:</b> <code>GET /matters/{matterNumber}</code> — render the court-case chain as a vertical timeline (ORIGINAL → APPEAL → …), roles per instance, judgment fields.</li>
+  <li><b>One matter's history:</b> <code>GET /matters/{matterNumber}/timeline</code>.</li>
+  <li><b>Calendar:</b> <code>GET /calendar?from=…&amp;to=…</code> for month view, <code>/calendar/today</code> for the day view, <code>/calendar/upcoming?days=7</code> for the widget.</li>
+  <li><b>Overdue watch:</b> <code>GET /matters/stale?days=90</code> for long-pending matters.</li>
+</ul>
+
+<h2>Step 5 — Handling errors &amp; edge cases</h2>
+<ul>
+  <li>400 <code>BusinessRuleException</code> — e.g. illegal stage transition, advocate conflict, WRIT at District, held event cancel, missing <code>nextEventDate</code>.</li>
+  <li>404 <code>ResourceNotFoundException</code> — unknown matter number / court-case ref / event id.</li>
+  <li>403 — wrong firm context or insufficient role.</li>
+  <li>Always read <code>message</code> for user-facing text; keys are human-readable English.</li>
+</ul>
+
+<h2>Enum cheat-sheet for dropdowns</h2>
+<table>
+  <tr><th>Enum</th><th>Values</th></tr>
+  <tr><td>MatterType</td><td>CIVIL, CRIMINAL</td></tr>
+  <tr><td>MatterStatus</td><td>ACTIVE, DORMANT, CLOSED</td></tr>
+  <tr><td>CourtLevel</td><td>DISTRICT, HIGH, SUPREME, SPECIALIZED</td></tr>
+  <tr><td>RelationType</td><td>ORIGINAL, APPEAL, CROSS_APPEAL, REMAND, REVISION, WRIT, REVIEW</td></tr>
+  <tr><td>PartyType</td><td>PLAINTIFF, DEFENDANT, ACCUSED, APPELLANT, RESPONDENT, APPLICANT, COMPLAINANT, INFORMANT</td></tr>
+  <tr><td>PartyRepresentation</td><td>REPRESENTED, OPPOSING, SELF</td></tr>
+  <tr><td>CourtEventType</td><td>TARIK, PESHI</td></tr>
+  <tr><td>CourtEventStatus</td><td>SCHEDULED, HELD, ADJOURNED, CANCELED</td></tr>
+  <tr><td>OutcomeType</td><td>PART_HEARD, ARGUMENTS_COMPLETE, EVIDENCE_TAKEN, ADJOURNED_NO_PROGRESS, ORDER_PASSED, ORDER_ISSUED, STAY_GRANTED, INTERIM_ORDER, JUDGMENT_DELIVERED, WITHDRAWN</td></tr>
+  <tr><td>NextEventType</td><td>TARIK, PESHI, JUDGMENT, NONE</td></tr>
+  <tr><td>CourtCaseStatus</td><td>ACTIVE, JUDGMENT_AWAITED, DECIDED, APPEALED, REMANDED, CLOSED, WITHDRAWN</td></tr>
+  <tr><td>CourtCaseStage</td><td>civil: FILED, SUMMONS_ISSUED, RESPONSE_PENDING, MEDIATION, HEARING_STAGE, JUDGMENT_AWAITED, JUDGMENT_DELIVERED, EXECUTION; criminal: FIR_REGISTERED, UNDER_INVESTIGATION, CHARGE_SHEET_FILED, SENTENCING; appeals: APPEAL_FILED, ADMITTED, FURTHER_APPEALED; writs: WRIT_FILED, NOTICE_ISSUED, ORDER_ISSUED; shared: APPEALED, REMANDED, CLOSED</td></tr>
+  <tr><td>TimelineEventType</td><td>MATTER_CREATED, COURT_CASE_ADDED, STAGE_CHANGE, MEDIATION_FAILED, MEDIATION_SUCCEEDED, COURT_EVENT_SCHEDULED, COURT_EVENT_HELD, COURT_EVENT_ADJOURNED, COURT_EVENT_CANCELLED, PARTY_ADDED, JUDGMENT_RECORDED, APPEAL_FILED, MATTER_NOTE_ADDED</td></tr>
+</table>
+
+<div class="footer">
+  Case Management Module guide — generated from the implementation in <code>modules/casemanagement</code>.
+  Endpoints live under <code>/api/v1/firm</code>; Swagger UI is available at <code>/swagger-ui.html</code>.
+</div>
+
+</body>
+</html>

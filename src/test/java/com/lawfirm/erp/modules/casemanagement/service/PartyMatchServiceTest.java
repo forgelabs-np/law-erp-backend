@@ -4,10 +4,10 @@ import com.lawfirm.erp.customer.entity.CustomerProfile;
 import com.lawfirm.erp.customer.repository.CustomerProfileRepository;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.modules.casemanagement.dto.response.PartyMatchResult;
-import com.lawfirm.erp.modules.casemanagement.entity.Case;
-import com.lawfirm.erp.modules.casemanagement.entity.CaseParty;
-import com.lawfirm.erp.modules.casemanagement.repository.CasePartyRepository;
-import com.lawfirm.erp.modules.casemanagement.repository.CaseRepository;
+import com.lawfirm.erp.modules.casemanagement.entity.Matter;
+import com.lawfirm.erp.modules.casemanagement.entity.MatterParty;
+import com.lawfirm.erp.modules.casemanagement.repository.MatterPartyRepository;
+import com.lawfirm.erp.modules.casemanagement.repository.MatterRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,8 +31,8 @@ class PartyMatchServiceTest {
     private static final UUID FIRM_ID = UUID.randomUUID();
 
     @Mock private CustomerProfileRepository customerProfileRepository;
-    @Mock private CasePartyRepository casePartyRepository;
-    @Mock private CaseRepository caseRepository;
+    @Mock private MatterPartyRepository matterPartyRepository;
+    @Mock private MatterRepository matterRepository;
 
     private PartyMatchService partyMatchService;
 
@@ -51,9 +51,10 @@ class PartyMatchServiceTest {
         return c;
     }
 
-    private CaseParty makeParty(String name, String phone, String email) {
-        CaseParty p = new CaseParty();
+    private MatterParty makeParty(String name, String phone, String email) {
+        MatterParty p = new MatterParty();
         p.setId(UUID.randomUUID());
+        p.setMatterId(UUID.randomUUID());
         p.setFullName(name);
         p.setMobileNo(phone);
         p.setEmail(email);
@@ -62,7 +63,7 @@ class PartyMatchServiceTest {
 
     @BeforeEach
     void setUp() {
-        partyMatchService = new PartyMatchService(customerProfileRepository, casePartyRepository, caseRepository);
+        partyMatchService = new PartyMatchService(customerProfileRepository, matterPartyRepository, matterRepository);
     }
 
     @Test
@@ -71,7 +72,7 @@ class PartyMatchServiceTest {
         User user = makeUser("Ram Sharma", "9800000001", "ram@email.com");
         when(customerProfileRepository.findMatches(eq(FIRM_ID), any(), any(), any()))
                 .thenReturn(List.of(makeClient(user)));
-        when(casePartyRepository.findMatches(any(), any(), any(), any()))
+        when(matterPartyRepository.findMatches(any(), any(), any(), any()))
                 .thenReturn(List.of());
 
         List<PartyMatchResult.Match> matches = partyMatchService.match(
@@ -87,7 +88,7 @@ class PartyMatchServiceTest {
         User user = makeUser("Ram Sharma", null, "ram@email.com");
         when(customerProfileRepository.findMatches(eq(FIRM_ID), any(), any(), any()))
                 .thenReturn(List.of(makeClient(user)));
-        when(casePartyRepository.findMatches(any(), any(), any(), any()))
+        when(matterPartyRepository.findMatches(any(), any(), any(), any()))
                 .thenReturn(List.of());
 
         List<PartyMatchResult.Match> matches = partyMatchService.match(
@@ -102,7 +103,7 @@ class PartyMatchServiceTest {
         User user = makeUser("Ram Sharma", null, null);
         when(customerProfileRepository.findMatches(eq(FIRM_ID), any(), any(), any()))
                 .thenReturn(List.of(makeClient(user)));
-        when(casePartyRepository.findMatches(any(), any(), any(), any()))
+        when(matterPartyRepository.findMatches(any(), any(), any(), any()))
                 .thenReturn(List.of());
 
         List<PartyMatchResult.Match> matches = partyMatchService.match(
@@ -117,7 +118,7 @@ class PartyMatchServiceTest {
         User user = makeUser("Ram Sharma", null, null);
         when(customerProfileRepository.findMatches(eq(FIRM_ID), any(), any(), any()))
                 .thenReturn(List.of(makeClient(user)));
-        when(casePartyRepository.findMatches(any(), any(), any(), any()))
+        when(matterPartyRepository.findMatches(any(), any(), any(), any()))
                 .thenReturn(List.of());
 
         List<PartyMatchResult.Match> matches = partyMatchService.match(
@@ -127,35 +128,33 @@ class PartyMatchServiceTest {
     }
 
     @Test
-    @DisplayName("Matches both clients and case parties")
+    @DisplayName("Matches both clients and matter parties")
     void matchesBothSources() {
         User user = makeUser("Sita Devi", "9800000002", null);
-        CaseParty party = makeParty("Sita Devi", "9800000002", null);
-        UUID caseId = UUID.randomUUID();
-        party.setCaseId(caseId);
+        MatterParty party = makeParty("Sita Devi", "9800000002", null);
 
-        Case c = new Case();
-        c.setId(caseId);
-        c.setCaseNumber("APX-CIV-2026-00001");
+        Matter m = new Matter();
+        m.setId(party.getMatterId());
+        m.setMatterNumber("APX-MAT-2026-00001");
 
         when(customerProfileRepository.findMatches(eq(FIRM_ID), any(), any(), any()))
                 .thenReturn(List.of(makeClient(user)));
-        when(casePartyRepository.findMatches(eq(FIRM_ID), any(), any(), any()))
+        when(matterPartyRepository.findMatches(eq(FIRM_ID), any(), any(), any()))
                 .thenReturn(List.of(party));
-        when(caseRepository.findAllById(anyCollection()))
-                .thenReturn(List.of(c));
+        when(matterRepository.findAllById(anyCollection()))
+                .thenReturn(List.of(m));
 
         List<PartyMatchResult.Match> matches = partyMatchService.match(
                 FIRM_ID, "Sita Devi", "9800000002", null);
 
         assertEquals(2, matches.size());
-        assertTrue(matches.stream().allMatch(m -> "HIGH".equals(m.getConfidence())));
+        assertTrue(matches.stream().allMatch(match -> "HIGH".equals(match.getConfidence())));
 
-        // CASE_PARTY match must carry the case number
-        PartyMatchResult.Match casePartyMatch = matches.stream()
-                .filter(m -> "CASE_PARTY".equals(m.getSourceType()))
+        // MATTER_PARTY match must carry the matter number
+        PartyMatchResult.Match matterPartyMatch = matches.stream()
+                .filter(match -> "MATTER_PARTY".equals(match.getSourceType()))
                 .findFirst().orElseThrow();
-        assertEquals("APX-CIV-2026-00001", casePartyMatch.getCaseNumber());
+        assertEquals("APX-MAT-2026-00001", matterPartyMatch.getCaseNumber());
     }
 
     @Test
@@ -163,7 +162,7 @@ class PartyMatchServiceTest {
     void noMatch() {
         when(customerProfileRepository.findMatches(any(), any(), any(), any()))
                 .thenReturn(List.of());
-        when(casePartyRepository.findMatches(any(), any(), any(), any()))
+        when(matterPartyRepository.findMatches(any(), any(), any(), any()))
                 .thenReturn(List.of());
 
         List<PartyMatchResult.Match> matches = partyMatchService.match(

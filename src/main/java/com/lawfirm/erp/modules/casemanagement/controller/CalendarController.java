@@ -26,7 +26,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/firm/calendar")
 @RequiredArgsConstructor
-@Tag(name = "Calendar", description = "Court calendar — hearings as the source of truth")
+@Tag(name = "Calendar", description = "Court calendar — CourtEvents (Tarik/Peshi) as the source of truth")
 @PreAuthorize("hasAnyRole('FIRM_ADMIN', 'ADVOCATE', 'PARALEGAL')")
 public class CalendarController {
 
@@ -35,7 +35,7 @@ public class CalendarController {
     private final ResponseHandler responseHandler;
 
     @GetMapping
-    @Operation(summary = "Get calendar events", description = "Hearings in a date range, optionally filtered by advocate. " +
+    @Operation(summary = "Get calendar events", description = "Tarik/Peshi events in a date range, optionally filtered by advocate. " +
             "from/to are optional — defaults to last 30 days through next 90 days. " +
             "Accepts YYYY-MM-DD or full ISO datetime (e.g. 2026-08-01T00:00:00.000Z).")
     public ResponseEntity<ApiResponse<List<CalendarEventResponse>>> getCalendar(
@@ -57,18 +57,18 @@ public class CalendarController {
     }
 
     @GetMapping("/today")
-    @Operation(summary = "Today's hearings", description = "All hearings scheduled for today, optionally filtered by advocate")
-    public ResponseEntity<ApiResponse<List<CalendarEventResponse>>> getTodayHearings(
+    @Operation(summary = "Today's events", description = "All Tarik/Peshi events scheduled for today, optionally filtered by advocate")
+    public ResponseEntity<ApiResponse<List<CalendarEventResponse>>> getTodayEvents(
             @RequestParam(required = false) UUID advocateId) {
         UUID firmId = getRequiredFirmId();
         return responseHandler.ok(
-                calendarService.getTodayHearings(firmId, advocateId),
-                "Today's hearings fetched successfully");
+                calendarService.getTodayEvents(firmId, advocateId),
+                "Today's events fetched successfully");
     }
 
     @GetMapping("/upcoming")
-    @Operation(summary = "Upcoming hearings", description = "Hearings in the next N days (default 7, max 365)")
-    public ResponseEntity<ApiResponse<List<CalendarEventResponse>>> getUpcomingHearings(
+    @Operation(summary = "Upcoming events", description = "Events in the next N days (default 7, max 365)")
+    public ResponseEntity<ApiResponse<List<CalendarEventResponse>>> getUpcomingEvents(
             @RequestParam(defaultValue = "7") int days,
             @RequestParam(required = false) UUID advocateId) {
         UUID firmId = getRequiredFirmId();
@@ -78,8 +78,8 @@ public class CalendarController {
         }
 
         return responseHandler.ok(
-                calendarService.getUpcomingHearings(firmId, days, advocateId),
-                "Upcoming hearings fetched successfully");
+                calendarService.getUpcomingEvents(firmId, days, advocateId),
+                "Upcoming events fetched successfully");
     }
 
     private UUID getRequiredFirmId() {
@@ -93,7 +93,6 @@ public class CalendarController {
      *   - plain date:        2026-08-01
      *   - ISO datetime:      2026-08-01T10:00:00
      *   - ISO instant:       2026-08-01T10:00:00.000Z  /  +05:45 offsets
-     * When the parameter is absent or blank, returns the fallback value.
      */
     private LocalDate parseDate(String value, LocalDate fallback) {
         if (value == null || value.isBlank()) {

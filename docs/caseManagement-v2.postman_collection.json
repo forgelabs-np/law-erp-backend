@@ -1,0 +1,469 @@
+{
+  "info": {
+    "name": "Case Management v2 (Matter / CourtCase / CourtEvent)",
+    "_postman_id": "ca8f1c2e-9c44-4d3a-b9e2-7a1f3f8d0b21",
+    "description": "LAW ERP — Case Management v2 module.\n\nBase path: /api/v1/firm. Auth: Bearer JWT (firm-scoped; roles FIRM_ADMIN / ADVOCATE / PARALEGAL).\n\nConventions:\n- POST/PUT bodies are wrapped in { \"data\": { ... } } (ApiRequest envelope).\n- Every response is { \"success\", \"responseCode\", \"message\", \"data\" }.\n- List endpoints return a Spring Page: content[], totalElements, totalPages, number, size, first, last, empty.\n- Save matterNumber and ourCourtCaseRef from the create response — they are the primary lookups.\n\nWorkflow: create matter → schedule events → mark held (the Tarik/Peshi loop) → record judgment (inline on /held, or via PUT judgment) → appeal/remand/review via add court-case → watch /court-cases/appeal-deadlines.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "token", "value": "" },
+    { "key": "matterNumber", "value": "APX-MAT-2026-00001" },
+    { "key": "ourCourtCaseRef", "value": "APX-MAT-2026-00001-DC1" },
+    { "key": "eventId", "value": "" },
+    { "key": "partyId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 · Matters",
+      "item": [
+        {
+          "name": "Create matter (+ original court case + parties)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"matterType\": \"CIVIL\",\n    \"title\": \"Ram vs Shyam — land boundary dispute\",\n    \"originatingCourtLevel\": \"DISTRICT\",\n    \"courtName\": \"Kathmandu District Court\",\n    \"courtCaseNumber\": \"C-123/082\",\n    \"filingDate\": \"2026-08-01\",\n    \"assignedPartnerId\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"advocateId\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"description\": \"Boundary dispute over plot no. 45\",\n    \"parties\": [\n      { \"fullName\": \"Ram Sharma\", \"mobileNo\": \"9800000001\", \"email\": \"ram@mail.com\", \"isOurClient\": true, \"roleType\": \"PLAINTIFF\", \"representation\": \"REPRESENTED\" },\n      { \"fullName\": \"Shyam Thapa\", \"mobileNo\": \"9800000002\", \"roleType\": \"DEFENDANT\", \"representation\": \"OPPOSING\" }\n    ]\n  }\n}"
+            },
+            "description": "Creates the Matter, its ORIGINAL CourtCase at the originating level, and the parties (each with a role on the original case).\nSave the generated matterNumber and ourCourtCaseRef from the response — they are the primary lookups for every other call."
+          }
+        },
+        {
+          "name": "List matters",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters?matterType=CIVIL&status=ACTIVE&search=&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters"],
+              "query": [
+                { "key": "matterType", "value": "CIVIL" },
+                { "key": "status", "value": "ACTIVE" },
+                { "key": "search", "value": "" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Matter detail",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters/{{matterNumber}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters", "{{matterNumber}}"]
+            }
+          }
+        },
+        {
+          "name": "Update matter",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters/{{matterNumber}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters", "{{matterNumber}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"title\": \"Ram vs Shyam — land boundary dispute (updated)\",\n    \"description\": \"Boundary dispute over plot no. 45 — second survey ordered\",\n    \"status\": \"ACTIVE\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Timeline — one matter",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters/{{matterNumber}}/timeline",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters", "{{matterNumber}}", "timeline"]
+            }
+          }
+        },
+        {
+          "name": "Timeline — firm-wide (overall)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters/timeline?matterType=&status=&from=&to=&page=0&size=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters", "timeline"],
+              "query": [
+                { "key": "matterType", "value": "" },
+                { "key": "status", "value": "" },
+                { "key": "from", "value": "" },
+                { "key": "to", "value": "" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Stale matters (no real Peshi in N days)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters/stale?days=90&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters", "stale"],
+              "query": [
+                { "key": "days", "value": "90" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Attach court case (appeal / remand / writ / review)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters/{{matterNumber}}/court-cases",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters", "{{matterNumber}}", "court-cases"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"relationType\": \"APPEAL\",\n    \"courtLevel\": \"HIGH\",\n    \"courtName\": \"High Court, Patan\",\n    \"courtCaseNumber\": \"HC-555/083\",\n    \"filingDate\": \"2026-08-10\",\n    \"advocateId\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"judgeName\": \"Justice A. Poudel\",\n    \"parentCourtCaseId\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"partyIsState\": false,\n    \"roles\": [\n      { \"matterPartyId\": \"{{partyId}}\", \"roleType\": \"APPELLANT\", \"representation\": \"REPRESENTED\" }\n    ]\n  }\n}"
+            },
+            "description": "Defaults parentCourtCaseId to the matter's current leaf when null.\nREVIEW is exempt from the closed-parent guard and leaves the parent untouched.\nWRIT cannot be filed at District level.\npartyIsState is recorded HERE (once) — it is reused by the appeal-deadline engine."
+          }
+        },
+        {
+          "name": "Add party to matter",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters/{{matterNumber}}/parties",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters", "{{matterNumber}}", "parties"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"fullName\": \"Gita Devi\",\n    \"mobileNo\": \"9800000003\",\n    \"email\": \"gita@mail.com\",\n    \"roleType\": \"PLAINTIFF\",\n    \"representation\": \"REPRESENTED\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Party match (dedup)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters/parties/match",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters", "parties", "match"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"fullName\": \"Ram Sharma\",\n    \"mobileNo\": \"9800000001\",\n    \"email\": \"ram@mail.com\"\n  }\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 · Court Cases",
+      "item": [
+        {
+          "name": "Court case detail",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/court-cases/{{ourCourtCaseRef}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "court-cases", "{{ourCourtCaseRef}}"]
+            }
+          }
+        },
+        {
+          "name": "Update court case fields",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/court-cases/{{ourCourtCaseRef}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "court-cases", "{{ourCourtCaseRef}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"courtCaseNumber\": \"C-123/082 (amended)\",\n    \"courtName\": \"Kathmandu District Court\",\n    \"judgeName\": \"Judge B. Karki\",\n    \"mediationDate\": \"2026-09-10\",\n    \"writtenStatementDeadline\": \"2026-09-01\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Change stage (validated)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/court-cases/{{ourCourtCaseRef}}/stage",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "court-cases", "{{ourCourtCaseRef}}", "stage"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": { \"stage\": \"JUDGMENT_AWAITED\" }\n}"
+            }
+          }
+        },
+        {
+          "name": "Allowed next stages (dropdown source)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/court-cases/{{ourCourtCaseRef}}/allowed-stages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "court-cases", "{{ourCourtCaseRef}}", "allowed-stages"]
+            },
+            "description": "Returns the legal next moves from the current stage, filtered by court level / matter type / relation. Render the stage dropdown from this — never duplicate the state machine client-side."
+          }
+        },
+        {
+          "name": "Record judgment",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/court-cases/{{ourCourtCaseRef}}/judgment",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "court-cases", "{{ourCourtCaseRef}}", "judgment"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"judgmentDate\": \"2026-09-01\",\n    \"judgmentSummary\": \"Boundary fixed in favor of the plaintiff; defendant to pay costs\",\n    \"decisionInFavorOfPartyId\": \"{{partyId}}\"\n  }\n}"
+            },
+            "description": "Moves the case to JUDGMENT_DELIVERED / DECIDED, clears appealLapsed, computes appealDeadline.\npartyIsState is NOT accepted here — it was recorded at court-case creation and the engine reuses it.\nHigh Court judgments return appealRequiresLeave=true (leave petition required)."
+          }
+        },
+        {
+          "name": "Appeal-deadline watch (next N days)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/court-cases/appeal-deadlines?withinDays=30",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "court-cases", "appeal-deadlines"],
+              "query": [{ "key": "withinDays", "value": "30" }]
+            },
+            "description": "Decided, not-lapsed cases whose statutory appeal window closes within N days, with no appeal filed. The proactive watch list."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 · Court Events (Tarik/Peshi loop)",
+      "item": [
+        {
+          "name": "Schedule event",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/court-cases/{{ourCourtCaseRef}}/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "court-cases", "{{ourCourtCaseRef}}", "events"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"eventType\": \"PESHI\",\n    \"scheduledDate\": \"2026-08-15\",\n    \"scheduledTime\": \"10:30:00\",\n    \"endTime\": \"11:30:00\",\n    \"attendingAdvocateId\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"judgeName\": \"Judge B. Karki\",\n    \"courtRoom\": \"Court 3\",\n    \"notes\": \"Cross-examination of DW-1\"\n  }\n}"
+            },
+            "description": "Peshi + advocate overlap → hard 400. Tarik + overlap → allowed, response carries conflictWarning."
+          }
+        },
+        {
+          "name": "Event stream (per court case)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/court-cases/{{ourCourtCaseRef}}/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "court-cases", "{{ourCourtCaseRef}}", "events"]
+            }
+          }
+        },
+        {
+          "name": "Event detail",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/court-events/{{eventId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "court-events", "{{eventId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update event",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/court-events/{{eventId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "court-events", "{{eventId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"scheduledTime\": \"11:00:00\",\n    \"endTime\": \"12:00:00\",\n    \"courtRoom\": \"Court 5\",\n    \"notes\": \"Re-scheduled by mutual request\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Mark held — adjournment (loop continues)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/court-events/{{eventId}}/held",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "court-events", "{{eventId}}", "held"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"outcome\": \"Both sides heard; court adjourned\",\n    \"outcomeType\": \"ADJOURNED_NO_PROGRESS\",\n    \"nextEventType\": \"PESHI\",\n    \"nextEventDate\": \"2026-09-02\",\n    \"nextEventTime\": \"11:00:00\",\n    \"notes\": \"Next date given in open court\"\n  }\n}"
+            },
+            "description": "nextEventType=TARIK|PESHI requires nextEventDate — the server creates the next event row and links it via nextEventId."
+          }
+        },
+        {
+          "name": "Mark held — judgment delivered (inline judgment fields REQUIRED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/court-events/{{eventId}}/held",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "court-events", "{{eventId}}", "held"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"outcome\": \"Judgment delivered in open court\",\n    \"outcomeType\": \"JUDGMENT_DELIVERED\",\n    \"nextEventType\": \"NONE\",\n    \"judgmentDate\": \"2026-09-01\",\n    \"judgmentSummary\": \"Boundary fixed in favor of the plaintiff; defendant to pay costs\",\n    \"decisionInFavorOfPartyId\": \"{{partyId}}\",\n    \"notes\": \"Appeal window computed automatically\"\n  }\n}"
+            },
+            "description": "outcomeType=JUDGMENT_DELIVERED REQUIRES judgmentDate + judgmentSummary inline — otherwise 400. The case becomes DECIDED with the judgment on record and the appeal deadline computed, via the SAME code path as the judgment endpoint (they can never get out of sync)."
+          }
+        },
+        {
+          "name": "Cancel event",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/court-events/{{eventId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "court-events", "{{eventId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 · Calendar",
+      "item": [
+        {
+          "name": "Calendar (date range)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/calendar?from=2026-07-01&to=2026-12-31&advocateId=",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "calendar"],
+              "query": [
+                { "key": "from", "value": "2026-07-01" },
+                { "key": "to", "value": "2026-12-31" },
+                { "key": "advocateId", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Today's events",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/calendar/today",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "calendar", "today"]
+            }
+          }
+        },
+        {
+          "name": "Upcoming events (N days)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/calendar/upcoming?days=7",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "calendar", "upcoming"],
+              "query": [{ "key": "days", "value": "7" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -94,7 +94,7 @@ public class SuperAdminService {
         user.setActive(true);
         user = userRepository.save(user);
 
-        // AUDIT: Super Admin created
+        // ✅ AUDIT: Super Admin created
         auditService.log(
                 AuditAction.USER_CREATED,
                 AuditEntity.USER,

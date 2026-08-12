@@ -38,6 +38,21 @@ public enum AuditAction {
     CASE_ARCHIVED,
     CASE_REOPENED,
 
+    // ── Matter / Court case / Court event (Phase 10) ──
+    MATTER_CREATED,
+    MATTER_UPDATED,
+    COURT_CASE_CREATED,
+    COURT_CASE_UPDATED,
+    COURT_CASE_STAGE_CHANGED,
+    COURT_CASE_CLOSED,
+    APPEAL_FILED,
+    JUDGMENT_RECORDED,
+    COURT_EVENT_SCHEDULED,
+    COURT_EVENT_UPDATED,
+    COURT_EVENT_HELD,
+    COURT_EVENT_ADJOURNED,
+    COURT_EVENT_CANCELLED,
+
     // ── Document management ──────────────────
     DOCUMENT_UPLOADED,
     DOCUMENT_DELETED,
@@ -84,14 +99,12 @@ public enum AuditAction {
     MODULE_UPDATED,
     MODULE_DELETED,
 
-    // ── Email ────────────────────────────────
+    // ── Email / config (Phase 10) ──────────────
     EMAIL_SENT,
     EMAIL_FAILED,
     EMAIL_CONFIG_UPDATED,
     EMAIL_CONFIG_TESTED,
     EMAIL_CONFIG_DELETED,
-
-    // ── System Config ─────────────────────────
     CONFIG_UPDATED,
     CONFIG_DELETED
 }
