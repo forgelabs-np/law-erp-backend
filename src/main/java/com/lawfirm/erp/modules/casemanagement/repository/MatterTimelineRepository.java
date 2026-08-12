@@ -22,13 +22,17 @@ public interface MatterTimelineRepository extends JpaRepository<MatterTimelineEv
     /**
      * Firm-wide activity feed across all matters — the "overall timeline".
      * Optional filters: matter type, matter status, and createdAt window.
+     *
+     * NOTE: the temporal filters use COALESCE instead of "(:from IS NULL OR ...)" —
+     * Postgres cannot infer the JDBC type of a null LocalDateTime parameter bound in a
+     * bare "? IS NULL" position ("could not determine data type of parameter").
      */
     @Query("SELECT e FROM MatterTimelineEvent e JOIN Matter m ON m.id = e.matterId " +
            "WHERE e.firmId = :firmId " +
            "AND (:matterType IS NULL OR m.matterType = :matterType) " +
            "AND (:status IS NULL OR m.status = :status) " +
-           "AND (:from IS NULL OR e.createdAt >= :from) " +
-           "AND (:to IS NULL OR e.createdAt <= :to)")
+           "AND e.createdAt >= COALESCE(:from, e.createdAt) " +
+           "AND e.createdAt <= COALESCE(:to, e.createdAt)")
     Page<MatterTimelineEvent> findFirmEvents(@Param("firmId") UUID firmId,
                                              @Param("matterType") MatterType matterType,
                                              @Param("status") MatterStatus status,
