@@ -1,0 +1,79 @@
+[
+  {
+    "id": 1,
+    "code": "NP-P1",
+    "nameEn": "Koshi Province",
+    "nameNp": "कोशी प्रदेश",
+    "capitalEn": "Biratnagar",
+    "capitalNp": "विराटनगर",
+    "areaKm2": 25905,
+    "population2021": 4961412,
+    "districtCount": 14
+  },
+  {
+    "id": 2,
+    "code": "NP-P2",
+    "nameEn": "Madhesh Province",
+    "nameNp": "मधेश प्रदेश",
+    "capitalEn": "Janakpur",
+    "capitalNp": "जनकपुर",
+    "areaKm2": 9661,
+    "population2021": 6114600,
+    "districtCount": 8
+  },
+  {
+    "id": 3,
+    "code": "NP-P3",
+    "nameEn": "Bagmati Province",
+    "nameNp": "बागमती प्रदेश",
+    "capitalEn": "Hetauda",
+    "capitalNp": "हेटौडा",
+    "areaKm2": 20300,
+    "population2021": 6116866,
+    "districtCount": 13
+  },
+  {
+    "id": 4,
+    "code": "NP-P4",
+    "nameEn": "Gandaki Province",
+    "nameNp": "गण्डकी प्रदेश",
+    "capitalEn": "Pokhara",
+    "capitalNp": "पोखरा",
+    "areaKm2": 21504,
+    "population2021": 2466427,
+    "districtCount": 11
+  },
+  {
+    "id": 5,
+    "code": "NP-P5",
+    "nameEn": "Lumbini Province",
+    "nameNp": "लुम्बिनी प्रदेश",
+    "capitalEn": "Deukhuri",
+    "capitalNp": "देउखुरी",
+    "areaKm2": 22288,
+    "population2021": 5122078,
+    "districtCount": 12
+  },
+  {
+    "id": 6,
+    "code": "NP-P6",
+    "nameEn": "Karnali Province",
+    "nameNp": "कर्णाली प्रदेश",
+    "capitalEn": "Birendranagar",
+    "capitalNp": "वीरेन्द्रनगर",
+    "areaKm2": 27984,
+    "population2021": 1688412,
+    "districtCount": 10
+  },
+  {
+    "id": 7,
+    "code": "NP-P7",
+    "nameEn": "Sudurpashchim Province",
+    "nameNp": "सुदूरपश्चिम प्रदेश",
+    "capitalEn": "Godawari",
+    "capitalNp": "गोदावरी",
+    "areaKm2": 19999.28,
+    "population2021": 2694783,
+    "districtCount": 9
+  }
+]

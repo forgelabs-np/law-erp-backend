@@ -1,0 +1,78 @@
+id,code,nameEn,nameNp,headquarters,provinceId,provinceCode,provinceNameEn,areaKm2,population2021
+1,BHOJPUR,"Bhojpur","भोजपुर","Bhojpur",1,NP-P1,"Koshi Province",1507,157923
+2,DHANKUTA,"Dhankuta","धनकुटा","Dhankuta",1,NP-P1,"Koshi Province",891,150599
+3,ILAM,"Ilam","इलाम","Ilam",1,NP-P1,"Koshi Province",1703,279534
+4,JHAPA,"Jhapa","झापा","Chandragadhi (Bhadrapur)",1,NP-P1,"Koshi Province",1606,998054
+5,KHOTANG,"Khotang","खोटाङ","Diktel",1,NP-P1,"Koshi Province",1591,175298
+6,MORANG,"Morang","मोरङ","Biratnagar",1,NP-P1,"Koshi Province",1855,1148156
+7,OKHALDHUNGA,"Okhaldhunga","ओखलढुङ्गा","Okhaldhunga (Siddhicharan)",1,NP-P1,"Koshi Province",1074,139552
+8,PANCHTHAR,"Panchthar","पाँचथर","Phidim",1,NP-P1,"Koshi Province",1241,172400
+9,SANKHUWASABHA,"Sankhuwasabha","सङ्खुवासभा","Khandbari",1,NP-P1,"Koshi Province",3480,158041
+10,SOLUKHUMBU,"Solukhumbu","सोलुखुम्बु","Salleri (Solududhkunda)",1,NP-P1,"Koshi Province",3312,104851
+11,SUNSARI,"Sunsari","सुनसरी","Inaruwa",1,NP-P1,"Koshi Province",1257,926962
+12,TAPLEJUNG,"Taplejung","ताप्लेजुङ","Phungling",1,NP-P1,"Koshi Province",3646,120590
+13,TEHRATHUM,"Tehrathum","तेह्रथुम","Myanglung",1,NP-P1,"Koshi Province",679,88731
+14,UDAYAPUR,"Udayapur","उदयपुर","Gaighat (Triyuga)",1,NP-P1,"Koshi Province",2063,340721
+15,PARSA,"Parsa","पर्सा","Birgunj",2,NP-P2,"Madhesh Province",1353,654471
+16,BARA,"Bara","बारा","Kalaiya",2,NP-P2,"Madhesh Province",1190,763137
+17,RAUTAHAT,"Rautahat","रौतहट","Gaur",2,NP-P2,"Madhesh Province",1126,813573
+18,SARLAHI,"Sarlahi","सर्लाही","Malangwa",2,NP-P2,"Madhesh Province",1259,862470
+19,DHANUSHA,"Dhanusha","धनुषा","Janakpur",2,NP-P2,"Madhesh Province",1180,867747
+20,SIRAHA,"Siraha","सिराहा","Siraha",2,NP-P2,"Madhesh Province",1188,739953
+21,MAHOTTARI,"Mahottari","महोत्तरी","Jaleshwar",2,NP-P2,"Madhesh Province",1002,706994
+22,SAPTARI,"Saptari","सप्तरी","Rajbiraj",2,NP-P2,"Madhesh Province",1363,706255
+23,SINDHULI,"Sindhuli","सिन्धुली","Sindhulimadhi (Kamalamai)",3,NP-P3,"Bagmati Province",2491,300026
+24,RAMECHHAP,"Ramechhap","रामेछाप","Manthali",3,NP-P3,"Bagmati Province",1546,170302
+25,DOLAKHA,"Dolakha","दोलखा","Charikot (Bhimeshwar)",3,NP-P3,"Bagmati Province",2191,172767
+26,BHAKTAPUR,"Bhaktapur","भक्तपुर","Bhaktapur",3,NP-P3,"Bagmati Province",119,432132
+27,DHADING,"Dhading","धादिङ","Dhading Besi (Nilkantha)",3,NP-P3,"Bagmati Province",1926,325710
+28,KATHMANDU,"Kathmandu","काठमाडौँ","Kathmandu",3,NP-P3,"Bagmati Province",395,2041587
+29,KAVREPALANCHOK,"Kavrepalanchok","काभ्रेपलाञ्चोक","Dhulikhel",3,NP-P3,"Bagmati Province",1396,364039
+30,LALITPUR,"Lalitpur","ललितपुर","Lalitpur",3,NP-P3,"Bagmati Province",385,551667
+31,NUWAKOT,"Nuwakot","नुवाकोट","Bidur",3,NP-P3,"Bagmati Province",1121,263391
+32,RASUWA,"Rasuwa","रसुवा","Dhunche",3,NP-P3,"Bagmati Province",1544,46689
+33,SINDHUPALCHOK,"Sindhupalchok","सिन्धुपाल्चोक","Chautara",3,NP-P3,"Bagmati Province",2542,262624
+34,CHITWAN,"Chitwan","चितवन","Bharatpur",3,NP-P3,"Bagmati Province",2218,719859
+35,MAKWANPUR,"Makwanpur","मकवानपुर","Hetauda",3,NP-P3,"Bagmati Province",2426,466073
+36,BAGLUNG,"Baglung","बागलुङ","Baglung",4,NP-P4,"Gandaki Province",1784,249211
+37,GORKHA,"Gorkha","गोरखा","Gorkha",4,NP-P4,"Gandaki Province",3610,251027
+38,KASKI,"Kaski","कास्की","Pokhara",4,NP-P4,"Gandaki Province",2017,600051
+39,LAMJUNG,"Lamjung","लमजुङ","Besisahar",4,NP-P4,"Gandaki Province",1692,155852
+40,MANANG,"Manang","मनाङ","Chame",4,NP-P4,"Gandaki Province",2246,5658
+41,MUSTANG,"Mustang","मुस्ताङ","Jomsom",4,NP-P4,"Gandaki Province",3573,14452
+42,MYAGDI,"Myagdi","म्याग्दी","Beni",4,NP-P4,"Gandaki Province",2297,107033
+43,NAWALPUR,"Nawalpur","नवलपुर","Kawasoti",4,NP-P4,"Gandaki Province",1370,378079
+44,PARBAT,"Parbat","पर्वत","Kusma",4,NP-P4,"Gandaki Province",494,130887
+45,SYANGJA,"Syangja","स्याङ्गजा","Putalibazar",4,NP-P4,"Gandaki Province",1164,253024
+46,TANAHUN,"Tanahun","तनहुँ","Damauli (Vyas)",4,NP-P4,"Gandaki Province",1546,321153
+47,KAPILVASTU,"Kapilvastu","कपिलवस्तु","Taulihawa",5,NP-P5,"Lumbini Province",1738,682961
+48,PARASI,"Parasi","परासी","Parasi (Ramgram)",5,NP-P5,"Lumbini Province",792,386868
+49,RUPANDEHI,"Rupandehi","रुपन्देही","Bhairahawa (Siddharthanagar)",5,NP-P5,"Lumbini Province",1360,1121957
+50,ARGHAKHANCHI,"Arghakhanchi","अर्घाखाँची","Sandhikharka",5,NP-P5,"Lumbini Province",1193,177086
+51,GULMI,"Gulmi","गुल्मी","Tamghas (Resunga)",5,NP-P5,"Lumbini Province",1149,246494
+52,PALPA,"Palpa","पाल्पा","Tansen",5,NP-P5,"Lumbini Province",1373,245027
+53,DANG,"Dang","दाङ","Ghorahi",5,NP-P5,"Lumbini Province",2955,674993
+54,PYUTHAN,"Pyuthan","प्युठान","Pyuthan",5,NP-P5,"Lumbini Province",1309,232019
+55,ROLPA,"Rolpa","रोल्पा","Liwang (Rolpa)",5,NP-P5,"Lumbini Province",1879,224506
+56,RUKUM_EAST,"Eastern Rukum","पूर्वी रूकुम","Rukumkot",5,NP-P5,"Lumbini Province",1161,56786
+57,BANKE,"Banke","बाँके","Nepalgunj",5,NP-P5,"Lumbini Province",2337,603194
+58,BARDIYA,"Bardiya","बर्दिया","Gulariya",5,NP-P5,"Lumbini Province",2025,459900
+59,RUKUM_WEST,"Western Rukum","पश्चिमी रूकुम","Musikot",6,NP-P6,"Karnali Province",1716,166740
+60,SALYAN,"Salyan","सल्यान","Salyan (Sharada)",6,NP-P6,"Karnali Province",1462,238515
+61,DOLPA,"Dolpa","डोल्पा","Dunai (Thuli Bheri)",6,NP-P6,"Karnali Province",7889,42774
+62,HUMLA,"Humla","हुम्ला","Simikot",6,NP-P6,"Karnali Province",5655,55394
+63,JUMLA,"Jumla","जुम्ला","Jumla (Chandannath)",6,NP-P6,"Karnali Province",2531,118349
+64,KALIKOT,"Kalikot","कालिकोट","Manma (Khandachakra)",6,NP-P6,"Karnali Province",1741,145292
+65,MUGU,"Mugu","मुगु","Gamgadhi (Chhyanath Rara)",6,NP-P6,"Karnali Province",3535,64549
+66,SURKHET,"Surkhet","सुर्खेत","Birendranagar",6,NP-P6,"Karnali Province",2451,415126
+67,DAILEKH,"Dailekh","दैलेख","Dailekh (Narayan)",6,NP-P6,"Karnali Province",1502,252313
+68,JAJARKOT,"Jajarkot","जाजरकोट","Jajarkot Khalanga (Bheri)",6,NP-P6,"Karnali Province",2230,189360
+69,KAILALI,"Kailali","कैलाली","Dhangadhi",7,NP-P7,"Sudurpashchim Province",3235,904666
+70,ACHHAM,"Achham","अछाम","Mangalsen",7,NP-P7,"Sudurpashchim Province",1680,228852
+71,DOTI,"Doti","डोटी","Dipayal Silgadhi",7,NP-P7,"Sudurpashchim Province",2025,204831
+72,BAJHANG,"Bajhang","बझाङ","Chainpur (Jayaprithvi)",7,NP-P7,"Sudurpashchim Province",3422,189085
+73,BAJURA,"Bajura","बाजुरा","Martadi (Badimalika)",7,NP-P7,"Sudurpashchim Province",2188,138523
+74,KANCHANPUR,"Kanchanpur","कञ्चनपुर","Mahendranagar (Bheemdatta)",7,NP-P7,"Sudurpashchim Province",1610,513757
+75,DADELDHURA,"Dadeldhura","डडेलधुरा","Dadeldhura (Amargadhi)",7,NP-P7,"Sudurpashchim Province",1538,139602
+76,BAITADI,"Baitadi","बैतडी","Baitadi Khalanga (Dasharathchand)",7,NP-P7,"Sudurpashchim Province",1519,242157
+77,DARCHULA,"Darchula","दार्चुला","Darchula Khalanga (Mahakali)",7,NP-P7,"Sudurpashchim Province",2322,133310
