@@ -57,6 +57,10 @@ class DailyTableParserTest {
         Set<String> judges = records.stream().map(HearingRecord::getJudgeName).collect(Collectors.toSet());
         assertTrue(judges.size() > 5, "expected many judges, got " + judges.size());
         assertTrue(judges.contains("माननीय जिल्ला न्यायाधीश श्री अशोककुमार बस्नेत"));
+
+        // Bench numbers are present on rows and vary across the page.
+        Set<String> benches = records.stream().map(HearingRecord::getBench).collect(Collectors.toSet());
+        assertTrue(benches.contains("1") && benches.contains("2"), "benches 1 and 2 expected, got " + benches);
     }
 
     @Test
@@ -70,6 +74,8 @@ class DailyTableParserTest {
         assertEquals("माननीय जिल्ला न्यायाधीश श्री अशोककुमार बस्नेत", first.getJudgeName());
         assertTrue(first.getPlaintiff().startsWith("रुपेश पराजुली"));
         assertNull(first.getOrderType(), "this row has an empty outcome cell");
+        assertEquals("1", first.getBench(), "bench (इजलाश) must be extracted");
+        assertEquals("क", first.getSerialNo(), "serial (क्र. स.) must be extracted");
 
         // A row with a स्थगित (adjourned) outcome.
         HearingRecord st = records.stream()

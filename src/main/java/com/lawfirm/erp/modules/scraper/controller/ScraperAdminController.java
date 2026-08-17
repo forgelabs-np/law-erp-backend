@@ -21,7 +21,7 @@ import java.nio.file.Path;
 @RequestMapping("/api/v1/scraper/admin")
 @RequiredArgsConstructor
 @Tag(name = "Scraper Admin", description = "Manual scrape triggers and exports for backfill/testing")
-@PreAuthorize("hasAnyRole('FIRM_ADMIN')")
+@PreAuthorize("hasAnyRole('SUPER_ADMIN')")
 public class ScraperAdminController {
 
     private final ScraperService scraperService;
@@ -29,11 +29,18 @@ public class ScraperAdminController {
     private final ResponseHandler responseHandler;
 
     @PostMapping("/scrape")
-    @Operation(summary = "Trigger a daily scrape for one court",
-            description = "Hits the court site live for a single court. date is BS yyyy-mm-dd (defaults to today).")
+    @Operation(summary = "Trigger a scrape for one court",
+            description = "Hits the court site live for a single court. mode=daily (default) or weekly; "
+                    + "date is BS yyyy-mm-dd and only applies to mode=daily (defaults to today).")
     public ResponseEntity<ApiResponse<ScrapeRunResult>> scrape(
             @RequestParam Integer courtId,
-            @RequestParam(required = false) String date) {
+            @RequestParam(required = false) String date,
+            @RequestParam(defaultValue = "daily") String mode) {
+        if ("weekly".equalsIgnoreCase(mode)) {
+            ScrapeRunResult result = scraperService.runWeeklyScrapeForCourt(courtId);
+            return responseHandler.ok(result,
+                    result.isSuccess() ? "Weekly scrape completed" : "Scrape failed — see result for details");
+        }
         String dateBs = date != null ? date
                 : com.lawfirm.erp.modules.scraper.converter.NepaliDateUtil.adToBs(java.time.LocalDate.now());
         ScrapeRunResult result = scraperService.runDailyScrapeForCourt(courtId, dateBs);

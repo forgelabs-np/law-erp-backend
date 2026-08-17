@@ -7,10 +7,9 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 @Repository
-public interface WeeklyHearingRepository extends JpaRepository<WeeklyHearing, UUID> {
+public interface WeeklyHearingRepository extends JpaRepository<WeeklyHearing, Long> {
 
     Optional<WeeklyHearing> findByCourtIdAndCaseNoInternalAndHearingDateBs(
             Integer courtId, String caseNoInternal, String hearingDateBs);
@@ -19,6 +18,8 @@ public interface WeeklyHearingRepository extends JpaRepository<WeeklyHearing, UU
             Integer courtId, String caseNoInternal, LocalDate from);
 
     List<WeeklyHearing> findByCaseNoInternalOrderByHearingDateAdDesc(String caseNoInternal);
+
+    List<WeeklyHearing> findByCaseNoInternalAndHearingDateBs(String caseNoInternal, String hearingDateBs);
 
     List<WeeklyHearing> findByHearingDateAdBetweenOrderByCourtIdAscHearingDateAdAsc(
             LocalDate from, LocalDate to);

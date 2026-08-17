@@ -3,6 +3,7 @@ package com.lawfirm.erp.modules.scraper.service;
 import com.lawfirm.erp.modules.scraper.client.CourtSiteClient;
 import com.lawfirm.erp.modules.scraper.config.ScraperProperties;
 import com.lawfirm.erp.modules.scraper.converter.NepaliDateUtil;
+import com.lawfirm.erp.modules.scraper.dto.CaseDetailResponse;
 import com.lawfirm.erp.modules.scraper.dto.HearingRecord;
 import com.lawfirm.erp.modules.scraper.dto.HearingStatusResponse;
 import com.lawfirm.erp.modules.scraper.dto.ScrapeRunResult;
@@ -10,6 +11,7 @@ import com.lawfirm.erp.modules.scraper.entity.Court;
 import com.lawfirm.erp.modules.scraper.entity.DailyHearing;
 import com.lawfirm.erp.modules.scraper.entity.WeeklyHearing;
 import com.lawfirm.erp.modules.scraper.enums.HearingSource;
+import com.lawfirm.erp.modules.scraper.parser.CaseDetailParser;
 import com.lawfirm.erp.modules.scraper.parser.DailyTableParser;
 import com.lawfirm.erp.modules.scraper.parser.WeeklyTableParser;
 import com.lawfirm.erp.modules.scraper.repository.ClientCaseRepository;
@@ -30,14 +32,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-/**
- * Orchestrates a scrape run:
- *   1. Derive the court list from client cases (never hardcoded).
- *   2. Fan out one scrape per court concurrently (bounded executor ≈ asyncio.gather).
- *   3. Parse + upsert each court's rows.
- *   4. Match client cases against ingested hearings and notify.
- * Failure and 0-row results are alerted (logged) per court.
- */
+// Orchestrates a scrape run: derive active courts from client cases, fan out one scrape per
+// court on a bounded executor, upsert, then match + notify. Failures and 0-row results are
+// logged per court and never stop the rest of the run.
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -46,6 +43,7 @@ public class ScraperService {
     private final CourtSiteClient courtSiteClient;
     private final DailyTableParser dailyParser;
     private final WeeklyTableParser weeklyParser;
+    private final CaseDetailParser caseDetailParser;
     private final HearingIngestionService ingestionService;
     private final HearingMatchingService matchingService;
     private final ClientCaseRepository clientCaseRepository;
@@ -71,12 +69,10 @@ public class ScraperService {
         this.executor = executor;
     }
 
-    /** Courts with at least one active client case — the dynamic, minimal scrape list. */
     public List<Integer> getActiveCourts() {
         return clientCaseRepository.findDistinctActiveCourtIds();
     }
 
-    /** Full daily run: every active court, today's list. Returns per-court results. */
     public List<ScrapeRunResult> runDailyScrape(String dateBs) {
         if (!properties.isEnabled()) {
             log.info("Scraper disabled — skipping daily run");
@@ -96,7 +92,6 @@ public class ScraperService {
         return results;
     }
 
-    /** Full weekly run: every active court, the Sun–Fri window. Returns per-court results. */
     public List<ScrapeRunResult> runWeeklyScrape() {
         if (!properties.isEnabled()) {
             log.info("Scraper disabled — skipping weekly run");
@@ -115,17 +110,27 @@ public class ScraperService {
         return results;
     }
 
-    /** Manual single-court trigger (admin endpoint / backfill). */
     public ScrapeRunResult runDailyScrapeForCourt(Integer courtId, String dateBs) {
         LocalDate dateAd = NepaliDateUtil.bsToAd(dateBs);
         return scrapeCourtDaily(courtId, dateBs, dateAd);
+    }
+
+    public ScrapeRunResult runWeeklyScrapeForCourt(Integer courtId) {
+        return scrapeCourtWeekly(courtId);
+    }
+
+    // Live lookup against the court site — the case_process_detail feed holds the case's full
+    // history regardless of what we've scraped. Takes the display form (081-C1-7530).
+    public CaseDetailResponse getCaseDetailLive(Integer courtId, String caseNoBs) {
+        String html = courtSiteClient.scrapeCaseDetail(courtId, caseNoBs);
+        return caseDetailParser.parse(html, courtId);
     }
 
     private ScrapeRunResult scrapeCourtDaily(Integer courtId, String dateBs, LocalDate dateAd) {
         try {
             String html = courtSiteClient.scrapeDaily(courtId, dateBs);
             List<HearingRecord> records = dailyParser.parse(html, courtId);
-            // The daily page is "today's list" — stamp the requested date on every row.
+            // The daily page is the requested date's list — stamp it on every row.
             for (HearingRecord r : records) {
                 r.setHearingDateBs(dateBs);
                 r.setHearingDateAd(dateAd);
@@ -162,19 +167,34 @@ public class ScraperService {
         }
     }
 
-    /** Read-only hearing status for a case number — our DB only, no live scrape. */
     public HearingStatusResponse getHearingStatus(String caseNoInternal) {
+        return getHearingStatus(caseNoInternal, null);
+    }
+
+    // DB only, no live scrape; optional BS date filters to one day's list.
+    public HearingStatusResponse getHearingStatus(String caseNoInternal, String dateBs) {
         LocalDate today = LocalDate.now();
         List<HearingStatusResponse.Hearing> upcoming = new ArrayList<>();
         List<HearingStatusResponse.Hearing> history = new ArrayList<>();
 
-        for (DailyHearing h : dailyHearingRepository.findByCaseNoInternalOrderByHearingDateAdDesc(caseNoInternal)) {
-            addHearing(upcoming, history, today, h.getHearingDateAd(), h.getHearingDateBs(),
-                    h.getJudgeName(), h.getSubject(), h.getOrderType(), HearingSource.DAILY);
-        }
-        for (WeeklyHearing h : weeklyHearingRepository.findByCaseNoInternalOrderByHearingDateAdDesc(caseNoInternal)) {
-            addHearing(upcoming, history, today, h.getHearingDateAd(), h.getHearingDateBs(),
-                    h.getJudgeName(), h.getSubject(), h.getOrderType(), HearingSource.WEEKLY);
+        if (dateBs != null && !dateBs.isBlank()) {
+            for (DailyHearing h : dailyHearingRepository.findByCaseNoInternalAndHearingDateBs(caseNoInternal, dateBs)) {
+                addHearing(upcoming, history, today, h.getHearingDateAd(), h.getHearingDateBs(),
+                        h.getJudgeName(), h.getSubject(), h.getOrderType(), HearingSource.DAILY);
+            }
+            for (WeeklyHearing h : weeklyHearingRepository.findByCaseNoInternalAndHearingDateBs(caseNoInternal, dateBs)) {
+                addHearing(upcoming, history, today, h.getHearingDateAd(), h.getHearingDateBs(),
+                        h.getJudgeName(), h.getSubject(), h.getOrderType(), HearingSource.WEEKLY);
+            }
+        } else {
+            for (DailyHearing h : dailyHearingRepository.findByCaseNoInternalOrderByHearingDateAdDesc(caseNoInternal)) {
+                addHearing(upcoming, history, today, h.getHearingDateAd(), h.getHearingDateBs(),
+                        h.getJudgeName(), h.getSubject(), h.getOrderType(), HearingSource.DAILY);
+            }
+            for (WeeklyHearing h : weeklyHearingRepository.findByCaseNoInternalOrderByHearingDateAdDesc(caseNoInternal)) {
+                addHearing(upcoming, history, today, h.getHearingDateAd(), h.getHearingDateBs(),
+                        h.getJudgeName(), h.getSubject(), h.getOrderType(), HearingSource.WEEKLY);
+            }
         }
         upcoming.sort(Comparator.comparing(HearingStatusResponse.Hearing::getHearingDateAd,
                 Comparator.nullsLast(Comparator.naturalOrder())));

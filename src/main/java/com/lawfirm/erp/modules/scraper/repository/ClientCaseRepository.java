@@ -7,10 +7,9 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 @Repository
-public interface ClientCaseRepository extends JpaRepository<ClientCase, UUID> {
+public interface ClientCaseRepository extends JpaRepository<ClientCase, Long> {
 
     /** The courts we actually have active client cases in — the dynamic scrape list. */
     @Query("SELECT DISTINCT cc.courtId FROM ClientCase cc " +

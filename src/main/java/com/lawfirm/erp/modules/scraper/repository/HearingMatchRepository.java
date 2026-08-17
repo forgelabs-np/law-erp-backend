@@ -6,15 +6,14 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.UUID;
 
 @Repository
-public interface HearingMatchRepository extends JpaRepository<HearingMatch, UUID> {
+public interface HearingMatchRepository extends JpaRepository<HearingMatch, Long> {
 
     boolean existsByClientCaseIdAndCourtIdAndHearingDateBs(
-            UUID clientCaseId, Integer courtId, String hearingDateBs);
+            Long clientCaseId, Integer courtId, String hearingDateBs);
 
-    List<HearingMatch> findByClientCaseIdOrderByHearingDateAdDesc(UUID clientCaseId);
+    List<HearingMatch> findByClientCaseIdOrderByHearingDateAdDesc(Long clientCaseId);
 
     List<HearingMatch> findByNotifiedFalse();
 

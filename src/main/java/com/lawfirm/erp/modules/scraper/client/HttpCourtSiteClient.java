@@ -17,18 +17,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Optional;
 
-/**
- * Session-based HTTP client for the court site.
- *
- * Flow (verified against the live site):
- *   1. GET the endpoint first — the server issues PHPSESSID + court_session + F5 cookies.
- *   2. POST the form (daily: todays_date + pesi_date + submit; weekly: pesi_bar + submit).
- *   3. The POST answers 302 with a flash message (e.g. "causelist not published"); follow
- *      the Location with a GET to receive the final page.
- *
- * The site binds the session's USER_AGENT, so a consistent browser-like UA is sent.
- * A politeness delay is applied before each request.
- */
+// Session flow (verified live): GET issues PHPSESSID + court_session + F5 cookies, POST answers
+// 302 with a flash message, then follow Location with GET. Session binds the UA, so send a
+// fixed browser-like one; polite delay between requests.
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -52,6 +43,13 @@ public class HttpCourtSiteClient implements CourtSiteClient {
     public String scrapeWeekly(int courtId) {
         String path = "/weekly_dainik/pesi/weekly_pesi/" + courtId;
         String form = "pesi_bar=" + enc("all") + "&submit=" + enc("खोज्नु होस्");
+        return postForm(path, form);
+    }
+
+    @Override
+    public String scrapeCaseDetail(int courtId, String caseNoBs) {
+        String path = "/weekly_dainik/pesi/case_process_detail/" + courtId;
+        String form = "mudda_no=" + enc(caseNoBs) + "&submit=" + enc("खोज्नु होस्");
         return postForm(path, form);
     }
 

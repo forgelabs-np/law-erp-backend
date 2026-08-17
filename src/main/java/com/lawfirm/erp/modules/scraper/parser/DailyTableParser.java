@@ -13,18 +13,13 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Daily cause list (real structure):
- *   1. a summary table of per-judge counts — skipped;
- *   2. a "मिति <date> को दैनिक पेशि सुची" title — carries the hearing date;
- *   3. per-bench sections: a plain header table with "इजलाश N" and the judge name in a
- *      td.judge cell, followed by a `record_display` detail table (10 columns) whose last
- *      column (आदेश फैसलाको किसिम) is the order/outcome.
- */
+// Daily page: skip the judge-count summary table; read the date from the "मिति <date> को"
+// title; per-bench sections = header table (इजलाश N + judge in td.judge) + record_display
+// table whose last column (आदेश फैसलाको किसिम) is the outcome.
 @Component
 public class DailyTableParser {
 
-    private static final Pattern JUDGE_HEADER = Pattern.compile("इजलाश\\s*\\d+");
+    private static final Pattern BENCH_HEADER = Pattern.compile("इजलाश\\s*(\\d+)");
     private static final Pattern PAGE_DATE = Pattern.compile("मिति\\s*([\\d०-९-]+)\\s*को");
 
     public List<HearingRecord> parse(String html, Integer courtId) {
@@ -32,6 +27,7 @@ public class DailyTableParser {
         if (html == null || html.isBlank()) return records;
 
         String currentJudge = null;
+        String currentBench = null;
         String pageDateBs = null;
         for (Element el : Jsoup.parse(html).getAllElements()) {
             if (el.tagName().equals("span")) {
@@ -44,36 +40,46 @@ public class DailyTableParser {
             if (!el.tagName().equals("table")) continue;
 
             if (!el.hasClass("record_display")) {
-                String judge = extractJudge(el);
-                if (judge != null) {
-                    currentJudge = judge;
+                String[] header = extractBenchHeader(el);
+                if (header != null) {
+                    currentBench = header[0];
+                    currentJudge = header[1];
                 }
                 continue;
             }
             if (isDetailTable(el)) {
-                parseRows(el, courtId, currentJudge, pageDateBs, records);
+                parseRows(el, courtId, currentJudge, currentBench, pageDateBs, records);
             }
         }
         return records;
     }
 
-    /** Judge name from a bench header table: prefer the td.judge cell, else the इजलाश N cell. */
-    private String extractJudge(Element table) {
+    /**
+     * From a bench header table: [bench ("1"), judge name]. Prefers the td.judge cell for the
+     * judge; the इजलाश N cell is the fallback for both when no judge cell exists.
+     */
+    private String[] extractBenchHeader(Element table) {
+        String bench = null;
+        String judge = null;
         Element judgeCell = table.selectFirst("td.judge");
         if (judgeCell != null) {
-            String name = judgeCell.text().replace('\u00A0', ' ').trim();
-            if (!name.isEmpty()) return name;
+            judge = clean(judgeCell.text());
         }
         for (Element td : table.select("td")) {
-            if (JUDGE_HEADER.matcher(td.text()).find()) {
-                String t = td.text().replace('\u00A0', ' ').trim();
-                if (!t.isEmpty()) return t;
+            Matcher m = BENCH_HEADER.matcher(td.text());
+            if (m.find()) {
+                bench = m.group(1);
+                if (judge == null) {
+                    judge = clean(td.text());
+                }
+                break;
             }
         }
-        return null;
+        if (bench == null && judge == null) return null;
+        return new String[]{bench, judge};
     }
 
-    private void parseRows(Element table, Integer courtId, String judge, String dateBs,
+    private void parseRows(Element table, Integer courtId, String judge, String bench, String dateBs,
                            List<HearingRecord> out) {
         for (Element tr : table.select("tr")) {
             if (tr.select("th").size() > 0) continue; // header row
@@ -81,6 +87,7 @@ public class DailyTableParser {
             if (cells.size() < 6) continue; // footer (इजलास अधिकृत) rows are single cells
 
             String[] nums = CaseNumberExtractor.split(cells.get(1).text());
+            String serialNo = clean(DevanagariConverter.toArabic(cells.get(0).text()));
             String subject = clean(cells.get(3).text());
             String plaintiff = clean(cells.get(4).text());
             String defendant = clean(cells.get(5).text());
@@ -92,6 +99,8 @@ public class DailyTableParser {
                     .hearingDateAd(dateBs != null ? NepaliDateUtil.bsToAd(dateBs) : null)
                     .caseNoBs(nums[0])
                     .caseNoInternal(nums[1])
+                    .bench(bench)
+                    .serialNo(serialNo)
                     .judgeName(judge)
                     .subject(subject)
                     .plaintiff(plaintiff)

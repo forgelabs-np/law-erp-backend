@@ -61,6 +61,8 @@ class WeeklyTableParserTest {
         assertEquals("अंशचलन", first.getSubject());
         assertEquals("सुजा अधिकारी भन्ने सोभा अधिकारीको संरक्षक सुनिता अधिकारी", first.getPlaintiff());
         assertEquals("सुरज अधिकारी", first.getDefendant());
+        assertEquals("1", first.getSerialNo(), "serial (क्र. स.) must be extracted");
+        assertNull(first.getBench(), "weekly feed has no benches");
     }
 
     @Test

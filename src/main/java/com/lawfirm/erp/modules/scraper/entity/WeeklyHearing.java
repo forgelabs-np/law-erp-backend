@@ -1,6 +1,5 @@
 package com.lawfirm.erp.modules.scraper.entity;
 
-import com.lawfirm.erp.entity.base.ActiveAuditableEntity;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -9,11 +8,8 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 
-/**
- * A normalized row from the weekly cause list (per-date tables, combined party column,
- * no outcome column). Same normalized schema as DailyHearing so both feeds flow through
- * the same matcher.
- */
+// One row of the weekly cause list (per-date tables, no benches/outcome). Same normalized
+// schema as DailyHearing so both feeds flow through the same matcher.
 @Entity
 @Table(name = "scraper_weekly_hearings", uniqueConstraints = {
         @UniqueConstraint(name = "uq_scraper_weekly_key",
@@ -23,7 +19,11 @@ import java.time.LocalDate;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class WeeklyHearing extends ActiveAuditableEntity {
+public class WeeklyHearing {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @Column(nullable = false)
     private Integer courtId;
@@ -39,6 +39,13 @@ public class WeeklyHearing extends ActiveAuditableEntity {
     @Column(length = 60, nullable = false)
     private String caseNoInternal;
 
+    // Weekly feed has no per-bench grouping — always null.
+    @Column(length = 10)
+    private String bench;
+
+    @Column(length = 10)
+    private String serialNo;
+
     @Column(length = 120)
     private String judgeName;
 
@@ -51,7 +58,9 @@ public class WeeklyHearing extends ActiveAuditableEntity {
     @Column(length = 500)
     private String defendant;
 
-    /** Weekly feed has no outcome column — always null here, kept for schema uniformity. */
+    // Weekly feed has no outcome column — always null, kept for schema uniformity.
     @Column(length = 200)
     private String orderType;
+
+    private LocalDate scrapedDate;
 }

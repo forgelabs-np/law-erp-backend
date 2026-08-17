@@ -9,11 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 
-/**
- * Scheduled entry points. Cron expressions are overridable via
- * `scraper.daily-cron` / `scraper.weekly-cron` (defaults: 10:05 weekdays, 10:15 Mondays).
- * Both no-op when `scraper.enabled=false`.
- */
+// Scheduled entry points; crons overridable via scraper.*-cron. All no-op when scraper.enabled=false.
 @Slf4j
 @Component
 @RequiredArgsConstructor

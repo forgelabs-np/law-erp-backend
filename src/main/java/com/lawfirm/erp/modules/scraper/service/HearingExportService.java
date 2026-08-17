@@ -25,15 +25,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Weekly offline snapshot: exports the previous Monday–Sunday window from the raw
- * daily + weekly tables into a single UTF-8 CSV (BOM-prefixed so Excel renders the
- * Devanagari text correctly; all fields quoted). The `matched` column marks rows that
- * appear in hearing_matches (i.e. one of our registered cases).
- *
- * The DB remains the system of record — this file is a convenience copy, regenerated
- * idempotently (same file name per week, temp-file + atomic rename).
- */
+// Weekly offline snapshot of the previous Mon–Sun window (DB stays the system of record).
+// UTF-8 BOM so Excel renders Devanagari; quoted fields; temp-file + atomic rename so a
+// failed run never leaves a half-written file.
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -41,14 +35,13 @@ public class HearingExportService {
 
     private static final DateTimeFormatter FILE_DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final String HEADER = "courtId,hearingDateBs,hearingDateAd,caseNoBs,caseNoInternal,"
-            + "judgeName,subject,plaintiff,defendant,orderType,source,matched";
+            + "bench,serialNo,judgeName,subject,plaintiff,defendant,orderType,source,matched";
 
     private final DailyHearingRepository dailyRepository;
     private final WeeklyHearingRepository weeklyRepository;
     private final HearingMatchRepository matchRepository;
     private final ScraperProperties properties;
 
-    /** Exports the previous completed Monday–Sunday week. */
     public Path exportLastWeek() {
         LocalDate monday = previousMonday(LocalDate.now());
         return export(monday, monday.plusDays(6));
@@ -59,14 +52,16 @@ public class HearingExportService {
         for (DailyHearing h : dailyRepository
                 .findByHearingDateAdBetweenOrderByCourtIdAscHearingDateAdAsc(monday, sunday)) {
             rows.add(Row.of(h.getCourtId(), h.getHearingDateBs(), h.getHearingDateAd(),
-                    h.getCaseNoBs(), h.getCaseNoInternal(), h.getJudgeName(), h.getSubject(),
-                    h.getPlaintiff(), h.getDefendant(), h.getOrderType(), "DAILY"));
+                    h.getCaseNoBs(), h.getCaseNoInternal(), h.getBench(), h.getSerialNo(),
+                    h.getJudgeName(), h.getSubject(), h.getPlaintiff(), h.getDefendant(),
+                    h.getOrderType(), "DAILY"));
         }
         for (WeeklyHearing h : weeklyRepository
                 .findByHearingDateAdBetweenOrderByCourtIdAscHearingDateAdAsc(monday, sunday)) {
             rows.add(Row.of(h.getCourtId(), h.getHearingDateBs(), h.getHearingDateAd(),
-                    h.getCaseNoBs(), h.getCaseNoInternal(), h.getJudgeName(), h.getSubject(),
-                    h.getPlaintiff(), h.getDefendant(), h.getOrderType(), "WEEKLY"));
+                    h.getCaseNoBs(), h.getCaseNoInternal(), h.getBench(), h.getSerialNo(),
+                    h.getJudgeName(), h.getSubject(), h.getPlaintiff(), h.getDefendant(),
+                    h.getOrderType(), "WEEKLY"));
         }
         rows.sort(Comparator.comparing(Row::courtId)
                 .thenComparing(Row::hearingDateAd, Comparator.nullsLast(Comparator.naturalOrder()))
@@ -86,6 +81,8 @@ public class HearingExportService {
                     .append(quote(r.hearingDateAd() != null ? r.hearingDateAd().toString() : "")).append(',')
                     .append(quote(r.caseNoBs())).append(',')
                     .append(quote(r.caseNoInternal())).append(',')
+                    .append(quote(r.bench())).append(',')
+                    .append(quote(r.serialNo())).append(',')
                     .append(quote(r.judgeName())).append(',')
                     .append(quote(r.subject())).append(',')
                     .append(quote(r.plaintiff())).append(',')
@@ -127,13 +124,14 @@ public class HearingExportService {
     }
 
     private record Row(Integer courtId, String hearingDateBs, LocalDate hearingDateAd,
-                       String caseNoBs, String caseNoInternal, String judgeName, String subject,
-                       String plaintiff, String defendant, String orderType, String source) {
+                       String caseNoBs, String caseNoInternal, String bench, String serialNo,
+                       String judgeName, String subject, String plaintiff, String defendant,
+                       String orderType, String source) {
         static Row of(Integer courtId, String dateBs, LocalDate dateAd, String caseNoBs,
-                      String internal, String judge, String subject, String plaintiff,
-                      String defendant, String orderType, String source) {
-            return new Row(courtId, dateBs, dateAd, caseNoBs, internal, judge, subject,
-                    plaintiff, defendant, orderType, source);
+                      String internal, String bench, String serialNo, String judge, String subject,
+                      String plaintiff, String defendant, String orderType, String source) {
+            return new Row(courtId, dateBs, dateAd, caseNoBs, internal, bench, serialNo, judge,
+                    subject, plaintiff, defendant, orderType, source);
         }
     }
 }

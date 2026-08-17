@@ -84,10 +84,15 @@ expected behaviour, not an error.</div>
   <tr><th>Table</th><th>Contents</th><th>Key / notes</th></tr>
   <tr><td><code>scraper_courts</code></td><td>Court registry (39 = Kathmandu, 63 = Gulmi)</td><td><code>courtId</code> PK, matches the site URL segment</td></tr>
   <tr><td><code>scraper_client_cases</code></td><td><b>Your cases</b>: courtId + caseNoInternal + status</td><td>ACTIVE rows drive which courts are scraped</td></tr>
-  <tr><td><code>scraper_daily_hearings</code></td><td>Normalized daily rows (has outcome column)</td><td>unique (courtId, caseNoInternal, hearingDateBs) → idempotent upsert</td></tr>
-  <tr><td><code>scraper_weekly_hearings</code></td><td>Normalized weekly rows (no outcome column)</td><td>same unique key</td></tr>
-  <tr><td><code>scraper_hearing_matches</code></td><td><b>The app's working set</b>: your case × hearing, with full detail</td><td>unique per (clientCaseId, courtId, hearingDateBs); notified flag</td></tr>
+  <tr><td><code>scraper_daily_hearings</code></td><td>Normalized daily rows (has outcome column)</td><td>numeric id · bench (इजलाश) + serial (क्र. स.) · unique (courtId, caseNoInternal, hearingDateBs) → idempotent upsert</td></tr>
+  <tr><td><code>scraper_weekly_hearings</code></td><td>Normalized weekly rows (no outcome column, no benches)</td><td>numeric id · serial (क्र. स.), bench always null · same unique key</td></tr>
+  <tr><td><code>scraper_hearing_matches</code></td><td><b>The app's working set</b>: your case × hearing, with full detail</td><td>numeric id · unique per (clientCaseId, courtId, hearingDateBs); notified flag</td></tr>
 </table>
+<p>All scraper tables use <b>numeric auto-increment ids</b> (no UUID) and carry a
+<code>scrapedDate</code> column (when the row was pulled) — no audit columns. Rows store the
+<b>bench (इजलाश)</b> the case was listed before (daily feed only) and its <b>serial (क्र. स.)</b>
+within the bench/date group (Devanagari digits normalized to Arabic; letters like <code>क</code>
+stay as-is).</p>
 
 <h3>Matching</h3>
 <p>After every ingest, <code>HearingMatchingService</code> joins <code>client_cases × hearings</code> on
@@ -102,7 +107,71 @@ created before the detail columns existed are backfilled automatically on startu
 <code>notified</code> only after a successful dispatch, so a broken channel never loses a match and
 never blocks matching.</p>
 
-<h2>4. Weekly CSV export (new)</h2>
+<h2>4. Services — what each class does</h2>
+<p>The module is a small pipeline of focused classes. Each has one job and a narrow seam, so the
+scrape path, the matching path and the notification path stay independent.</p>
+
+<h3>HTTP client — <code>CourtSiteClient</code> (interface) / <code>HttpCourtSiteClient</code></h3>
+<ul>
+  <li>Only class that talks to <code>supremecourt.gov.np</code>. One method per feed: <code>scrapeDaily(courtId, dateBs)</code> and <code>scrapeWeekly(courtId)</code>.</li>
+  <li>Session flow per call: GET (cookie handshake) → POST form → follow the 302 <code>Location</code> with a GET. Sends a fixed browser User-Agent (the session binds it) and respects <code>request-delay-ms</code> between requests.</li>
+  <li>Interface first so a Selenium/Playwright impl can be swapped in later without touching the rest of the pipeline.</li>
+</ul>
+
+<h3>Converters</h3>
+<ul>
+  <li><code>DevanagariConverter</code> — ०-९ ↔ 0-9, used on every parsed field and on the outgoing <code>pesi_date</code> form value.</li>
+  <li><code>NepaliDateUtil</code> — BS ↔ AD with the 2000–2090 month-length table (epoch BS 2000-01-01 = AD 1943-04-13). Verified against 2081-01-01 → 2024-04-13 and 2083-05-01 → 2026-08-17.</li>
+  <li><code>CaseNumberExtractor</code> — pulls both forms from one cell: the court-visible <code>caseNoBs</code> (<code>081-C4-3827</code>) and the parenthesized court-scoped <code>caseNoInternal</code> (<code>39-081-32030</code>).</li>
+</ul>
+
+<h3>Parsers — one per table structure, same output</h3>
+<ul>
+  <li><code>DailyTableParser</code> — real daily page: skips the judge-count summary table, reads the page date from the <code>मिति … को</code> title, walks per-bench sections (bench header table → <code>record_display</code> detail table). Extracts bench (इजलाश number) + judge (from <code>td.judge</code>), serial (क्र. स.), both case numbers, parties, subject and the आदेश फैसलाको किसिम outcome column.</li>
+  <li><code>WeeklyTableParser</code> — real weekly page: grouped by <code>पेशी मिति :&lt;date&gt;</code>, flat 9-column table per date, combined <code>पक्ष ‖ विपक्ष</code> split on <code>‖</code>/<code>||</code>. No bench, no judge, no outcome — those fields stay null.</li>
+  <li>Both emit the same normalized <code>HearingRecord</code> DTO, so ingestion never knows which feed a row came from.</li>
+</ul>
+
+<h3>Orchestrator — <code>ScraperService</code></h3>
+<ul>
+  <li><code>getActiveCourts()</code> — distinct <code>courtId</code>s from <code>client_cases</code> where status = ACTIVE (dynamic, never hardcoded).</li>
+  <li><code>runDailyScrape(dateBs)</code> / <code>runWeeklyScrape()</code> — fan out one scrape per active court on a bounded executor (<code>max-concurrent-courts</code>), collect per-court results, then <code>matchAndNotify()</code>. Alerts (<code>[scraper-alert]</code>) on failure or 0 rows; a failing court never stops the others or the matching step.</li>
+  <li><code>runDailyScrapeForCourt(courtId, dateBs)</code> / <code>runWeeklyScrapeForCourt(courtId)</code> — single-court entry points behind the admin endpoint.</li>
+  <li><code>getHearingStatus(caseNoInternal, dateBs)</code> — read path: our DB only, no live scrape. Optional BS date filters to that day's list.</li>
+</ul>
+
+<h3>Ingestion — <code>HearingIngestionService</code></h3>
+<ul>
+  <li>Idempotent upsert keyed on (courtId, caseNoInternal, hearingDateBs) — re-scraping the same day replaces in place, never duplicates.</li>
+  <li>Copies the full normalized row (bench, serial, judge, parties, subject, order type) and stamps <code>scrapedDate</code>.</li>
+</ul>
+
+<h3>Matching — <code>HearingMatchingService</code></h3>
+<ul>
+  <li>Joins active client cases × ingested hearings on (courtId, caseNoInternal) for today/upcoming; inserts new rows into <code>hearing_matches</code>, copying the full row so matches are self-contained.</li>
+  <li>Deduped on (clientCaseId, courtId, hearingDateBs); <code>backfillLegacyMatches()</code> enriches pre-detail rows at startup.</li>
+  <li>Independent of the scrape — reads whatever is already ingested, so a slow/failed scrape never blocks matching.</li>
+</ul>
+
+<h3>Notification — <code>NotificationDispatcher</code> (interface) / <code>LogNotificationDispatcher</code></h3>
+<ul>
+  <li>The only seam for email/SMS/webhook. Currently logs (<code>[scraper-notify:log] …</code>); swap in a real impl behind the interface.</li>
+  <li>At-least-once: a match is marked <code>notified</code> only after a successful dispatch — a broken channel retries instead of losing the alert, and never blocks matching.</li>
+</ul>
+
+<h3>Export — <code>HearingExportService</code></h3>
+<ul>
+  <li>Reads the previous Mon–Sun window from both raw tables, merges into one sorted row set, writes a BOM-prefixed quoted CSV via temp-file + atomic rename (idempotent, never half-written).</li>
+  <li>Reads the DB only — a failed scrape still exports whatever exists.</li>
+</ul>
+
+<h3>Scheduling — <code>ScraperScheduler</code> + <code>ScraperProperties</code></h3>
+<ul>
+  <li>Three <code>@Scheduled</code> jobs (daily 10:05 Mon–Fri, weekly 10:15 Mon, export 10:30 Mon), all gated by <code>scraper.enabled</code> and overridable via the cron properties.</li>
+  <li><code>ScraperProperties</code> binds the whole <code>scraper.*</code> block (see §9 Configuration).</li>
+</ul>
+
+<h2>5. Weekly CSV export (new)</h2>
 <p>Every Monday <b>10:30</b> (<code>scraper.export-cron</code>), <code>HearingExportService</code> writes the
 previous <b>Monday–Sunday</b> window (daily + weekly rows merged, same normalized schema) to:</p>
 <pre>export-dir/week-&lt;monday&gt;_&lt;sunday&gt;.csv     e.g. ./exports/week-2026-08-10_2026-08-16.csv</pre>
@@ -110,18 +179,20 @@ previous <b>Monday–Sunday</b> window (daily + weekly rows merged, same normali
   <li><b>UTF-8 with BOM</b> — Excel renders the Devanagari text correctly (a CSV without it opens as mojibake).</li>
   <li><b>All fields quoted</b> — party names and subjects contain commas, so quoting is mandatory.</li>
   <li><b><code>matched</code> column</b> — <code>Y</code>/<code>N</code> flag marking rows that appear in <code>hearing_matches</code> (i.e. one of our cases).</li>
-  <li>Columns: <code>courtId, hearingDateBs, hearingDateAd, caseNoBs, caseNoInternal, judgeName, subject, plaintiff, defendant, orderType, source, matched</code>, sorted by court then date.</li>
+  <li>Columns: <code>courtId, hearingDateBs, hearingDateAd, caseNoBs, caseNoInternal, bench, serialNo, judgeName, subject, plaintiff, defendant, orderType, source, matched</code>, sorted by court then date.</li>
   <li><b>Idempotent</b> — same file name per week; writes to a <code>.tmp</code> then atomically renames (never a half-written file). Re-running overwrites.</li>
   <li>The export is <b>independent of the scrape</b> — it only reads the DB, so a failed scrape still exports whatever exists.</li>
 </ul>
 <p>Configurable: <code>scraper.export-dir</code> (default <code>./exports</code>). Directory is created if missing.</p>
 
-<h2>5. Endpoints (frontend-facing)</h2>
+<h2>6. Endpoints (frontend-facing)</h2>
 
 <div class="endpoint">
-  <div class="head"><span class="method">GET</span><code>/api/v1/cases/{caseNo}/hearing-status</code><span class="tag">DB only · no live scrape</span></div>
+  <div class="head"><span class="method">GET</span><code>/api/v1/cases/{caseNo}/hearing-status?date=</code><span class="tag">DB only · no live scrape</span></div>
   <div class="body">
     <p>Upcoming + past hearings for a court-scoped internal case number (e.g. <code>39-081-32030</code>).
+    Optional <code>date</code> (BS yyyy-mm-dd) filters to that one day's list — e.g. after scraping
+the date via the admin endpoint, this answers "was this case on the list that day?".
     Roles: FIRM_ADMIN / ADVOCATE / PARALEGAL.</p>
 <pre>GET /api/v1/cases/39-081-32030/hearing-status
 
@@ -139,17 +210,62 @@ previous <b>Monday–Sunday</b> window (daily + weekly rows merged, same normali
     ],
     "history": [ ]
   }
-}</pre>
+}
+
+# one specific day (BS):
+GET /api/v1/cases/39-081-32030/hearing-status?date=2083-04-29</pre>
   </div>
 </div>
 
 <div class="endpoint">
-  <div class="head"><span class="method">POST</span><code>/api/v1/scraper/admin/scrape?courtId=&amp;date=</code><span class="tag">FIRM_ADMIN only</span></div>
+  <div class="head"><span class="method">GET</span><code>/api/v1/cases/live-detail?courtId=&amp;caseNo=</code><span class="tag">live · hits the court site</span></div>
   <div class="body">
-    <p>Manual single-court daily scrape for backfill/testing. <code>date</code> is BS yyyy-mm-dd (defaults to today).</p>
-<pre>POST /api/v1/scraper/admin/scrape?courtId=39&amp;date=2083-05-01
+    <p>Live case detail from the site's <code>case_process_detail</code> feed — the case's full history,
+    no prior scrape needed. <code>caseNo</code> is the <b>display form</b> (e.g. <code>081-C1-7530</code>),
+    not the internal form. Roles: FIRM_ADMIN / ADVOCATE / PARALEGAL.</p>
+<pre>GET /api/v1/cases/live-detail?courtId=39&amp;caseNo=081-C1-7530
 
-{ "success": true, "data": { "courtId": 39, "success": true, "rows": 672, "error": null } }</pre>
+{
+  "success": true,
+  "data": {
+    "found": true,
+    "courtId": 39,
+    "caseNoBs": "081-C1-7530",
+    "caseNoInternal": "39-081-39885",
+    "registrationDate": "2082-02-19",
+    "caseType": "बैङकिङ्ग कसूर",
+    "subject": "बैङकिङ्ग कसूर (चेक अनादर)",
+    "division": "मुद्दा फाटँ 1 (सरल)",
+    "status": "चालु",
+    "verdictDate": null,
+    "verdictJudge": null,
+    "hearingCount": "7",
+    "plaintiffs": [ { "name": "रुपेश पराजुली", "address": "..." } ],
+    "defendants": [ { "name": "शान्ति कुमारी खत्री", "address": "..." } ],
+    "tarekhe": [ { "dateBs": "2083-05-01", "type": "पूरक" } ],
+    "hearings": [
+      { "dateBs": "2083-05-01", "type": "पूरक", "division": "मुद्दा फाटँ 1 (सरल)",
+        "judge": "श्री अशोककुमार बस्नेत", "order": "आदेश &gt;&gt; बयान/बकपत्र नभएको" }
+    ]
+  }
+}
+
+# not found on the site → found: false, empty lists
+GET /api/v1/cases/live-detail?courtId=39&amp;caseNo=99-X1-99999</pre>
+  </div>
+</div>
+
+<div class="endpoint">
+  <div class="head"><span class="method">POST</span><code>/api/v1/scraper/admin/scrape?courtId=&amp;mode=&amp;date=</code><span class="tag">FIRM_ADMIN only</span></div>
+  <div class="body">
+    <p>Manual single-court scrape for backfill/testing. <code>mode</code> is <code>daily</code> (default)
+or <code>weekly</code>. <code>date</code> is BS yyyy-mm-dd and applies to <code>mode=daily</code> only (defaults to today);
+the weekly feed always returns its Sun–Fri window.</p>
+<pre>POST /api/v1/scraper/admin/scrape?courtId=39&amp;mode=daily&amp;date=2083-05-01
+→ { "success": true, "data": { "courtId": 39, "success": true, "rows": 703, "error": null } }
+
+POST /api/v1/scraper/admin/scrape?courtId=39&amp;mode=weekly
+→ { "success": true, "data": { "courtId": 39, "success": true, "rows": 1721, "error": null } }</pre>
   </div>
 </div>
 
@@ -163,7 +279,7 @@ previous <b>Monday–Sunday</b> window (daily + weekly rows merged, same normali
   </div>
 </div>
 
-<h2>6. Scheduled jobs</h2>
+<h2>7. Scheduled jobs</h2>
 <table>
   <tr><th>Job</th><th>Cron (overridable)</th><th>What it does</th></tr>
   <tr><td>Daily scrape</td><td><code>scraper.daily-cron</code> — 10:05 Mon–Fri</td><td>Every active court → today's daily list → upsert → match + notify</td></tr>
@@ -173,7 +289,7 @@ previous <b>Monday–Sunday</b> window (daily + weekly rows merged, same normali
 <p>All jobs no-op when <code>scraper.enabled=false</code>. Also note: adding <code>@EnableScheduling</code> activated
 the case-management module's lapsed-appeal watcher, which was previously dormant.</p>
 
-<h2>7. Frontend consumption guide</h2>
+<h2>8. Frontend consumption guide</h2>
 <ol>
   <li><b>Register a case</b> — add a row to <code>scraper_client_cases</code> (courtId + caseNoInternal + ACTIVE).
       No CRUD endpoint exists yet; until one is added, register via DB/seed. Once registered, the court is scraped automatically.</li>
@@ -186,7 +302,7 @@ the case-management module's lapsed-appeal watcher, which was previously dormant
       because of the BOM). Not needed by the frontend unless you add a download link to <code>POST /api/v1/scraper/admin/export</code>.</li>
 </ol>
 
-<h2>8. Configuration</h2>
+<h2>9. Configuration</h2>
 <pre>scraper:
   enabled: true            # master switch
   base-url: https://supremecourt.gov.np

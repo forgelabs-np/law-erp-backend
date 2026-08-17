@@ -1,10 +1,6 @@
 package com.lawfirm.erp.modules.scraper.converter;
 
-/**
- * Devanagari digit conversion. All numerals on the court site are Devanagari
- * (०१२३४५६७८९); the DB stores Arabic digits. Non-digit characters are left untouched,
- * so case numbers like "०८१-C४-३८२७" convert to "081-C4-3827" in one pass.
- */
+// Court-site numerals are Devanagari; the DB stores Arabic digits. Non-digits pass through.
 public final class DevanagariConverter {
 
     private static final char[] DEVANAGARI = {'०', '१', '२', '३', '४', '५', '६', '७', '८', '९'};

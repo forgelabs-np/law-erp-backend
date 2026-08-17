@@ -9,11 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-/**
- * Court registry. courtId matches the site's URL path segment
- * (e.g. 39 = Kathmandu District, 63 = Gulmi District) and is the single natural id.
- * Standalone entity (not auditable) because courtId — not a generated UUID — is the key.
- */
+// courtId matches the site's URL path segment (39 = Kathmandu) and is the natural id.
 @Entity
 @Table(name = "scraper_courts")
 @Getter

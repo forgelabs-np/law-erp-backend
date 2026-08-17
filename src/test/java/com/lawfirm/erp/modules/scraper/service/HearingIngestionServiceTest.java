@@ -18,7 +18,6 @@ import org.mockito.quality.Strictness;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -45,6 +44,8 @@ class HearingIngestionServiceTest {
                 .hearingDateAd(LocalDate.of(2026, 8, 17))
                 .caseNoBs("081-C4-3827")
                 .caseNoInternal("39-081-32030")
+                .bench("1")
+                .serialNo("क")
                 .judgeName("इजलाश 1")
                 .subject("लेनदेन")
                 .plaintiff("राम")
@@ -71,13 +72,16 @@ class HearingIngestionServiceTest {
         assertEquals("39-081-32030", saved.getCaseNoInternal());
         assertEquals("इजलाश 1", saved.getJudgeName());
         assertEquals("स्थगित", saved.getOrderType());
+        assertEquals("1", saved.getBench());
+        assertEquals("क", saved.getSerialNo());
+        assertEquals(LocalDate.now(), saved.getScrapedDate());
     }
 
     @Test
     @DisplayName("Re-upserting the same key updates in place — no duplicate row")
     void updatesInPlace() {
         DailyHearing existing = new DailyHearing();
-        existing.setId(UUID.randomUUID());
+        existing.setId(77L);
         existing.setCourtId(39);
         existing.setCaseNoInternal("39-081-32030");
         existing.setHearingDateBs("2083-05-01");

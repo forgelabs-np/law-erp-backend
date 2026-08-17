@@ -1,0 +1,126 @@
+{
+  "info": {
+    "name": "Scraper Module (Supreme Court Hearing Tracking)",
+    "_postman_id": "3f9b2a71-5d4c-4e8a-9c6f-2b8a7d3f0e91",
+    "description": "LAW ERP — Scraper module: Nepal Supreme Court cause-list ingestion, matching, and weekly CSV export.\n\nBase path: /api/v1. Server port: 6969 (dev). Auth: Bearer JWT; scrape/export are FIRM_ADMIN only, hearing-status is FIRM_ADMIN / ADVOCATE / PARALEGAL.\n\nWorkflow:\n1. Login → copy accessToken into the {{token}} variable.\n2. (Optional, backfill) POST /scraper/admin/scrape?courtId=39&mode=daily&date=<BS> — pulls that date's WHOLE court list into scraper_daily_hearings.\n   mode=weekly pulls the Sun-Fri window into scraper_weekly_hearings.\n3. GET /cases/{caseNoInternal}/hearing-status — read from OUR DB (no live scrape). Optional ?date= (BS) filters to one day.\n4. POST /scraper/admin/export — regenerates the previous Mon-Sun week's CSV snapshot.\n\nConventions: responses are { \"success\", \"responseCode\", \"message\", \"data\" }. Date params are Bikram Sambat yyyy-mm-dd (e.g. 2083-05-01). caseNo is the court-scoped INTERNAL form (39-081-32030), not the display form (081-C4-3827).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:6969" },
+    { "key": "token", "value": "" },
+    { "key": "caseNo", "value": "39-081-32030" },
+    { "key": "courtId", "value": "39" },
+    { "key": "dateBs", "value": "2083-05-01" }
+  ],
+  "item": [
+    {
+      "name": "00 · Auth",
+      "item": [
+        {
+          "name": "Login (internal user)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"lawFirmCode\": \"APEX-LAW\",\n    \"username\": \"your-username\",\n    \"password\": \"your-password\"\n  }\n}"
+            },
+            "description": "Login as an internal user. If MFA is enabled the response is status=MFA_REQUIRED with an mfaToken — call /auth/mfa/validate with { data: { mfaToken, totpCode } } to finish. On SUCCESS, copy data.accessToken into the {{token}} collection variable (the curl examples use it as Bearer)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 · Case hearing status (read path)",
+      "item": [
+        {
+          "name": "All hearings for a case (upcoming + history)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cases/{{caseNo}}/hearing-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "cases", "{{caseNo}}", "hearing-status"]
+            },
+            "description": "DB only — never scrapes live. Returns upcoming + history for the court-scoped internal case number, with judge, subject, outcome and source."
+          }
+        },
+        {
+          "name": "Hearing status filtered to one BS date",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cases/{{caseNo}}/hearing-status?date={{dateBs}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "cases", "{{caseNo}}", "hearing-status"],
+              "query": [{ "key": "date", "value": "{{dateBs}}" }]
+            },
+            "description": "Same read path, filtered to one BS date — answers 'was this case on the list on that day?'. The date must have been scraped first (admin scrape) for data to exist."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 · Admin scrape (live site)",
+      "item": [
+        {
+          "name": "Scrape daily list for a court + date",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scraper/admin/scrape?courtId={{courtId}}&mode=daily&date={{dateBs}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "scraper", "admin", "scrape"],
+              "query": [
+                { "key": "courtId", "value": "{{courtId}}" },
+                { "key": "mode", "value": "daily" },
+                { "key": "date", "value": "{{dateBs}}" }
+              ]
+            },
+            "description": "FIRM_ADMIN. Hits the court site live for one court on one BS date and stores the ENTIRE list into scraper_daily_hearings (upsert). rows=0 means the site has no list for that date (not published yet)."
+          }
+        },
+        {
+          "name": "Scrape weekly list for a court",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scraper/admin/scrape?courtId={{courtId}}&mode=weekly",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "scraper", "admin", "scrape"],
+              "query": [
+                { "key": "courtId", "value": "{{courtId}}" },
+                { "key": "mode", "value": "weekly" }
+              ]
+            },
+            "description": "FIRM_ADMIN. Pulls the Sun-Fri weekly window for the court into scraper_weekly_hearings. date is ignored in weekly mode."
+          }
+        },
+        {
+          "name": "Regenerate weekly CSV export",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scraper/admin/export",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "scraper", "admin", "export"]
+            },
+            "description": "FIRM_ADMIN. Writes (overwrites) the previous completed Mon-Sun window to <export-dir>/week-<monday>_<sunday>.csv and returns the absolute file path."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -21,7 +21,6 @@ import org.mockito.quality.Strictness;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -39,7 +38,7 @@ class HearingMatchingServiceTest {
 
     private HearingMatchingService service;
 
-    private final UUID caseId = UUID.randomUUID();
+    private final Long caseId = 1001L;
 
     @BeforeEach
     void setUp() {
@@ -64,6 +63,8 @@ class HearingMatchingServiceTest {
         h.setCaseNoInternal("39-081-32030");
         h.setHearingDateBs("2083-05-02");
         h.setHearingDateAd(LocalDate.of(2026, 8, 18));
+        h.setBench("1");
+        h.setSerialNo("क");
         h.setJudgeName("इजलाश 1");
         h.setOrderType("स्थगित");
         h.setCaseNoBs("081-C4-3827");
@@ -101,6 +102,8 @@ class HearingMatchingServiceTest {
         assertEquals("2083-05-02", saved.getHearingDateBs());
         assertEquals("इजलाश 1", saved.getJudgeName());
         // Matches carry the full row — no join back needed to display them.
+        assertEquals("1", saved.getBench());
+        assertEquals("क", saved.getSerialNo());
         assertEquals("081-C4-3827", saved.getCaseNoBs());
         assertEquals("लेनदेन", saved.getSubject());
         assertEquals("राम", saved.getPlaintiff());
@@ -131,7 +134,7 @@ class HearingMatchingServiceTest {
     @DisplayName("Backfill fills legacy matches that predate the detail columns")
     void backfillLegacyMatches() {
         HearingMatch legacy = new HearingMatch();
-        legacy.setId(UUID.randomUUID());
+        legacy.setId(900L);
         legacy.setClientCaseId(caseId);
         legacy.setCourtId(39);
         legacy.setCaseNoInternal("39-081-32030");

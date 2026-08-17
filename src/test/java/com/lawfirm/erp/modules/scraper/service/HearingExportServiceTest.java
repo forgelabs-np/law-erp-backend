@@ -25,7 +25,6 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -63,6 +62,8 @@ class HearingExportServiceTest {
         h.setPlaintiff("रुपेश पराजुली को जाहेरीले नेपाल सरकार");
         h.setDefendant("शान्ति कुमारी खत्री");
         h.setOrderType("स्थगित");
+        h.setBench("1");
+        h.setSerialNo("क");
         return h;
     }
 
@@ -105,7 +106,7 @@ class HearingExportServiceTest {
         // header + 2 daily rows + 1 weekly row
         assertEquals(4, lines.length);
         assertEquals("courtId,hearingDateBs,hearingDateAd,caseNoBs,caseNoInternal,"
-                + "judgeName,subject,plaintiff,defendant,orderType,source,matched",
+                + "bench,serialNo,judgeName,subject,plaintiff,defendant,orderType,source,matched",
                 lines[0].replace("\uFEFF", ""));
 
         String matchedLine = java.util.Arrays.stream(lines)
@@ -117,6 +118,7 @@ class HearingExportServiceTest {
 
         assertTrue(matchedLine.startsWith("\"39\",\"2083-05-01\",\"2026-08-12\",\"081-C1-7530\","),
                 "row must be quoted: " + matchedLine);
+        assertTrue(matchedLine.contains(",\"1\",\"क\",\"माननीय"), "bench and serial must be exported: " + matchedLine);
         assertTrue(matchedLine.contains("\"लेनदेन, चेक अनादर\""), "commas inside fields must be quoted");
         assertTrue(matchedLine.endsWith(",\"DAILY\",\"Y\""), "matched row flagged Y");
         assertTrue(unmatchedLine.endsWith(",\"DAILY\",\"N\""), "unmatched row flagged N");

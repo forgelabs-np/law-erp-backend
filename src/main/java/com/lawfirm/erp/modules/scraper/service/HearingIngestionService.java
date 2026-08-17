@@ -10,12 +10,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 
-/**
- * Idempotent ingestion: upserts keyed on (courtId, caseNoInternal, hearingDateBs), so
- * re-scraping the same day replaces rows instead of duplicating them.
- */
+// Idempotent upsert keyed on (courtId, caseNoInternal, hearingDateBs) — re-scraping a day
+// replaces rows instead of duplicating.
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -68,11 +67,14 @@ public class HearingIngestionService {
         h.setHearingDateAd(r.getHearingDateAd());
         h.setCaseNoBs(r.getCaseNoBs());
         h.setCaseNoInternal(r.getCaseNoInternal());
+        h.setBench(r.getBench());
+        h.setSerialNo(r.getSerialNo());
         h.setJudgeName(r.getJudgeName());
         h.setSubject(r.getSubject());
         h.setPlaintiff(r.getPlaintiff());
         h.setDefendant(r.getDefendant());
         h.setOrderType(r.getOrderType());
+        h.setScrapedDate(LocalDate.now());
     }
 
     private void apply(WeeklyHearing h, HearingRecord r) {
@@ -81,10 +83,13 @@ public class HearingIngestionService {
         h.setHearingDateAd(r.getHearingDateAd());
         h.setCaseNoBs(r.getCaseNoBs());
         h.setCaseNoInternal(r.getCaseNoInternal());
+        h.setBench(r.getBench());
+        h.setSerialNo(r.getSerialNo());
         h.setJudgeName(r.getJudgeName());
         h.setSubject(r.getSubject());
         h.setPlaintiff(r.getPlaintiff());
         h.setDefendant(r.getDefendant());
         h.setOrderType(r.getOrderType());
+        h.setScrapedDate(LocalDate.now());
     }
 }

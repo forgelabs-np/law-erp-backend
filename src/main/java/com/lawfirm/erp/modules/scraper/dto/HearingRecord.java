@@ -7,10 +7,7 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 
-/**
- * The normalized scrape output — both table parsers (daily and weekly) produce this same
- * shape, and ingestion upserts from it.
- */
+// Normalized scrape output produced by both table parsers and upserted by ingestion.
 @Getter
 @Setter
 @Builder
@@ -29,6 +26,12 @@ public class HearingRecord {
 
     /** Court-scoped internal id, e.g. "39-081-32030". */
     private String caseNoInternal;
+
+    /** इजलाश — bench number, daily feed only (weekly has no benches). */
+    private String bench;
+
+    /** क्र. स. — row serial within the bench/date group. */
+    private String serialNo;
 
     private String judgeName;
 

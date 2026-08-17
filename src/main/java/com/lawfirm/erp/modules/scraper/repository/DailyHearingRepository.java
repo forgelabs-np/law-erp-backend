@@ -7,15 +7,16 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 @Repository
-public interface DailyHearingRepository extends JpaRepository<DailyHearing, UUID> {
+public interface DailyHearingRepository extends JpaRepository<DailyHearing, Long> {
 
     Optional<DailyHearing> findByCourtIdAndCaseNoInternalAndHearingDateBs(
             Integer courtId, String caseNoInternal, String hearingDateBs);
 
     List<DailyHearing> findByCaseNoInternalOrderByHearingDateAdDesc(String caseNoInternal);
+
+    List<DailyHearing> findByCaseNoInternalAndHearingDateBs(String caseNoInternal, String hearingDateBs);
 
     List<DailyHearing> findByCourtIdAndCaseNoInternalAndHearingDateAdGreaterThanEqualOrderByHearingDateAdAsc(
             Integer courtId, String caseNoInternal, LocalDate from);

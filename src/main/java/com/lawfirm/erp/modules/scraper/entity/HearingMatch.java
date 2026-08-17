@@ -1,6 +1,5 @@
 package com.lawfirm.erp.modules.scraper.entity;
 
-import com.lawfirm.erp.entity.base.ActiveAuditableEntity;
 import com.lawfirm.erp.modules.scraper.enums.HearingSource;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -10,12 +9,9 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.UUID;
 
-/**
- * A matched hearing: client case × ingested hearing row, joined on (courtId, caseNoInternal).
- * The notification worker consumes new rows here; `notified` dedupes against repeats.
- */
+// A matched hearing: client case × ingested row, joined on (courtId, caseNoInternal).
+// `notified` dedupes against repeats for the notification worker.
 @Entity
 @Table(name = "scraper_hearing_matches", indexes = {
         @Index(name = "idx_shm_client_date", columnList = "clientCaseId, hearingDateAd")
@@ -24,15 +20,18 @@ import java.util.UUID;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class HearingMatch extends ActiveAuditableEntity {
+public class HearingMatch {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @Column(nullable = false)
-    private UUID clientCaseId;
+    private Long clientCaseId;
 
     @Column(nullable = false)
     private Integer courtId;
 
-    /** Court-scoped internal id, e.g. "39-081-32030" — kept on the match so it is self-contained. */
     @Column(length = 60, nullable = false)
     private String caseNoInternal;
 
@@ -41,13 +40,19 @@ public class HearingMatch extends ActiveAuditableEntity {
 
     private LocalDate hearingDateAd;
 
+    @Column(length = 10)
+    private String bench;
+
+    @Column(length = 10)
+    private String serialNo;
+
     @Column(length = 120)
     private String judgeName;
 
     @Column(length = 200)
     private String orderType;
 
-    /** Full row copy from the source feed — matches are self-contained, no join back needed. */
+    // Full row copy from the source feed so matches need no join back.
     @Column(length = 60)
     private String caseNoBs;
 

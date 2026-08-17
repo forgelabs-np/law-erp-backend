@@ -4,18 +4,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.regex.Pattern;
 
-/**
- * Bikram Sambat (BS) date conversion.
- *
- * The court site reports all hearing dates in BS (e.g. "२०८३-०५-०१"). We store the BS
- * string verbatim and also convert to AD for filtering/sorting. The month-length table
- * below (2000–2090 BS) is the standard Nepali calendar table used by the
- * nepali-date-converter ecosystem; epoch: BS 2000-01-01 = AD 1943-04-13, so
- * AD = 1943-04-13 + daysPassed.
- *
- * Verified against known references: BS 2081-01-01 = AD 2024-04-13,
- * BS 2083-05-01 = AD 2026-08-17.
- */
+// Standard BS calendar table, epoch BS 2000-01-01 = AD 1943-04-13 (AD = epoch + daysPassed).
+// Verified: BS 2081-01-01 = AD 2024-04-13, BS 2083-05-01 = AD 2026-08-17.
 public final class NepaliDateUtil {
 
     /** Baisakh..Chaitra day counts per BS year, index 0 = 2000 BS. */
@@ -120,7 +110,6 @@ public final class NepaliDateUtil {
     private NepaliDateUtil() {
     }
 
-    /** "2083-05-01" (Arabic digits) -> AD LocalDate, or null when unparseable/out of range. */
     public static LocalDate bsToAd(String bsDate) {
         if (bsDate == null) return null;
         var m = BS_DATE.matcher(bsDate.trim());
@@ -146,7 +135,6 @@ public final class NepaliDateUtil {
         return EPOCH.plusDays(daysPassed);
     }
 
-    /** AD LocalDate -> "yyyy-mm-dd" BS string (Arabic digits), or null when out of range. */
     public static String adToBs(LocalDate ad) {
         if (ad == null) return null;
         long days = EPOCH.until(ad, java.time.temporal.ChronoUnit.DAYS);

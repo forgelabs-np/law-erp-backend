@@ -20,14 +20,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * Matches client cases against ingested hearings (join on courtId + caseNoInternal) and
- * pushes new matches to the notification channel.
- *
- * The match step is independent of the scrape step: it reads whatever is already ingested,
- * so a failed/slow scrape never blocks matching against previously-ingested data. A match
- * is keyed on (clientCaseId, courtId, hearingDateBs), so re-runs skip already-matched rows.
- */
+// Joins client cases against ingested hearings on (courtId, caseNoInternal) and pushes new
+// matches to the notification channel. Independent of the scrape — it reads whatever is
+// already ingested, so a slow/failed scrape never blocks matching. Matches are keyed on
+// (clientCaseId, courtId, hearingDateBs); re-runs skip existing rows.
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -73,18 +69,21 @@ public class HearingMatchingService {
 
     private boolean createMatch(ClientCase cc, DailyHearing h, HearingSource source) {
         return createMatch(cc, h.getCourtId(), h.getCaseNoInternal(), h.getHearingDateBs(),
-                h.getHearingDateAd(), h.getJudgeName(), h.getOrderType(), h.getSubject(),
-                h.getPlaintiff(), h.getDefendant(), h.getCaseNoBs(), source);
+                h.getHearingDateAd(), h.getBench(), h.getSerialNo(), h.getJudgeName(),
+                h.getOrderType(), h.getSubject(), h.getPlaintiff(), h.getDefendant(),
+                h.getCaseNoBs(), source);
     }
 
     private boolean createMatch(ClientCase cc, WeeklyHearing h, HearingSource source) {
         return createMatch(cc, h.getCourtId(), h.getCaseNoInternal(), h.getHearingDateBs(),
-                h.getHearingDateAd(), h.getJudgeName(), h.getOrderType(), h.getSubject(),
-                h.getPlaintiff(), h.getDefendant(), h.getCaseNoBs(), source);
+                h.getHearingDateAd(), h.getBench(), h.getSerialNo(), h.getJudgeName(),
+                h.getOrderType(), h.getSubject(), h.getPlaintiff(), h.getDefendant(),
+                h.getCaseNoBs(), source);
     }
 
     private boolean createMatch(ClientCase cc, Integer courtId, String caseNoInternal,
                                 String dateBs, LocalDate dateAd,
+                                String bench, String serialNo,
                                 String judgeName, String orderType, String subject,
                                 String plaintiff, String defendant, String caseNoBs,
                                 HearingSource source) {
@@ -98,6 +97,8 @@ public class HearingMatchingService {
         m.setCaseNoInternal(caseNoInternal);
         m.setHearingDateBs(dateBs);
         m.setHearingDateAd(dateAd);
+        m.setBench(bench);
+        m.setSerialNo(serialNo);
         m.setJudgeName(judgeName);
         m.setOrderType(orderType);
         m.setSubject(subject);
@@ -111,10 +112,7 @@ public class HearingMatchingService {
         return true;
     }
 
-    /**
-     * One-time (idempotent) enrichment of matches created before the detail columns existed.
-     * Runs at startup; new matches already carry the full row, so this only fills legacy NULLs.
-     */
+    // One-time startup enrichment for matches created before the detail columns existed.
     @PostConstruct
     @Transactional
     public void backfillLegacyMatches() {
@@ -128,6 +126,8 @@ public class HearingMatchingService {
                 m.setPlaintiff(h.getPlaintiff());
                 m.setDefendant(h.getDefendant());
                 m.setCaseNoBs(h.getCaseNoBs());
+                m.setBench(h.getBench());
+                m.setSerialNo(h.getSerialNo());
                 matchRepository.save(m);
                 updated++;
                 continue;
@@ -140,6 +140,8 @@ public class HearingMatchingService {
                 m.setPlaintiff(h.getPlaintiff());
                 m.setDefendant(h.getDefendant());
                 m.setCaseNoBs(h.getCaseNoBs());
+                m.setBench(h.getBench());
+                m.setSerialNo(h.getSerialNo());
                 matchRepository.save(m);
                 updated++;
             }
@@ -149,7 +151,7 @@ public class HearingMatchingService {
         }
     }
 
-    /** At-least-once delivery: a match is marked notified only after a successful dispatch. */
+    // At-least-once: mark notified only after a successful dispatch, so failures are retried.
     private void dispatchPending() {
         for (HearingMatch m : matchRepository.findByNotifiedFalse()) {
             try {

@@ -13,11 +13,8 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Weekly cause list: one response covers the Sun–Fri window, grouped by "पेशी मिति :<date>",
- * then a flat table per date (no per-judge sub-tables, no outcome column). Party names share
- * one "पक्ष || विपक्ष" column split on "||" / "‖".
- */
+// Weekly page: one response for the Sun–Fri window, grouped by "पेशी मिति :<date>", flat table
+// per date, no benches/outcome. Parties share a "पक्ष || विपक्ष" column split on "||"/"‖".
 @Component
 public class WeeklyTableParser {
 
@@ -53,6 +50,7 @@ public class WeeklyTableParser {
             String[] nums = CaseNumberExtractor.split(cells.get(1).text());
             String[] party = splitParty(cells.get(4).text());
             String subject = clean(cells.get(3).text());
+            String serialNo = clean(DevanagariConverter.toArabic(cells.get(0).text()));
 
             out.add(HearingRecord.builder()
                     .courtId(courtId)
@@ -60,6 +58,7 @@ public class WeeklyTableParser {
                     .hearingDateAd(NepaliDateUtil.bsToAd(dateBs))
                     .caseNoBs(nums[0])
                     .caseNoInternal(nums[1])
+                    .serialNo(serialNo)
                     .subject(subject)
                     .plaintiff(party[0])
                     .defendant(party[1])

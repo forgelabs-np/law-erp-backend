@@ -9,6 +9,7 @@ import com.lawfirm.erp.modules.scraper.entity.ClientCase;
 import com.lawfirm.erp.modules.scraper.entity.Court;
 import com.lawfirm.erp.modules.scraper.entity.DailyHearing;
 import com.lawfirm.erp.modules.scraper.enums.HearingSource;
+import com.lawfirm.erp.modules.scraper.parser.CaseDetailParser;
 import com.lawfirm.erp.modules.scraper.parser.DailyTableParser;
 import com.lawfirm.erp.modules.scraper.parser.WeeklyTableParser;
 import com.lawfirm.erp.modules.scraper.repository.ClientCaseRepository;
@@ -41,6 +42,7 @@ class ScraperServiceTest {
     @Mock private CourtSiteClient courtSiteClient;
     @Mock private DailyTableParser dailyParser;
     @Mock private WeeklyTableParser weeklyParser;
+    @Mock private CaseDetailParser caseDetailParser;
     @Mock private HearingIngestionService ingestionService;
     @Mock private HearingMatchingService matchingService;
     @Mock private ClientCaseRepository clientCaseRepository;
@@ -57,7 +59,7 @@ class ScraperServiceTest {
         properties.setEnabled(true);
         properties.setMaxConcurrentCourts(4);
         properties.setRequestDelayMs(0);
-        service = new ScraperService(courtSiteClient, dailyParser, weeklyParser,
+        service = new ScraperService(courtSiteClient, dailyParser, weeklyParser, caseDetailParser,
                 ingestionService, matchingService, clientCaseRepository, courtRepository,
                 dailyHearingRepository, weeklyHearingRepository, properties);
         service.init();
@@ -165,5 +167,46 @@ class ScraperServiceTest {
         assertEquals("काठमाडौं जिल्ला अदालत", status.getCourtName());
         assertEquals("081-C4-3827", status.getCaseNoBs());
         verifyNoInteractions(courtSiteClient);
+    }
+
+    @Test
+    @DisplayName("Hearing-status with a date filter returns only that BS date's rows")
+    void hearingStatusFilteredByDate() {
+        DailyHearing onDate = new DailyHearing();
+        onDate.setCaseNoInternal("39-081-32030");
+        onDate.setHearingDateBs("2083-04-29");
+        onDate.setHearingDateAd(LocalDate.now().minusDays(1));
+        onDate.setJudgeName("इजलाश 1");
+        onDate.setSubject("लेनदेन");
+
+        when(dailyHearingRepository.findByCaseNoInternalAndHearingDateBs("39-081-32030", "2083-04-29"))
+                .thenReturn(List.of(onDate));
+        when(weeklyHearingRepository.findByCaseNoInternalAndHearingDateBs(any(), any()))
+                .thenReturn(List.of());
+        when(clientCaseRepository.findByCaseNoInternal("39-081-32030")).thenReturn(Optional.empty());
+
+        HearingStatusResponse status = service.getHearingStatus("39-081-32030", "2083-04-29");
+
+        assertEquals(1, status.getHistory().size());
+        assertEquals("2083-04-29", status.getHistory().get(0).getHearingDateBs());
+        assertEquals("लेनदेन", status.getHistory().get(0).getSubject());
+        verify(dailyHearingRepository, never()).findByCaseNoInternalOrderByHearingDateAdDesc(any());
+        verifyNoInteractions(courtSiteClient);
+    }
+
+    @Test
+    @DisplayName("Live case detail hits the site with the display-form number and returns parsed result")
+    void liveDetail() {
+        var detail = com.lawfirm.erp.modules.scraper.dto.CaseDetailResponse.builder()
+                .found(true).courtId(39).caseNoBs("081-C1-7530")
+                .caseNoInternal("39-081-39885").status("चालु").build();
+        when(courtSiteClient.scrapeCaseDetail(39, "081-C1-7530")).thenReturn("<html>detail</html>");
+        when(caseDetailParser.parse("<html>detail</html>", 39)).thenReturn(detail);
+
+        var result = service.getCaseDetailLive(39, "081-C1-7530");
+
+        assertTrue(result.isFound());
+        assertEquals("39-081-39885", result.getCaseNoInternal());
+        verify(courtSiteClient, times(1)).scrapeCaseDetail(39, "081-C1-7530");
     }
 }

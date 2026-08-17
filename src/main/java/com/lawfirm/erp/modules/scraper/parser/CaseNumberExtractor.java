@@ -5,12 +5,7 @@ import com.lawfirm.erp.modules.scraper.converter.DevanagariConverter;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Splits a case-number cell like "०८१-C४-३८२७ (३९-०८१-३२०३०)" into its two forms:
- *   - caseNoBs       = "081-C4-3827"       (court-visible number)
- *   - caseNoInternal = "39-081-32030"      (court-scoped internal id, from the parenthesized form)
- * Both are normalized to Arabic digits.
- */
+// Splits "०८१-C४-३८२७ (३९-०८१-३२०३०)" into display form and parenthesized court-scoped id.
 final class CaseNumberExtractor {
 
     private static final Pattern PAREN = Pattern.compile("\\(([^)]+)\\)");
