@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Scraper Module — Nepal Supreme Court Hearing Tracking</title>
+<style>
+  :root { --accent:#b41c1c; --ink:#1a2233; --muted:#5b6577; --bg:#f6f7f9; --card:#ffffff; --line:#e3e7ee; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Segoe UI",system-ui,sans-serif; color:var(--ink); background:var(--bg); line-height:1.55; }
+  header { background:linear-gradient(135deg,#101728,#1a2233 60%,#2a3350); color:#fff; padding:40px 48px 34px; }
+  header h1 { margin:0 0 6px; font-size:26px; letter-spacing:.3px; }
+  header .sub { color:#9fb0d8; font-size:15px; }
+  header .meta { margin-top:14px; font-size:12px; color:#7d8db5; }
+  main { max-width:1000px; margin:0 auto; padding:28px 24px 80px; }
+  h2 { font-size:20px; margin:44px 0 12px; padding-bottom:8px; border-bottom:2px solid var(--accent); }
+  h3 { font-size:16px; margin:26px 0 8px; }
+  p, li { font-size:14.5px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px 20px; margin:14px 0; }
+  code { background:#eef1f6; border:1px solid var(--line); border-radius:4px; padding:1px 6px; font-family:Consolas,monospace; font-size:12.5px; }
+  pre { background:#101728; color:#d7e0f5; border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:12.5px; line-height:1.5; }
+  pre code { background:none; border:none; color:inherit; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:12px 0; font-size:13.5px; background:var(--card); }
+  th, td { border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top; }
+  th { background:#f0f2f7; font-weight:600; }
+  .flow { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:13px; }
+  .flow .step { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-weight:600; }
+  .flow .arrow { color:var(--accent); font-weight:700; }
+  .tag { display:inline-block; background:#fdeeee; color:var(--accent); border:1px solid #f3c8c8; border-radius:4px; padding:1px 7px; font-size:11px; font-weight:600; }
+  .warn { background:#fff8e6; border:1px solid #f0dc9e; border-radius:8px; padding:12px 14px; font-size:13.5px; margin:12px 0; }
+  .endpoint { border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px; margin:14px 0; background:var(--card); }
+  .endpoint .head { display:flex; align-items:center; gap:10px; padding:10px 14px; }
+  .method { background:var(--accent); color:#fff; font-weight:700; font-size:12px; border-radius:4px; padding:2px 8px; letter-spacing:.5px; }
+  .endpoint .body { padding:4px 14px 14px; }
+  footer { color:var(--muted); font-size:12px; text-align:center; padding:20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Scraper Module — Nepal Supreme Court Hearing Tracking</h1>
+  <div class="sub">daily + weekly cause lists → normalize → store → match → notify → weekly CSV snapshot</div>
+  <div class="meta">com.lawfirm.erp.modules.scraper · Spring Boot 4 · jsoup + java.net.http</div>
+</header>
+<main>
+
+<h2>1. What the module does</h2>
+<p>Every weekday the module pulls the <b>entire cause list</b> of each court where we have an
+active client case, stores it, then <b>matches our registered cases</b> against it and notifies.
+Every Monday it also pulls the <b>weekly (Sun–Fri)</b> list, and exports the previous completed
+week to a <b>CSV file</b> as an offline snapshot. The DB is the system of record; the CSV is a
+convenience copy — nothing is ever deleted.</p>
+
+<h2>2. The pipeline</h2>
+<div class="flow card">
+  <span class="step">⏰ cron</span><span class="arrow">→</span>
+  <span class="step">active courts<br>(from client cases)</span><span class="arrow">→</span>
+  <span class="step">session GET<br>(cookies)</span><span class="arrow">→</span>
+  <span class="step">POST form</span><span class="arrow">→</span>
+  <span class="step">follow 302</span><span class="arrow">→</span>
+  <span class="step">parse HTML<br>(jsoup)</span><span class="arrow">→</span>
+  <span class="step">upsert raw<br>tables</span><span class="arrow">→</span>
+  <span class="step">match<br>our cases</span><span class="arrow">→</span>
+  <span class="step">notify<br>(stub)</span>
+</div>
+
+<h3>How one court is scraped</h3>
+<ol>
+  <li><b>GET</b> the endpoint first — the server issues <code>PHPSESSID</code>, <code>court_session</code> (which binds the User-Agent, so a fixed browser UA is sent) and an F5 <code>TS…</code> cookie.</li>
+  <li><b>POST</b> the form: daily = <code>todays_date</code> (Arabic BS) + <code>pesi_date</code> (Devanagari BS) + <code>submit</code>; weekly = <code>pesi_bar=all</code> + <code>submit</code>.</li>
+  <li>The server answers <b>302</b> with a flash message in the cookie; we follow <code>Location</code> with a GET to receive the final page.</li>
+  <li>Parse the page with the two dedicated parsers, normalize, and <b>upsert</b>.</li>
+</ol>
+<p>All numerals on the site are Devanagari (<code>०८१-C४-३८२७</code>) — converted to Arabic on ingest.
+Dates are Bikram Sambat; both the BS string and the converted AD date are stored
+(<code>NepaliDateUtil</code>, verified: 2083-05-01 = 2026-08-17). Every row carries both case-number
+forms: the court-visible <code>caseNoBs</code> (<code>081-C4-3827</code>) and the court-scoped
+<code>caseNoInternal</code> (<code>39-081-32030</code> — the parenthesized form, which is what matching uses).</p>
+
+<div class="warn"><b>Not published?</b> If the site has no list for a date (common early morning),
+the scrape returns 0 rows, nothing is stored for that date, and an alert is logged. This is
+expected behaviour, not an error.</div>
+
+<h2>3. Storage (PostgreSQL, auto-created)</h2>
+<table>
+  <tr><th>Table</th><th>Contents</th><th>Key / notes</th></tr>
+  <tr><td><code>scraper_courts</code></td><td>Court registry (39 = Kathmandu, 63 = Gulmi)</td><td><code>courtId</code> PK, matches the site URL segment</td></tr>
+  <tr><td><code>scraper_client_cases</code></td><td><b>Your cases</b>: courtId + caseNoInternal + status</td><td>ACTIVE rows drive which courts are scraped</td></tr>
+  <tr><td><code>scraper_daily_hearings</code></td><td>Normalized daily rows (has outcome column)</td><td>unique (courtId, caseNoInternal, hearingDateBs) → idempotent upsert</td></tr>
+  <tr><td><code>scraper_weekly_hearings</code></td><td>Normalized weekly rows (no outcome column)</td><td>same unique key</td></tr>
+  <tr><td><code>scraper_hearing_matches</code></td><td><b>The app's working set</b>: your case × hearing, with full detail</td><td>unique per (clientCaseId, courtId, hearingDateBs); notified flag</td></tr>
+</table>
+
+<h3>Matching</h3>
+<p>After every ingest, <code>HearingMatchingService</code> joins <code>client_cases × hearings</code> on
+<code>(courtId, caseNoInternal)</code> for today/upcoming hearings. New matches are inserted into
+<code>hearing_matches</code> (deduped — re-runs skip existing), copying the <b>full row</b> (subject,
+plaintiff, defendant, caseNoBs, judge, order type) so matches are self-contained. Legacy matches
+created before the detail columns existed are backfilled automatically on startup.</p>
+
+<h3>Notification</h3>
+<p>New matches go through the <code>NotificationDispatcher</code> interface — currently the log stub
+(<code>[scraper-notify:log] …</code>). Delivery is at-least-once: a match is marked
+<code>notified</code> only after a successful dispatch, so a broken channel never loses a match and
+never blocks matching.</p>
+
+<h2>4. Weekly CSV export (new)</h2>
+<p>Every Monday <b>10:30</b> (<code>scraper.export-cron</code>), <code>HearingExportService</code> writes the
+previous <b>Monday–Sunday</b> window (daily + weekly rows merged, same normalized schema) to:</p>
+<pre>export-dir/week-&lt;monday&gt;_&lt;sunday&gt;.csv     e.g. ./exports/week-2026-08-10_2026-08-16.csv</pre>
+<ul>
+  <li><b>UTF-8 with BOM</b> — Excel renders the Devanagari text correctly (a CSV without it opens as mojibake).</li>
+  <li><b>All fields quoted</b> — party names and subjects contain commas, so quoting is mandatory.</li>
+  <li><b><code>matched</code> column</b> — <code>Y</code>/<code>N</code> flag marking rows that appear in <code>hearing_matches</code> (i.e. one of our cases).</li>
+  <li>Columns: <code>courtId, hearingDateBs, hearingDateAd, caseNoBs, caseNoInternal, judgeName, subject, plaintiff, defendant, orderType, source, matched</code>, sorted by court then date.</li>
+  <li><b>Idempotent</b> — same file name per week; writes to a <code>.tmp</code> then atomically renames (never a half-written file). Re-running overwrites.</li>
+  <li>The export is <b>independent of the scrape</b> — it only reads the DB, so a failed scrape still exports whatever exists.</li>
+</ul>
+<p>Configurable: <code>scraper.export-dir</code> (default <code>./exports</code>). Directory is created if missing.</p>
+
+<h2>5. Endpoints (frontend-facing)</h2>
+
+<div class="endpoint">
+  <div class="head"><span class="method">GET</span><code>/api/v1/cases/{caseNo}/hearing-status</code><span class="tag">DB only · no live scrape</span></div>
+  <div class="body">
+    <p>Upcoming + past hearings for a court-scoped internal case number (e.g. <code>39-081-32030</code>).
+    Roles: FIRM_ADMIN / ADVOCATE / PARALEGAL.</p>
+<pre>GET /api/v1/cases/39-081-32030/hearing-status
+
+{
+  "success": true, "responseCode": 200,
+  "data": {
+    "caseNoInternal": "39-081-32030",
+    "caseNoBs": "081-C4-3827",
+    "courtId": 39,
+    "courtName": "काठमाडौं जिल्ला अदालत",
+    "upcoming": [
+      { "hearingDateAd": "2026-08-18", "hearingDateBs": "2083-05-02",
+        "judgeName": "माननीय जिल्ला न्यायाधीश श्री अशोककुमार बस्नेत",
+        "subject": "लेनदेन", "orderType": "स्थगित", "source": "DAILY" }
+    ],
+    "history": [ ]
+  }
+}</pre>
+  </div>
+</div>
+
+<div class="endpoint">
+  <div class="head"><span class="method">POST</span><code>/api/v1/scraper/admin/scrape?courtId=&amp;date=</code><span class="tag">FIRM_ADMIN only</span></div>
+  <div class="body">
+    <p>Manual single-court daily scrape for backfill/testing. <code>date</code> is BS yyyy-mm-dd (defaults to today).</p>
+<pre>POST /api/v1/scraper/admin/scrape?courtId=39&amp;date=2083-05-01
+
+{ "success": true, "data": { "courtId": 39, "success": true, "rows": 672, "error": null } }</pre>
+  </div>
+</div>
+
+<div class="endpoint">
+  <div class="head"><span class="method">POST</span><code>/api/v1/scraper/admin/export</code><span class="tag">FIRM_ADMIN only · new</span></div>
+  <div class="body">
+    <p>Regenerate the weekly CSV export for the previous completed Monday–Sunday window (overwrites the file). Returns the absolute file path.</p>
+<pre>POST /api/v1/scraper/admin/export
+
+{ "success": true, "data": "G:/…/exports/week-2026-08-10_2026-08-16.csv" }</pre>
+  </div>
+</div>
+
+<h2>6. Scheduled jobs</h2>
+<table>
+  <tr><th>Job</th><th>Cron (overridable)</th><th>What it does</th></tr>
+  <tr><td>Daily scrape</td><td><code>scraper.daily-cron</code> — 10:05 Mon–Fri</td><td>Every active court → today's daily list → upsert → match + notify</td></tr>
+  <tr><td>Weekly scrape</td><td><code>scraper.weekly-cron</code> — 10:15 Mon</td><td>Every active court → Sun–Fri weekly list → upsert → match + notify</td></tr>
+  <tr><td>CSV export</td><td><code>scraper.export-cron</code> — 10:30 Mon</td><td>Previous Mon–Sun window → <code>week-….csv</code></td></tr>
+</table>
+<p>All jobs no-op when <code>scraper.enabled=false</code>. Also note: adding <code>@EnableScheduling</code> activated
+the case-management module's lapsed-appeal watcher, which was previously dormant.</p>
+
+<h2>7. Frontend consumption guide</h2>
+<ol>
+  <li><b>Register a case</b> — add a row to <code>scraper_client_cases</code> (courtId + caseNoInternal + ACTIVE).
+      No CRUD endpoint exists yet; until one is added, register via DB/seed. Once registered, the court is scraped automatically.</li>
+  <li><b>Show a case's hearing status</b> — call <code>GET /api/v1/cases/{caseNoInternal}/hearing-status</code>
+      whenever a case screen opens. Fast, DB-only, shows upcoming + history with judge, subject, outcome and source.</li>
+  <li><b>Notifications</b> — new matches are logged (<code>[scraper-notify:log]</code>) and stored in
+      <code>hearing_matches</code> (field <code>notified</code>). A future real channel (email/SMS/webhook) plugs into the
+      <code>NotificationDispatcher</code> interface; until then, poll the hearing-status endpoint or read matches.</li>
+  <li><b>Weekly snapshot</b> — the CSV file is a human-facing artifact (open in Excel; Nepali text renders
+      because of the BOM). Not needed by the frontend unless you add a download link to <code>POST /api/v1/scraper/admin/export</code>.</li>
+</ol>
+
+<h2>8. Configuration</h2>
+<pre>scraper:
+  enabled: true            # master switch
+  base-url: https://supremecourt.gov.np
+  request-delay-ms: 1500   # politeness delay between court-site requests
+  connect-timeout-ms: 15000
+  read-timeout-ms: 60000
+  max-concurrent-courts: 5 # fan-out width
+  export-dir: ./exports    # weekly CSV location
+  daily-cron: "0 5 10 * * MON-FRI"
+  weekly-cron: "0 15 10 * * MON"
+  export-cron: "0 30 10 * * MON"</pre>
+
+</main>
+<footer>LAW ERP · scraper-module documentation · generated 2026-08-17</footer>
+</body>
+</html>
