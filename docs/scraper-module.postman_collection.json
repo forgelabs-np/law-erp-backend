@@ -10,7 +10,9 @@
     { "key": "token", "value": "" },
     { "key": "caseNo", "value": "39-081-32030" },
     { "key": "courtId", "value": "39" },
-    { "key": "dateBs", "value": "2083-05-01" }
+    { "key": "dateBs", "value": "2083-05-01" },
+    { "key": "matterNumber", "value": "APX-MAT-2026-00001" },
+    { "key": "userId", "value": "" }
   ],
   "item": [
     {
@@ -118,6 +120,97 @@
               "path": ["api", "v1", "scraper", "admin", "export"]
             },
             "description": "FIRM_ADMIN. Writes (overwrites) the previous completed Mon-Sun window to <export-dir>/week-<monday>_<sunday>.csv and returns the absolute file path."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 · Dashboard",
+      "item": [
+        {
+          "name": "Get dashboard (role-based)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "dashboard"]
+            },
+            "description": "FIRM_ADMIN sees firm-wide stats; ADVOCATE/PARALEGAL see only assigned matters. Returns totalMatters, activeMatters, staleCount, todayEvents, and casePositioning summaries."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 · Case Assignments",
+      "item": [
+        {
+          "name": "Assign employee to matter",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters/{{matterNumber}}/assignments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters", "{{matterNumber}}", "assignments"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"userId\": \"<user-uuid>\",\n    \"assignmentRole\": \"PRIMARY_ADVOCATE\"\n  }\n}"
+            },
+            "description": "Assigns an employee (advocate, paralegal, junior) to a matter. Roles: PRIMARY_ADVOCATE, CO_ADVOCATE, PARALEGAL, JUNIOR, SUPERVISOR."
+          }
+        },
+        {
+          "name": "List assignments for matter",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters/{{matterNumber}}/assignments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters", "{{matterNumber}}", "assignments"]
+            },
+            "description": "Returns all employees assigned to this matter with their roles."
+          }
+        },
+        {
+          "name": "Revoke assignment",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters/{{matterNumber}}/assignments/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters", "{{matterNumber}}", "assignments", "{{userId}}"]
+            },
+            "description": "Removes all assignments for a user from a matter."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 · Live Case Detail (scrape site)",
+      "item": [
+        {
+          "name": "Live case detail by case number",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cases/live-detail?courtId={{courtId}}&caseNo=081-C1-7530",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "cases", "live-detail"],
+              "query": [
+                { "key": "courtId", "value": "{{courtId}}" },
+                { "key": "caseNo", "value": "081-C1-7530" }
+              ]
+            },
+            "description": "Hits the court site live (case_process_detail tab3). caseNo is the DISPLAY form (081-C1-7530), NOT the internal form. Returns full case history: parties, hearings, judges, orders. found=false when not found."
           }
         }
       ]

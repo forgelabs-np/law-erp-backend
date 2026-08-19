@@ -21,7 +21,7 @@ import java.nio.file.Path;
 @RequestMapping("/api/v1/scraper/admin")
 @RequiredArgsConstructor
 @Tag(name = "Scraper Admin", description = "Manual scrape triggers and exports for backfill/testing")
-@PreAuthorize("hasAnyRole('SUPER_ADMIN')")
+@PreAuthorize("hasAnyRole('FIRM_ADMIN')")
 public class ScraperAdminController {
 
     private final ScraperService scraperService;

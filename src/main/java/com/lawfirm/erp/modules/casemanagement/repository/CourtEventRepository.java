@@ -19,6 +19,8 @@ public interface CourtEventRepository extends JpaRepository<CourtEvent, UUID> {
 
     List<CourtEvent> findByCourtCaseIdAndFirmIdOrderBySequenceNoAsc(UUID courtCaseId, UUID firmId);
 
+    List<CourtEvent> findByCourtCaseIdInAndFirmIdOrderBySequenceNoAsc(List<UUID> courtCaseIds, UUID firmId);
+
     Optional<CourtEvent> findByIdAndFirmId(UUID id, UUID firmId);
 
     @Query("SELECT COALESCE(MAX(e.sequenceNo), 0) FROM CourtEvent e WHERE e.courtCaseId = :courtCaseId")
@@ -42,6 +44,8 @@ public interface CourtEventRepository extends JpaRepository<CourtEvent, UUID> {
             UUID firmId, UUID advocateId, LocalDate from, LocalDate to, Pageable pageable);
 
     List<CourtEvent> findByFirmIdAndScheduledDate(UUID firmId, LocalDate date);
+
+    List<CourtEvent> findByScheduledDate(LocalDate date);
 
     List<CourtEvent> findByFirmIdAndAttendingAdvocateIdAndScheduledDate(UUID firmId, UUID advocateId, LocalDate date);
 

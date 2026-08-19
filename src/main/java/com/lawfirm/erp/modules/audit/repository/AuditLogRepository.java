@@ -90,8 +90,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             Pageable pageable);
 
 
-    /** FIX: Use (:action IS NULL OR a.action = :action) so null action returns all rows */
-    @Query("SELECT a FROM AuditLog a WHERE (:action IS NULL OR a.action = :action) " +
+    @Query("SELECT a FROM AuditLog a WHERE a.action = :action " +
             "AND (a.createdAt >= COALESCE(:from, a.createdAt)) " +
             "AND (a.createdAt <= COALESCE(:to, a.createdAt)) " +
             "ORDER BY a.createdAt DESC")
@@ -110,6 +109,12 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     Page<AuditLog> findRecentByFirm(
             @Param("firmId") UUID firmId,
             Pageable pageable);
+
+    /**
+     * Get recent audit logs across all firms (super admin).
+     */
+    @Query("SELECT a FROM AuditLog a ORDER BY a.createdAt DESC")
+    Page<AuditLog> findRecent(Pageable pageable);
 
     /**
      * Count audit logs by action type for a firm.
