@@ -1,5 +1,6 @@
 package com.lawfirm.erp.rbac.controller;
 
+import com.lawfirm.erp.common.constant.RbacConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -29,7 +30,7 @@ public class ModuleController {
     private final ResponseHandler responseHandler;
 
     @PostMapping
-    @Operation(summary = "Create or update module")
+    @Operation(summary = RbacConstants.UPSERT_MODULE_SUMMARY)
     public ResponseEntity<ApiResponse<ModuleResponse>> upsertModule(
             @Valid @RequestBody ApiRequest<ModuleRequest> request) {
         return responseHandler.ok(
@@ -39,7 +40,7 @@ public class ModuleController {
     }
 
     @GetMapping
-    @Operation(summary = "Get all modules")
+    @Operation(summary = RbacConstants.GET_ALL_MODULES_SUMMARY)
     public ResponseEntity<ApiResponse<List<ModuleResponse>>> getAllModules() {
         return responseHandler.ok(
                 moduleService.getAllModules(),
@@ -48,7 +49,7 @@ public class ModuleController {
     }
 
     @GetMapping("/active")
-    @Operation(summary = "Get active modules")
+    @Operation(summary = RbacConstants.GET_ACTIVE_MODULES_SUMMARY)
     public ResponseEntity<ApiResponse<List<ModuleResponse>>> getActiveModules() {
         return responseHandler.ok(
                 moduleService.getActiveModules(),
@@ -57,7 +58,7 @@ public class ModuleController {
     }
 
     @GetMapping("/{moduleId}")
-    @Operation(summary = "Get module by ID")
+    @Operation(summary = RbacConstants.GET_MODULE_BY_ID_SUMMARY)
     public ResponseEntity<ApiResponse<ModuleResponse>> getModuleById(@PathVariable UUID moduleId) {
         return responseHandler.ok(
                 moduleService.getModuleById(moduleId),
@@ -66,14 +67,14 @@ public class ModuleController {
     }
 
     @DeleteMapping("/{moduleId}")
-    @Operation(summary = "Delete module")
+    @Operation(summary = RbacConstants.DELETE_MODULE_SUMMARY)
     public ResponseEntity<ApiResponse<Void>> deleteModule(@PathVariable UUID moduleId) {
         moduleService.deleteModule(moduleId);
         return responseHandler.ok(null, "Module deleted successfully");
     }
 
     @PatchMapping("/{moduleId}/toggle")
-    @Operation(summary = "Toggle module status")
+    @Operation(summary = RbacConstants.TOGGLE_MODULE_SUMMARY)
     public ResponseEntity<ApiResponse<ModuleResponse>> toggleModuleStatus(@PathVariable UUID moduleId) {
         return responseHandler.ok(
                 moduleService.toggleModuleStatus(moduleId),
@@ -82,7 +83,7 @@ public class ModuleController {
     }
 
     @PostMapping("/{moduleId}/permissions")
-    @Operation(summary = "Assign permissions to module")
+    @Operation(summary = RbacConstants.ASSIGN_PERMISSIONS_TO_MODULE_SUMMARY)
     public ResponseEntity<ApiResponse<ModuleResponse>> assignPermissionsToModule(
             @PathVariable UUID moduleId,
             @Valid @RequestBody ApiRequest<AssignPermissionsRequest> request) {

@@ -1,5 +1,6 @@
 package com.lawfirm.erp.modules.usermanagement.controller;
 
+import com.lawfirm.erp.common.constant.UserManagementConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.modules.usermanagement.dto.response.GlobalDashboardResponse;
@@ -24,9 +25,7 @@ public class GlobalDashboardController {
     private final ResponseHandler responseHandler;
 
     @GetMapping
-    @Operation(summary = "Get global dashboard",
-            description = "Aggregated stats across users, firms, case management, scraper, and recent activity. "
-                    + "FIRM_ADMIN sees firm-scoped data; SUPER_ADMIN sees all firms.")
+    @Operation(summary = UserManagementConstants.GET_DASHBOARD_SUMMARY, description = UserManagementConstants.GET_DASHBOARD_DESCRIPTION)
     public ResponseEntity<ApiResponse<GlobalDashboardResponse>> getDashboard() {
         return responseHandler.ok(dashboardService.getDashboard(), "Dashboard fetched successfully");
     }

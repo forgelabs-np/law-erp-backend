@@ -1,5 +1,6 @@
 package com.lawfirm.erp.modules.scraper.controller;
 
+import com.lawfirm.erp.common.constant.ScraperConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.modules.scraper.dto.CaseDetailResponse;
@@ -27,8 +28,7 @@ public class HearingStatusController {
     private final ResponseHandler responseHandler;
 
     @GetMapping("/{caseNo}/hearing-status")
-    @Operation(summary = "Hearing status for a case",
-            description = "Upcoming + past hearings for a court-scoped internal case number (e.g. 39-081-32030). Optional date filter (BS yyyy-mm-dd) returns only that day's list entries. DB only — no live scrape on this path.")
+    @Operation(summary = ScraperConstants.HEARING_STATUS_SUMMARY, description = ScraperConstants.HEARING_STATUS_DESCRIPTION)
     public ResponseEntity<ApiResponse<HearingStatusResponse>> hearingStatus(
             @PathVariable String caseNo,
             @RequestParam(required = false) String date) {
@@ -37,10 +37,7 @@ public class HearingStatusController {
     }
 
     @GetMapping("/live-detail")
-    @Operation(summary = "Live case detail from the court site",
-            description = "Hits the site's case_process_detail feed for the case's full history — no prior scrape needed. "
-                    + "caseNo is the display form (e.g. 081-C1-7530), courtId matches the site path segment (39 = Kathmandu). "
-                    + "found=false when the case number doesn't exist on the site.")
+    @Operation(summary = ScraperConstants.LIVE_DETAIL_SUMMARY, description = ScraperConstants.LIVE_DETAIL_DESCRIPTION)
     public ResponseEntity<ApiResponse<CaseDetailResponse>> liveDetail(
             @RequestParam Integer courtId,
             @RequestParam String caseNo) {

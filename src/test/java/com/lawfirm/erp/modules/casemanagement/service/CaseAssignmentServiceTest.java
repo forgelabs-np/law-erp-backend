@@ -40,7 +40,7 @@ class CaseAssignmentServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private AuditService auditService;
 
-    @InjectMocks private CaseAssignmentService service;
+    @InjectMocks private CaseAssignmentServiceImpl service;
 
     private static final UUID FIRM_ID = UUID.randomUUID();
     private static final UUID MATTER_ID = UUID.randomUUID();

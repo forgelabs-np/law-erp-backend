@@ -47,9 +47,10 @@ class RolePermissionServiceTest {
     @Mock private CurrentUserResolver currentUserResolver;
     @Mock private UserRepository userRepository;
     @Mock private PermissionEvaluator permissionEvaluator;
+    @Mock private com.lawfirm.erp.rbac.mapper.RbacResponseMapper rbacResponseMapper;
 
     @InjectMocks
-    private RolePermissionService rolePermissionService;
+    private RolePermissionServiceImpl rolePermissionService;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
     private static final UUID ROLE_ID = UUID.randomUUID();

@@ -1,5 +1,6 @@
 package com.lawfirm.erp.rbac.controller;
 
+import com.lawfirm.erp.common.constant.RbacConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -28,7 +29,7 @@ public class PermissionController {
     private final ResponseHandler responseHandler;
 
     @PostMapping
-    @Operation(summary = "Create or update permission")
+    @Operation(summary = RbacConstants.UPSERT_PERMISSION_SUMMARY)
     public ResponseEntity<ApiResponse<PermissionResponse>> upsert(
             @Valid @RequestBody ApiRequest<PermissionRequest> request) {
         return responseHandler.ok(
@@ -38,7 +39,7 @@ public class PermissionController {
     }
 
     @GetMapping
-    @Operation(summary = "Get all permissions")
+    @Operation(summary = RbacConstants.GET_ALL_PERMISSIONS_SUMMARY)
     public ResponseEntity<ApiResponse<List<PermissionResponse>>> findAll() {
         return responseHandler.ok(
                 permissionService.findAll(),
@@ -47,7 +48,7 @@ public class PermissionController {
     }
 
     @GetMapping("/active")
-    @Operation(summary = "Get active permissions")
+    @Operation(summary = RbacConstants.GET_ACTIVE_PERMISSIONS_SUMMARY)
     public ResponseEntity<ApiResponse<List<PermissionResponse>>> findActive() {
         return responseHandler.ok(
                 permissionService.findActive(),
@@ -56,7 +57,7 @@ public class PermissionController {
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get permission by ID")
+    @Operation(summary = RbacConstants.GET_PERMISSION_BY_ID_SUMMARY)
     public ResponseEntity<ApiResponse<PermissionResponse>> findById(@PathVariable UUID id) {
         return responseHandler.ok(
                 permissionService.findById(id),
@@ -65,14 +66,14 @@ public class PermissionController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Delete permission")
+    @Operation(summary = RbacConstants.DELETE_PERMISSION_SUMMARY)
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         permissionService.delete(id);
         return responseHandler.ok(null, "Permission deleted successfully");
     }
 
     @PatchMapping("/{id}/toggle")
-    @Operation(summary = "Toggle permission status")
+    @Operation(summary = RbacConstants.TOGGLE_PERMISSION_SUMMARY)
     public ResponseEntity<ApiResponse<PermissionResponse>> toggle(@PathVariable UUID id) {
         return responseHandler.ok(
                 permissionService.toggleStatus(id),

@@ -43,7 +43,7 @@ class MatterServiceTest {
     @Mock private AuditService auditService;
 
     @InjectMocks
-    private MatterService matterService;
+    private MatterServiceImpl matterService;
 
     @BeforeEach
     void setUp() {

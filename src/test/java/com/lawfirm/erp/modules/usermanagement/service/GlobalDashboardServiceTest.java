@@ -60,7 +60,7 @@ class GlobalDashboardServiceTest {
     @Mock HearingMatchRepository hearingMatchRepository;
     @Mock CurrentUserResolver currentUserResolver;
 
-    @InjectMocks GlobalDashboardService service;
+    @InjectMocks GlobalDashboardServiceImpl service;
 
     private final UUID firmId = UUID.randomUUID();
 

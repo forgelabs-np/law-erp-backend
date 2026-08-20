@@ -1,3 +1,94 @@
+## Code Architecture Refactoring — Auth & SuperAdmin Modules (2026-08-20)
+
+Refactored auth and superadmin modules to clean architecture pattern:
+
+**Pattern: Controller → Service (interface) → ServiceImpl → Mapper**
+
+**Auth Module Changes:**
+- `AuthService.java` — now an interface
+- `AuthServiceImpl.java` — implementation with clean separation of concerns
+- `AuthMapper.java` — extracts all LoginResponse building (success, MFA setup, MFA required, password change required)
+- `AuthController.java` — cleaned up, uses `AuthConstants` for Swagger
+- `AuthConstants.java` — centralized Swagger summary/description strings
+
+**SuperAdmin Module Changes:**
+- `SuperAdminService.java` — now an interface
+- `SuperAdminServiceImpl.java` — implementation using `AuthMapper` for response building
+- `SuperAdminController.java` — uses `SuperAdminConstants` for Swagger
+- `SuperAdminConstants.java` — centralized Swagger summary/description strings
+
+**Key improvements:**
+- Response building extracted from services into mapper classes
+- All services follow interface + impl pattern
+- Swagger summaries/descriptions are constants (no inline strings in controllers)
+- Removed dead/commented-out code from controllers
+- Reduced verbose comments to minimal essential ones
+- Helper methods extracted (`validateAccountStatus`, `handleFailedLogin`, `handleMfaFlow`)
+
+**Tests:** 132 total, 0 failures, 0 errors
+
+## Me, Scraper & UserManagement Refactoring (2026-08-20)
+
+Extended the same pattern to three more modules:
+
+**Me Module:**
+- `MeService.java` — interface
+- `MeServiceImpl.java` — implementation using MeMapper
+- `MeMapper.java` — extracts FirmInfo/RoleInfo building
+- `MeConstants.java` — Swagger constants
+
+**Scraper Module:**
+- `ScraperService.java` — interface
+- `ScraperServiceImpl.java` — implementation using ScraperMapper
+- `ScraperMapper.java` — extracts hearing response building and sorting
+- `ScraperConstants.java` — Swagger constants
+
+**UserManagement Module:**
+- `UserManagementService.java` — interface
+- `UserManagementServiceImpl.java` — implementation using UserManagementMapper
+- `GlobalDashboardService.java` — interface
+- `GlobalDashboardServiceImpl.java` — implementation
+- `UserManagementMapper.java` — extracts toSummary, toActivityEntry, groupByModule
+- `UserManagementConstants.java` — Swagger constants
+
+## RBAC, Audit & Email Refactoring (2026-08-20)
+
+**RBAC Module:**
+- `RbacResponseMapper.java` — extracts Permission/Role response building
+- `ModuleService.java`, `PermissionService.java`, `RoleManagementService.java`, `RolePermissionService.java` — interfaces
+- `*Impl.java` — implementations using RbacResponseMapper
+- `RbacConstants.java` — Swagger constants for all 3 RBAC controllers
+
+**Audit Module:**
+- `AuditService.java` — interface
+- `AuditServiceImpl.java` — implementation
+- `AuditConstants.java` — Swagger constants
+
+**Email Module:**
+- `EmailService.java` — interface
+- `EmailServiceImpl.java` — implementation
+
+**Tests:** 132 total, 0 failures, 0 errors
+
+## Firm & CaseManagement Refactoring (2026-08-20)
+
+**Firm Module (8 services):**
+- `FirmMapper.java` — extracts all response building
+- `ClientService`, `EmployeeService`, `FirmService`, `FirmAdminService`, `FirmRoleService`, `FirmProfileService`, `FirmModuleService`, `FirmEmailConfigService` — interfaces
+- All 8 impls updated to implement their interfaces
+- `FirmConstants.java` — Swagger constants for all 7 controllers
+
+**CaseManagement Module (6 services):**
+- `CalendarService`, `CaseAssignmentService`, `CourtCaseService`, `CourtEventService`, `DashboardService`, `MatterService` — interfaces
+- All 6 impls updated to implement their interfaces
+- `CaseManagementConstants.java` — Swagger constants for all 6 controllers
+- Utility classes (AppealDeadlineEngine, CourtCaseRefGenerator, MatterNumberGenerator, PartyMatchService) kept as-is
+
+**All modules now follow: Controller → Service (interface) → ServiceImpl → Mapper pattern**
+
+**Tests:** 132 total, 0 failures, 0 errors
+
+---
 
 ## Case Management Dashboard (2026-08-18)
 

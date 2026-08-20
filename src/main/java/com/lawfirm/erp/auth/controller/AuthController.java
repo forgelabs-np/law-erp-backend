@@ -1,6 +1,7 @@
 package com.lawfirm.erp.auth.controller;
 
 import com.lawfirm.erp.auth.service.AuthService;
+import com.lawfirm.erp.common.constant.AuthConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.enums.Message;
@@ -12,7 +13,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,7 +25,7 @@ public class AuthController {
     private final ResponseHandler responseHandler;
 
     @PostMapping("/login")
-    @Operation(summary = "API to internal user login", description = "API to login for internal users")
+    @Operation(summary = AuthConstants.LOGIN_SUMMARY, description = AuthConstants.LOGIN_DESCRIPTION)
     public ResponseEntity<ApiResponse<LoginResponse>> authenticateInternalUser(
             @Valid @RequestBody ApiRequest<LoginRequest> request) {
         return responseHandler.ok(
@@ -36,7 +36,7 @@ public class AuthController {
     }
 
     @PostMapping("/client/login")
-    @Operation(summary = "API to client login", description = "API to login for client users")
+    @Operation(summary = AuthConstants.CLIENT_LOGIN_SUMMARY, description = AuthConstants.CLIENT_LOGIN_DESCRIPTION)
     public ResponseEntity<ApiResponse<LoginResponse>> authenticateClient(
             @Valid @RequestBody ApiRequest<LoginRequest> request) {
         return responseHandler.ok(
@@ -46,32 +46,8 @@ public class AuthController {
         );
     }
 
-    // ========== REGISTRATION ENDPOINTS - DISABLED (Super Admin only creates) ==========
-
-    // @PostMapping("/register/solo")
-    // @Operation(summary = "API to register solo lawyer", description = "Register a new solo practitioner")
-    // public ResponseEntity<ApiResponse<RegisterResponse>> registerSolo(
-    //         @Valid @RequestBody ApiRequest<RegisterSoloRequest> request) {
-    //     return responseHandler.ok(
-    //             authService.registerSolo(request.getData()),
-    //             Message.CREATE_SUCCESS,
-    //             "Solo Lawyer"
-    //     );
-    // }
-
-    // @PostMapping("/register/client")
-    // @Operation(summary = "API to register client", description = "Register a new client")
-    // public ResponseEntity<ApiResponse<RegisterResponse>> registerClient(
-    //         @Valid @RequestBody ApiRequest<RegisterClientRequest> request) {
-    //     return responseHandler.ok(
-    //             authService.registerClient(request.getData()),
-    //             Message.CREATE_SUCCESS,
-    //             "Client"
-    //     );
-    // }
-
     @PostMapping("/refresh")
-    @Operation(summary = "API to refresh token", description = "Get new access token using refresh token")
+    @Operation(summary = AuthConstants.REFRESH_TOKEN_SUMMARY, description = AuthConstants.REFRESH_TOKEN_DESCRIPTION)
     public ResponseEntity<ApiResponse<LoginResponse>> refreshToken(
             @Valid @RequestBody ApiRequest<RefreshTokenRequest> request) {
         return responseHandler.ok(
@@ -82,7 +58,7 @@ public class AuthController {
     }
 
     @PostMapping("/mfa/setup/confirm")
-    @Operation(summary = "Confirm MFA setup after scanning QR code")
+    @Operation(summary = AuthConstants.MFA_SETUP_CONFIRM_SUMMARY, description = AuthConstants.MFA_SETUP_CONFIRM_DESCRIPTION)
     public ResponseEntity<ApiResponse<LoginResponse>> confirmMfaSetup(
             @Valid @RequestBody ApiRequest<MfaSetupConfirmRequest> request) {
         return responseHandler.ok(
@@ -93,7 +69,7 @@ public class AuthController {
     }
 
     @PostMapping("/mfa/validate")
-    @Operation(summary = "Validate TOTP code on login")
+    @Operation(summary = AuthConstants.MFA_VALIDATE_SUMMARY, description = AuthConstants.MFA_VALIDATE_DESCRIPTION)
     public ResponseEntity<ApiResponse<LoginResponse>> validateMfa(
             @Valid @RequestBody ApiRequest<MfaValidateRequest> request) {
         return responseHandler.ok(
@@ -104,7 +80,7 @@ public class AuthController {
     }
 
     @PostMapping("/change-password")
-    @Operation(summary = "Change password on first login")
+    @Operation(summary = AuthConstants.CHANGE_PASSWORD_SUMMARY, description = AuthConstants.CHANGE_PASSWORD_DESCRIPTION)
     public ResponseEntity<ApiResponse<LoginResponse>> changePassword(
             @Valid @RequestBody ApiRequest<ChangePasswordRequest> request) {
         return responseHandler.ok(
@@ -113,12 +89,4 @@ public class AuthController {
                 "Password changed"
         );
     }
-
-//    @PostMapping("/mfa/bulk-enable")
-//    @PreAuthorize("hasRole('FIRM_ADMIN') or hasRole('SUPER_ADMIN')")
-//    public ResponseEntity<ApiResponse<Void>> bulkEnableMfa(
-//            @Valid @RequestBody ApiRequest<BulkEnableMfaRequest> request) {
-//        authService.bulkEnableMfa(request.getData());
-//        return responseHandler.ok(null, Message.SUCCESS, "MFA enabled for selected users");
-//    }
 }

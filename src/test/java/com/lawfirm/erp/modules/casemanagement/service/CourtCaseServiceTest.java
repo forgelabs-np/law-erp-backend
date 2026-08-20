@@ -46,7 +46,7 @@ class CourtCaseServiceTest {
     @Mock private AuditService auditService;
 
     @InjectMocks
-    private CourtCaseService courtCaseService;
+    private CourtCaseServiceImpl courtCaseService;
 
     @BeforeEach
     void setUp() {

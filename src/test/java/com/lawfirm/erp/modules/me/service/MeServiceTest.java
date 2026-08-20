@@ -10,6 +10,7 @@ import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.entity.FirmModule;
 import com.lawfirm.erp.firm.repository.FirmModuleRepository;
 import com.lawfirm.erp.modules.me.dto.MeResponse;
+import com.lawfirm.erp.modules.me.mapper.MeMapper;
 import com.lawfirm.erp.rbac.entity.Module;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
@@ -42,9 +43,10 @@ class MeServiceTest {
     @Mock private ModuleRepository moduleRepository;
     @Mock private CurrentUserResolver currentUserResolver;
     @Mock private SystemConfigService systemConfigService;
+    @Mock private MeMapper meMapper;
 
     @InjectMocks
-    private MeService meService;
+    private MeServiceImpl meService;
 
     private static final UUID USER_ID = UUID.randomUUID();
     private static final UUID FIRM_ID = UUID.randomUUID();

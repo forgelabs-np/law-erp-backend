@@ -44,7 +44,7 @@ class DashboardServiceTest {
     @Mock CurrentUserResolver currentUserResolver;
     @Mock UserRepository userRepository;
 
-    @InjectMocks DashboardService dashboardService;
+    @InjectMocks DashboardServiceImpl dashboardService;
 
     private final UUID firmId = UUID.randomUUID();
     private final UUID adminId = UUID.randomUUID();

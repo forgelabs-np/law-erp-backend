@@ -14,6 +14,7 @@ import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
+import com.lawfirm.erp.auth.mapper.AuthMapper;
 import com.lawfirm.erp.auth.security.JwtUtil;
 import com.lawfirm.erp.auth.security.TotpUtil;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,9 +52,10 @@ class SuperAdminServiceTest {
     @Mock private FirmRepository firmRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private AuditService auditService;
+    @Mock private AuthMapper authMapper;
 
     @InjectMocks
-    private SuperAdminService superAdminService;
+    private SuperAdminServiceImpl superAdminService;
 
     private static final UUID SUPER_ADMIN_ID = UUID.randomUUID();
     private static final UUID SYSTEM_FIRM_ID = UUID.randomUUID();
@@ -69,6 +71,13 @@ class SuperAdminServiceTest {
     private User superAdmin;
     private Firm systemFirm;
     private Role superAdminRole;
+
+    private static final LoginResponse SUCCESS_RESPONSE = LoginResponse.builder()
+            .status(AuthStatus.SUCCESS).accessToken(ACCESS_TOKEN).refreshToken(REFRESH_TOKEN).expiresIn(86400000L).build();
+    private static final LoginResponse MFA_SETUP_RESPONSE = LoginResponse.builder()
+            .status(AuthStatus.MFA_SETUP_REQUIRED).mfaToken(MFA_TOKEN).mfaQrCodeUri("otpauth://totp/...").mfaManualKey("JBSW Y3DP EHPK 3PXP").build();
+    private static final LoginResponse MFA_REQUIRED_RESPONSE = LoginResponse.builder()
+            .status(AuthStatus.MFA_REQUIRED).mfaToken(MFA_TOKEN).build();
 
     @BeforeEach
     void setUp() {
@@ -106,12 +115,11 @@ class SuperAdminServiceTest {
             mockAuthentication();
             when(jwtUtil.generateAccessToken(superAdmin)).thenReturn(ACCESS_TOKEN);
             when(jwtUtil.generateRefreshToken(superAdmin)).thenReturn(REFRESH_TOKEN);
+            when(authMapper.toSuccessResponse(ACCESS_TOKEN, REFRESH_TOKEN)).thenReturn(SUCCESS_RESPONSE);
 
             LoginResponse response = login(USERNAME, PASSWORD, null);
 
             assertEquals(AuthStatus.SUCCESS, response.getStatus());
-            assertEquals(ACCESS_TOKEN, response.getAccessToken());
-            assertEquals(REFRESH_TOKEN, response.getRefreshToken());
             verify(authenticationManager).authenticate(any());
             verify(jwtUtil).generateAccessToken(superAdmin);
             verify(jwtUtil).generateRefreshToken(superAdmin);
@@ -138,6 +146,7 @@ class SuperAdminServiceTest {
             when(totpUtil.generateSecret()).thenReturn(MFA_SECRET);
             when(totpUtil.buildQrCodeUri(MFA_SECRET, USERNAME, "SYSTEM")).thenReturn("otpauth://totp/...");
             when(totpUtil.formatSecretForDisplay(MFA_SECRET)).thenReturn("JBSW Y3DP EHPK 3PXP");
+            when(authMapper.toMfaSetupResponse(MFA_TOKEN, "otpauth://totp/...", "JBSW Y3DP EHPK 3PXP")).thenReturn(MFA_SETUP_RESPONSE);
 
             LoginResponse response = login(USERNAME, PASSWORD, null);
 
@@ -161,6 +170,7 @@ class SuperAdminServiceTest {
             when(jwtUtil.generateMfaToken(superAdmin)).thenReturn(MFA_TOKEN);
             when(totpUtil.buildQrCodeUri(MFA_SECRET, USERNAME, "SYSTEM")).thenReturn("otpauth://totp/...");
             when(totpUtil.formatSecretForDisplay(MFA_SECRET)).thenReturn("JBSW Y3DP EHPK 3PXP");
+            when(authMapper.toMfaSetupResponse(MFA_TOKEN, "otpauth://totp/...", "JBSW Y3DP EHPK 3PXP")).thenReturn(MFA_SETUP_RESPONSE);
 
             LoginResponse response = login(USERNAME, PASSWORD, null);
 
@@ -187,6 +197,7 @@ class SuperAdminServiceTest {
             mockFindSuperAdmin();
             mockAuthentication();
             when(jwtUtil.generateMfaToken(superAdmin)).thenReturn(MFA_TOKEN);
+            when(authMapper.toMfaRequiredResponse(MFA_TOKEN)).thenReturn(MFA_REQUIRED_RESPONSE);
 
             LoginResponse response = login(USERNAME, PASSWORD, null);
 
@@ -201,6 +212,7 @@ class SuperAdminServiceTest {
             mockFindSuperAdmin();
             mockAuthentication();
             when(jwtUtil.generateMfaToken(superAdmin)).thenReturn(MFA_TOKEN);
+            when(authMapper.toMfaRequiredResponse(MFA_TOKEN)).thenReturn(MFA_REQUIRED_RESPONSE);
 
             LoginResponse response = login(USERNAME, PASSWORD, "");
 
@@ -215,12 +227,11 @@ class SuperAdminServiceTest {
             when(totpUtil.verify(MFA_SECRET, VALID_TOTP)).thenReturn(true);
             when(jwtUtil.generateAccessToken(superAdmin)).thenReturn(ACCESS_TOKEN);
             when(jwtUtil.generateRefreshToken(superAdmin)).thenReturn(REFRESH_TOKEN);
+            when(authMapper.toSuccessResponse(ACCESS_TOKEN, REFRESH_TOKEN)).thenReturn(SUCCESS_RESPONSE);
 
             LoginResponse response = login(USERNAME, PASSWORD, VALID_TOTP);
 
             assertEquals(AuthStatus.SUCCESS, response.getStatus());
-            assertEquals(ACCESS_TOKEN, response.getAccessToken());
-            assertEquals(REFRESH_TOKEN, response.getRefreshToken());
             verify(auditService).log(AuditAction.LOGIN, AuditEntity.AUTH, SUPER_ADMIN_ID, "Super Admin logged in: admin");
         }
 

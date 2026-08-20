@@ -13,6 +13,7 @@ import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.modules.email.service.EmailService;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkRoleChangeRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.response.BulkOperationResult;
+import com.lawfirm.erp.modules.usermanagement.mapper.UserManagementMapper;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
@@ -44,9 +45,10 @@ class UserManagementServiceTest {
     @Mock private CurrentUserResolver currentUserResolver;
     @Mock private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     @Mock private EmailService emailService;
+    @Mock private UserManagementMapper userManagementMapper;
 
     @InjectMocks
-    private UserManagementService userManagementService;
+    private UserManagementServiceImpl userManagementService;
 
     private static final UUID FIRM_ID = UUID.randomUUID();
 

@@ -1,7 +1,9 @@
 package com.lawfirm.erp.modules.scraper.controller;
 
+import com.lawfirm.erp.common.constant.ScraperConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
+import com.lawfirm.erp.modules.scraper.converter.NepaliDateUtil;
 import com.lawfirm.erp.modules.scraper.dto.ScrapeRunResult;
 import com.lawfirm.erp.modules.scraper.service.HearingExportService;
 import com.lawfirm.erp.modules.scraper.service.ScraperService;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.file.Path;
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/v1/scraper/admin")
@@ -29,9 +32,7 @@ public class ScraperAdminController {
     private final ResponseHandler responseHandler;
 
     @PostMapping("/scrape")
-    @Operation(summary = "Trigger a scrape for one court",
-            description = "Hits the court site live for a single court. mode=daily (default) or weekly; "
-                    + "date is BS yyyy-mm-dd and only applies to mode=daily (defaults to today).")
+    @Operation(summary = ScraperConstants.SCRAPE_SUMMARY, description = ScraperConstants.SCRAPE_DESCRIPTION)
     public ResponseEntity<ApiResponse<ScrapeRunResult>> scrape(
             @RequestParam Integer courtId,
             @RequestParam(required = false) String date,
@@ -41,16 +42,14 @@ public class ScraperAdminController {
             return responseHandler.ok(result,
                     result.isSuccess() ? "Weekly scrape completed" : "Scrape failed — see result for details");
         }
-        String dateBs = date != null ? date
-                : com.lawfirm.erp.modules.scraper.converter.NepaliDateUtil.adToBs(java.time.LocalDate.now());
+        String dateBs = date != null ? date : NepaliDateUtil.adToBs(LocalDate.now());
         ScrapeRunResult result = scraperService.runDailyScrapeForCourt(courtId, dateBs);
         return responseHandler.ok(result,
                 result.isSuccess() ? "Scrape completed" : "Scrape failed — see result for details");
     }
 
     @PostMapping("/export")
-    @Operation(summary = "Regenerate the weekly CSV export",
-            description = "Re-exports the previous completed Monday–Sunday window to <export-dir>/week-<monday>_<sunday>.csv (overwrites).")
+    @Operation(summary = ScraperConstants.EXPORT_SUMMARY, description = ScraperConstants.EXPORT_DESCRIPTION)
     public ResponseEntity<ApiResponse<String>> exportLastWeek() {
         Path file = exportService.exportLastWeek();
         return responseHandler.ok(file.toAbsolutePath().toString(), "Weekly export written");

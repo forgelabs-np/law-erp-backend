@@ -1,5 +1,6 @@
 package com.lawfirm.erp.modules.me.controller;
 
+import com.lawfirm.erp.common.constant.MeConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.modules.me.dto.MeResponse;
@@ -22,12 +23,7 @@ public class MeController {
     private final ResponseHandler responseHandler;
 
     @GetMapping
-    @Operation(
-            summary = "Get current user identity",
-            description = "Returns full identity for the logged-in user: " +
-                    "profile, firm context, role, all permissions (flat + grouped by module). " +
-                    "Frontend calls this once on app load to build the sidebar and permission checks."
-    )
+    @Operation(summary = MeConstants.GET_ME_SUMMARY, description = MeConstants.GET_ME_DESCRIPTION)
     public ResponseEntity<ApiResponse<MeResponse>> getMe() {
         return responseHandler.ok(meService.getMe(), "User identity fetched");
     }

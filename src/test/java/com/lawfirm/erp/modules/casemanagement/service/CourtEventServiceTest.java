@@ -46,10 +46,10 @@ class CourtEventServiceTest {
     @Mock private MatterRepository matterRepository;
     @Mock private MatterTimelineRepository matterTimelineRepository;
     @Mock private AuditService auditService;
-    @Mock private CourtCaseService courtCaseService;
+    @Mock private CourtCaseServiceImpl courtCaseService;
 
     @InjectMocks
-    private CourtEventService courtEventService;
+    private CourtEventServiceImpl courtEventService;
 
     @BeforeEach
     void setUp() {

@@ -51,7 +51,7 @@ class ScraperServiceTest {
     @Mock private WeeklyHearingRepository weeklyHearingRepository;
 
     private ScraperProperties properties;
-    private ScraperService service;
+    private ScraperServiceImpl service;
 
     @BeforeEach
     void setUp() {
@@ -59,9 +59,9 @@ class ScraperServiceTest {
         properties.setEnabled(true);
         properties.setMaxConcurrentCourts(4);
         properties.setRequestDelayMs(0);
-        service = new ScraperService(courtSiteClient, dailyParser, weeklyParser, caseDetailParser,
+        service = new ScraperServiceImpl(courtSiteClient, dailyParser, weeklyParser, caseDetailParser,
                 ingestionService, matchingService, clientCaseRepository, courtRepository,
-                dailyHearingRepository, weeklyHearingRepository, properties);
+                dailyHearingRepository, weeklyHearingRepository, properties, new com.lawfirm.erp.modules.scraper.mapper.ScraperMapper());
         service.init();
     }
 
