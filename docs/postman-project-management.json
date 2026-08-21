@@ -1,0 +1,460 @@
+{
+  "info": {
+    "name": "Law ERP — Project Management",
+    "description": "Complete API collection for the Project Management module.\n\nAuthentication: Bearer JWT token in Authorization header.\n\nBase URL: {{baseUrl}}/api/v1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "authToken",
+      "value": ""
+    },
+    {
+      "key": "projectCode",
+      "value": ""
+    },
+    {
+      "key": "credentialId",
+      "value": ""
+    },
+    {
+      "key": "renewalId",
+      "value": ""
+    },
+    {
+      "key": "instanceId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Projects",
+      "item": [
+        {
+          "name": "Create Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Nepal Telecom Trademark Renewal\",\n  \"clientName\": \"Nepal Telecom Ltd.\",\n  \"clientUserId\": null,\n  \"description\": \"Annual trademark renewal for Nepal Telecom\",\n  \"startDate\": \"2026-01-15\",\n  \"targetEndDate\": \"2028-12-31\",\n  \"ownerId\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects"]
+            }
+          }
+        },
+        {
+          "name": "List Projects",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "status", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Project",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Project",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Project Name\",\n  \"description\": \"Updated description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Status",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/status?status=ON_HOLD",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "status"],
+              "query": [
+                { "key": "status", "value": "ON_HOLD" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"uuid-of-user\",\n  \"role\": \"MEMBER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "members"]
+            }
+          }
+        },
+        {
+          "name": "List Members",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "members"]
+            }
+          }
+        },
+        {
+          "name": "Remove Member",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/members/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "members", "{{userId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Credentials",
+      "item": [
+        {
+          "name": "Add Credential",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"siteName\": \"USPTO Portal\",\n  \"siteType\": \"Trademark Portal\",\n  \"siteUrl\": \"https://www.uspto.gov\",\n  \"usernameOrEmail\": \"nepaltelecom@legal.com\",\n  \"password\": \"actual-password-here\",\n  \"contactPerson\": \"Sita Sharma\",\n  \"contactPhone\": \"+977-9841234567\",\n  \"contactEmail\": \"sita@uspto.gov\",\n  \"notes\": \"Portal access for trademark filing\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/credentials",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "credentials"]
+            }
+          }
+        },
+        {
+          "name": "List Credentials",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/credentials",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "credentials"]
+            }
+          }
+        },
+        {
+          "name": "Get Credential",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/credentials/{{credentialId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "credentials", "{{credentialId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Credential",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"siteName\": \"Updated Portal Name\",\n  \"password\": \"new-password-if-changing\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/credentials/{{credentialId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "credentials", "{{credentialId}}"]
+            }
+          }
+        },
+        {
+          "name": "Reveal Password",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/credentials/{{credentialId}}/reveal",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "credentials", "{{credentialId}}", "reveal"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Password is revealed', function () {",
+                  "    var response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.password).to.not.equal('••••••••');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Credential",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/credentials/{{credentialId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "credentials", "{{credentialId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Renewals",
+      "item": [
+        {
+          "name": "Create Renewal",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"renewalTypeId\": 1,\n  \"title\": \"Nepal Telecom Trademark Yearly\",\n  \"description\": \"Annual trademark renewal filing\",\n  \"recurrence\": \"YEARLY\",\n  \"startDate\": \"2026-03-15\",\n  \"endDate\": \"2029-03-15\",\n  \"assignedToId\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/renewals",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "renewals"]
+            }
+          }
+        },
+        {
+          "name": "List Renewals",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/renewals",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "renewals"]
+            }
+          }
+        },
+        {
+          "name": "Get Renewal",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/renewals/{{renewalId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "renewals", "{{renewalId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Renewal",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Renewal Title\",\n  \"assignedToId\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/renewals/{{renewalId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "renewals", "{{renewalId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Renewal Status",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/renewals/{{renewalId}}/status?status=COMPLETED",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "renewals", "{{renewalId}}", "status"],
+              "query": [
+                { "key": "status", "value": "COMPLETED" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Instance Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\",\n  \"notes\": \"Filed on time, confirmation received\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/renewals/{{renewalId}}/instances/{{instanceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "{{projectCode}}", "renewals", "{{renewalId}}", "instances", "{{instanceId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Renewal Types",
+      "item": [
+        {
+          "name": "List Renewal Types",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/renewal-types",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "renewal-types"]
+            }
+          }
+        },
+        {
+          "name": "Create Custom Type",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Environmental Compliance\",\n  \"description\": \"Annual environmental compliance filing\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/renewal-types",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "renewal-types"]
+            }
+          }
+        },
+        {
+          "name": "Delete Custom Type",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/renewal-types/{{typeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "renewal-types", "{{typeId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Client Portal",
+      "item": [
+        {
+          "name": "List My Projects",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/client/projects",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "client", "projects"]
+            }
+          }
+        },
+        {
+          "name": "View Project",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/client/projects/{{projectCode}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "client", "projects", "{{projectCode}}"]
+            }
+          }
+        },
+        {
+          "name": "View Renewals",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/client/projects/{{projectCode}}/renewals",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "client", "projects", "{{projectCode}}", "renewals"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects", "dashboard"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

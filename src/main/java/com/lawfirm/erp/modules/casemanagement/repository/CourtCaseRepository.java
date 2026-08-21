@@ -4,12 +4,13 @@ import com.lawfirm.erp.modules.casemanagement.entity.CourtCase;
 import com.lawfirm.erp.modules.casemanagement.enums.CourtCaseStatus;
 import com.lawfirm.erp.modules.casemanagement.enums.CourtLevel;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Repository
 public interface CourtCaseRepository extends JpaRepository<CourtCase, UUID> {
@@ -34,4 +35,8 @@ public interface CourtCaseRepository extends JpaRepository<CourtCase, UUID> {
     long countByMatterIdAndFirmIdAndStatusNotIn(UUID matterId, UUID firmId, List<CourtCaseStatus> statuses);
 
     boolean existsByParentCourtCaseId(UUID parentCourtCaseId);
+
+    /** Returns the set of parentCourtCaseIds that have at least one child. */
+    @Query("SELECT DISTINCT cc.parentCourtCaseId FROM CourtCase cc WHERE cc.parentCourtCaseId IN :parentIds")
+    Set<UUID> findParentIdsWithChildren(@Param("parentIds") Collection<UUID> parentIds);
 }

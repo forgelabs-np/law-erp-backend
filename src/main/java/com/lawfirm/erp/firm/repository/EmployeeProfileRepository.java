@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -18,4 +19,7 @@ public interface EmployeeProfileRepository extends JpaRepository<EmployeeProfile
 
     @Query("SELECT COUNT(ep) FROM EmployeeProfile ep WHERE ep.user.firm.id = :firmId")
     long countByFirmId(@Param("firmId") UUID firmId);
+
+    /** Batch-load profiles for multiple users in a single query — avoids N+1. */
+    List<EmployeeProfile> findAllByUserIdIn(List<UUID> userIds);
 }

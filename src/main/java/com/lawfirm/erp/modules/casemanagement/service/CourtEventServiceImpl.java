@@ -30,8 +30,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -101,9 +101,14 @@ public class CourtEventServiceImpl implements CourtEventService {
     public List<CourtEventResponse> listEvents(String ourCourtCaseRef) {
         UUID firmId = getRequiredFirmId();
         CourtCase cc = findCourtCase(ourCourtCaseRef, firmId);
-        return courtEventRepository.findByCourtCaseIdAndFirmIdOrderBySequenceNoAsc(cc.getId(), firmId)
-                .stream()
-                .map(e -> toResponse(e, cc))
+        List<CourtEvent> events = courtEventRepository
+                .findByCourtCaseIdAndFirmIdOrderBySequenceNoAsc(cc.getId(), firmId);
+
+        // Batch-resolve matter once for all events (avoids N+1)
+        Matter matter = matterRepository.findById(cc.getMatterId()).orElse(null);
+
+        return events.stream()
+                .map(e -> toResponse(e, cc, matter))
                 .collect(Collectors.toList());
     }
 
@@ -288,13 +293,20 @@ public class CourtEventServiceImpl implements CourtEventService {
     }
 
     private CourtEventResponse toResponse(CourtEvent event, CourtCase cc) {
-        return toResponse(event, cc, null);
+        return toResponse(event, cc, (Matter) null);
+    }
+
+    private CourtEventResponse toResponse(CourtEvent event, CourtCase cc, Matter matter) {
+        return toResponse(event, cc, matter, null);
     }
 
     private CourtEventResponse toResponse(CourtEvent event, CourtCase cc, String conflictWarning) {
         Matter matter = cc.getMatterId() != null
                 ? matterRepository.findById(cc.getMatterId()).orElse(null) : null;
+        return toResponse(event, cc, matter, conflictWarning);
+    }
 
+    private CourtEventResponse toResponse(CourtEvent event, CourtCase cc, Matter matter, String conflictWarning) {
         return CourtEventResponse.builder()
                 .id(event.getId())
                 .courtCaseId(cc.getId())

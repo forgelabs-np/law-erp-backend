@@ -69,6 +69,33 @@ Only on request, never automatically.
 5. Add one pointer line under STATE.md's "Deep history index."
 6. If it's not obvious which feature "generate" refers to, ask before writing.
 
+## 4b. On module completion — generate docs + Postman + PDF
+
+When a full module is completed (all entities, services, controllers, tests passing), automatically generate:
+
+1. **Comprehensive Markdown doc** at `docs/<module-name>-module.md` covering:
+   - Overview & architecture
+   - Data model (all entities with column tables)
+   - Full API reference (all endpoints with request/response examples)
+   - RBAC & permissions matrix
+   - Security details (encryption, audit logging)
+   - Business rules & restrictions
+   - Frontend integration guide (code snippets, form validation)
+   - Seed data reference
+   - Testing instructions
+
+2. **Postman collection JSON** at `docs/postman-<module-name>.json`:
+   - All endpoints organized by resource
+   - Environment variables (`baseUrl`, `authToken`, entity IDs)
+   - Request bodies with realistic examples
+   - Basic tests for key responses
+
+3. **PDF export** at `docs/<module-name>-module.pdf`:
+   - Use `npx --yes md-to-pdf` to convert the Markdown doc
+   - A4 format with 20mm margins
+
+This ensures every module ships with official documentation, importable API collection, and a shareable PDF.
+
 ## Hard rules
 
 - Session start reads `STATE.md` (+ today's file, if present). Nothing else, by default.

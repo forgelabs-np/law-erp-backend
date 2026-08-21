@@ -33,10 +33,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -224,8 +221,16 @@ public class CourtCaseServiceImpl implements CourtCaseService {
                         firmId, CourtCaseStatus.DECIDED, today, today.plusDays(withinDays))
                 .stream()
                 .filter(cc -> cc.getStage() == CourtCaseStage.JUDGMENT_DELIVERED)
-                .filter(cc -> !courtCaseRepository.existsByParentCourtCaseId(cc.getId()))
                 .collect(Collectors.toList());
+
+        // Batch: find which cases already have children (single query, no N+1)
+        if (!due.isEmpty()) {
+            Set<UUID> parentIdsWithChildren = courtCaseRepository.findParentIdsWithChildren(
+                    due.stream().map(CourtCase::getId).collect(Collectors.toSet()));
+            due = due.stream()
+                    .filter(cc -> !parentIdsWithChildren.contains(cc.getId()))
+                    .collect(Collectors.toList());
+        }
         if (due.isEmpty()) return List.of();
 
         Set<UUID> matterIds = due.stream().map(CourtCase::getMatterId).collect(Collectors.toSet());

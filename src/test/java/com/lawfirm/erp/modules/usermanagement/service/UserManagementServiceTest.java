@@ -98,7 +98,7 @@ class UserManagementServiceTest {
         employee.setUserType(UserType.FIRM_USER);
         employee.setUsername("advocate");
         employee.setActive(true);
-        when(userRepository.findById(any())).thenReturn(Optional.of(employee));
+        when(userRepository.findAllById(any())).thenReturn(List.of(employee));
         when(userRepository.save(any())).thenReturn(employee);
 
         BulkRoleChangeRequest request = new BulkRoleChangeRequest();

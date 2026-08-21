@@ -216,17 +216,31 @@ public class UserManagementServiceImpl implements UserManagementService {
         UUID firmId = getRequiredFirmId();
         UUID currentUserId = currentUserResolver.getCurrentUserId();
 
+        // Batch-load all users in one query (avoids N+1)
+        List<User> users = userRepository.findAllById(request.getUserIds());
+        Map<UUID, User> userMap = users.stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
         List<String> failed = new ArrayList<>();
         int succeeded = 0;
 
         for (UUID userId : request.getUserIds()) {
             try {
+                User user = userMap.get(userId);
+                if (user == null) {
+                    failed.add(userId + ": user not found");
+                    continue;
+                }
+
                 if (userId.equals(currentUserId)) {
                     failed.add(userId + ": cannot deactivate yourself");
                     continue;
                 }
 
-                User user = getValidatedUser(userId, firmId);
+                if (user.getFirm() == null || !user.getFirm().getId().equals(firmId)) {
+                    failed.add(userId + ": user does not belong to your firm");
+                    continue;
+                }
 
                 if (!user.isActive()) {
                     failed.add(userId + ": user is already inactive");
@@ -242,7 +256,7 @@ public class UserManagementServiceImpl implements UserManagementService {
                         "Bulk deactivated: " + user.getUsername());
 
                 succeeded++;
-            } catch (ResourceNotFoundException | ForbiddenException e) {
+            } catch (Exception e) {
                 failed.add(userId + ": " + e.getMessage());
             }
         }
@@ -282,9 +296,23 @@ public class UserManagementServiceImpl implements UserManagementService {
         List<String> failed = new ArrayList<>();
         int succeeded = 0;
 
+        // Batch-load all users in one query (avoids N+1)
+        List<User> allUsers = userRepository.findAllById(request.getUserIds());
+        Map<UUID, User> userMap = allUsers.stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
         for (UUID userId : request.getUserIds()) {
             try {
-                User user = getValidatedUser(userId, firmId);
+                User user = userMap.get(userId);
+                if (user == null) {
+                    failed.add(userId + ": user not found");
+                    continue;
+                }
+
+                if (user.getFirm() == null || !user.getFirm().getId().equals(firmId)) {
+                    failed.add(userId + ": user does not belong to your firm");
+                    continue;
+                }
 
                 if (user.getUserType() == UserType.CLIENT && newRole.getApplicableTo() == UserType.FIRM_USER) {
                     failed.add(userId + ": cannot assign FIRM_USER role to a client");
@@ -306,7 +334,7 @@ public class UserManagementServiceImpl implements UserManagementService {
                         " for user: " + user.getUsername());
 
                 succeeded++;
-            } catch (ResourceNotFoundException | ForbiddenException | BusinessRuleException e) {
+            } catch (Exception e) {
                 failed.add(userId + ": " + e.getMessage());
             }
         }

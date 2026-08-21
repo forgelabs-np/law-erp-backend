@@ -39,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -165,12 +166,15 @@ public class EmployeeServiceImpl implements EmployeeService {
                 pageable
         );
 
+        // Batch-load all employee profiles in one query (avoids N+1)
+        List<UUID> userIds = userPage.getContent().stream()
+                .map(User::getId).collect(Collectors.toList());
+        Map<UUID, EmployeeProfile> profileMap = employeeProfileRepository
+                .findAllByUserIdIn(userIds).stream()
+                .collect(Collectors.toMap(p -> p.getUser().getId(), p -> p));
+
         List<EmployeeResponse> content = userPage.getContent().stream()
-                .map(user -> {
-                    EmployeeProfile profile = employeeProfileRepository.findByUserId(user.getId())
-                            .orElse(null);
-                    return toResponse(user, user.getRole(), profile);
-                })
+                .map(user -> toResponse(user, user.getRole(), profileMap.get(user.getId())))
                 .collect(Collectors.toList());
 
         return PagedResponse.of(userPage, content);

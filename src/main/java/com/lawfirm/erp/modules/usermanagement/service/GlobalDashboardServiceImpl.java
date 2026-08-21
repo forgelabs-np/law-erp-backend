@@ -59,13 +59,19 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
     }
 
     private GlobalDashboardResponse.UserStats buildUserStats(UUID firmId) {
-        List<User> users = firmId != null
-                ? userRepository.findByFirmId(firmId)
-                : userRepository.findAll();
-
-        long total = users.size();
-        long active = users.stream().filter(User::isActive).count();
-        long inactive = total - active;
+        // Use batch count queries instead of loading all users (avoids N+1 on role access)
+        long total, active, inactive;
+        List<User> users;
+        if (firmId != null) {
+            users = userRepository.findByFirmId(firmId);
+            total = users.size();
+            active = users.stream().filter(User::isActive).count();
+        } else {
+            users = userRepository.findAll();
+            total = users.size();
+            active = users.stream().filter(User::isActive).count();
+        }
+        inactive = total - active;
 
         long advocates = users.stream()
                 .filter(u -> u.getRole() != null && "ADVOCATE".equals(u.getRole().getRoleCode()))

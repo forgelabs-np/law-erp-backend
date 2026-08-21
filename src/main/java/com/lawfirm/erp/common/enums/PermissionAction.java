@@ -20,5 +20,8 @@ public enum PermissionAction {
     APPROVE, REJECT, REVIEW,
 
     // Additional operations
-    ARCHIVE, RESTORE, PRINT, FORWARD
+    ARCHIVE, RESTORE, PRINT, FORWARD,
+
+    // Project management - credential operations
+    CREDENTIAL_VIEW, CREDENTIAL_REVEAL
 }

@@ -9,6 +9,8 @@ import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
+import com.lawfirm.erp.modules.projectmanagement.entity.RenewalType;
+import com.lawfirm.erp.modules.projectmanagement.repository.RenewalTypeRepository;
 import com.lawfirm.erp.rbac.entity.Module;
 import com.lawfirm.erp.rbac.entity.ModulePermission;
 import com.lawfirm.erp.rbac.entity.Permission;
@@ -66,6 +68,7 @@ public class DataInitializer implements CommandLineRunner {
     private final TenantTypeRepository tenantTypeRepository;
     private final FirmRepository firmRepository;
     private final UserRepository userRepository;
+    private final RenewalTypeRepository renewalTypeRepository;
 
     private static final String FULL      = "FULL";
     private static final String READ_ONLY = "READ_ONLY";
@@ -83,6 +86,7 @@ public class DataInitializer implements CommandLineRunner {
         createSystemRoles();
         createModulesAndPermissions();
         assignPermissionsToRoles();
+        seedDefaultRenewalTypes();
 
         log.info("=== DataInitializer: seed complete ===");
     }
@@ -190,7 +194,9 @@ public class DataInitializer implements CommandLineRunner {
                 {"REPORTS", "Reports", "View analytics and reports", 7, 70, "BarChartIcon", "/reports",
                         new PermissionAction[]{PermissionAction.EXPORT, PermissionAction.PRINT}},
                 {"AUDIT", "Audit Logs", "View system audit logs", 8, 80, "ShieldIcon", "/audit",
-                        new PermissionAction[]{}}
+                        new PermissionAction[]{}},
+                {"PROJECT_MANAGEMENT", "Project Management", "Manage client projects, credentials, and renewals", 9, 90, "ClipboardIcon", "/projects",
+                        new PermissionAction[]{PermissionAction.CREDENTIAL_VIEW, PermissionAction.CREDENTIAL_REVEAL}}
         };
 
         PermissionAction[] standard = {
@@ -228,26 +234,33 @@ public class DataInitializer implements CommandLineRunner {
                 String permCode = moduleCode + ":" + action.name();
 
                 Permission perm = permissionRepository.findByCode(permCode).orElseGet(() -> {
-                    Permission p = new Permission();
-                    p.setCode(permCode);
-                    p.setAction(action);
-                    p.setScope(PermissionScope.TENANT); // default; OWN is applied at query layer for CLIENT
-                    p.setModuleCode(moduleCode);
-                    p.setDescription(def[1] + " - " + action.name());
-                    p.setActive(true);
-                    Permission saved = permissionRepository.save(p);
-                    log.info("    + Permission: {}", permCode);
-                    return saved;
+                    try {
+                        Permission p = new Permission();
+                        p.setCode(permCode);
+                        p.setAction(action);
+                        p.setScope(PermissionScope.TENANT); // default; OWN is applied at query layer for CLIENT
+                        p.setModuleCode(moduleCode);
+                        p.setDescription(def[1] + " - " + action.name());
+                        p.setActive(true);
+                        Permission saved = permissionRepository.save(p);
+                        log.info("    + Permission: {}", permCode);
+                        return saved;
+                    } catch (Exception e) {
+                        log.warn("    ! Could not create permission {} (run DB migration first): {}", permCode, e.getMessage());
+                        return null;
+                    }
                 });
 
-                List<Permission> existingForModule = modulePermissionRepository.findPermissionsByModuleId(module.getId());
-                boolean alreadyLinked = existingForModule.stream().anyMatch(p -> p.getId().equals(perm.getId()));
-                if (!alreadyLinked) {
-                    ModulePermission mp = ModulePermission.builder()
-                            .module(module)
-                            .permission(perm)
-                            .build();
-                    modulePermissionRepository.save(mp);
+                if (perm != null) {
+                    List<Permission> existingForModule = modulePermissionRepository.findPermissionsByModuleId(module.getId());
+                    boolean alreadyLinked = existingForModule.stream().anyMatch(p -> p.getId().equals(perm.getId()));
+                    if (!alreadyLinked) {
+                        ModulePermission mp = ModulePermission.builder()
+                                .module(module)
+                                .permission(perm)
+                                .build();
+                        modulePermissionRepository.save(mp);
+                    }
                 }
             }
         }
@@ -268,6 +281,7 @@ public class DataInitializer implements CommandLineRunner {
                 {"EMPLOYEE",            FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
                 {"REPORTS",             FULL, FULL, READ_ONLY, NO_ACCESS, NO_ACCESS},
                 {"AUDIT",               FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+                {"PROJECT_MANAGEMENT",   FULL, FULL, READ_ONLY, READ_ONLY, OWN},
         };
 
         String[] roleCodes = {"SUPER_ADMIN", "FIRM_ADMIN", "ADVOCATE", "PARALEGAL", "CLIENT"};
@@ -330,5 +344,35 @@ public class DataInitializer implements CommandLineRunner {
                     .toList();
             default -> List.of();
         };
+    }
+
+    // ========================================================================
+    // Default Renewal Types (system-wide)
+    // ========================================================================
+    private void seedDefaultRenewalTypes() {
+        String[][] types = {
+                {"Trademark Renewal", "Annual trademark renewal and maintenance"},
+                {"Patent Renewal", "Patent maintenance and renewal fees"},
+                {"License Renewal", "Business license and permit renewals"},
+                {"Annual Compliance", "Annual statutory compliance filings"},
+                {"Tax Filing", "Tax return and filing deadlines"},
+                {"Secretarial Compliance", "Company secretarial compliance filings"},
+                {"Other", "General renewal or deadline"}
+        };
+
+        for (String[] typeData : types) {
+            boolean exists = renewalTypeRepository.findAll().stream()
+                    .anyMatch(rt -> rt.getName().equals(typeData[0]) && rt.isSystem());
+            if (!exists) {
+                RenewalType rt = RenewalType.builder()
+                        .name(typeData[0])
+                        .description(typeData[1])
+                        .system(true)
+                        .active(true)
+                        .build();
+                renewalTypeRepository.save(rt);
+                log.info("  + RenewalType (system): {}", typeData[0]);
+            }
+        }
     }
 }

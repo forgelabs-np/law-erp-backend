@@ -24,5 +24,8 @@ public enum AuditEntity {
     COURT_CASE,
     COURT_EVENT,
     EMAIL_CONFIG,
-    SYSTEM_CONFIG
+    SYSTEM_CONFIG,
+    PROJECT,
+    CREDENTIAL,
+    RENEWAL
 }

@@ -152,6 +152,12 @@ public class FirmRoleServiceImpl implements FirmRoleService {
 
         Role role = getValidatedFirmRole(roleId, firmId);
 
+        // ── Batch-load permissions first (single query, avoids N+1) ──────
+        List<Permission> permissions = permissionRepository.findAllById(request.getPermissionIds());
+        if (permissions.size() != request.getPermissionIds().size()) {
+            throw new ResourceNotFoundException("One or more permission IDs are invalid");
+        }
+
         // ── Ceiling check ─────────────────────────────────────────────────
         // Firm admin cannot assign permissions beyond what the parent system
         // role has. parentRoleId was set when the role was cloned at firm creation.
@@ -161,9 +167,7 @@ public class FirmRoleServiceImpl implements FirmRoleService {
 
             PermissionScope maxScope = getMaxScopeForParent(parentRole.getRoleCode());
 
-            for (UUID permId : request.getPermissionIds()) {
-                Permission p = permissionRepository.findById(permId)
-                        .orElseThrow(() -> new ResourceNotFoundException("Permission not found: " + permId));
+            for (Permission p : permissions) {
                 if (!isScopeAllowed(p.getScope(), maxScope)) {
                     throw new ForbiddenException(
                             "Permission '" + p.getCode() + "' (scope: " + p.getScope()
@@ -172,12 +176,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                     );
                 }
             }
-        }
-
-        // ── Validate all permission IDs exist ─────────────────────────────
-        List<Permission> permissions = permissionRepository.findAllById(request.getPermissionIds());
-        if (permissions.size() != request.getPermissionIds().size()) {
-            throw new ResourceNotFoundException("One or more permission IDs are invalid");
         }
 
         // ── Replace permissions ───────────────────────────────────────────

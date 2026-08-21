@@ -22,9 +22,8 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -191,8 +190,8 @@ class CourtCaseServiceTest {
         when(courtCaseRepository.findByFirmIdAndStatusAndAppealDeadlineBetweenAndAppealLapsedFalse(
                 eq(FIRM_ID), eq(CourtCaseStatus.DECIDED), any(), any()))
                 .thenReturn(List.of(due, withChild));
-        when(courtCaseRepository.existsByParentCourtCaseId(withChild.getId())).thenReturn(true);
-        when(courtCaseRepository.existsByParentCourtCaseId(due.getId())).thenReturn(false);
+        when(courtCaseRepository.findParentIdsWithChildren(anyCollection()))
+                .thenReturn(Set.of(withChild.getId()));
 
         Matter m = matter(MatterType.CIVIL);
         when(matterRepository.findAllById(anyCollection())).thenReturn(List.of(m));
