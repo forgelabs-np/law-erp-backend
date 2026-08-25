@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,4 +40,32 @@ public interface MatterRepository extends JpaRepository<Matter, UUID> {
                                @Param("status") MatterStatus status,
                                @Param("search") String search,
                                Pageable pageable);
+
+    /** Count by status — avoids loading all matters just to count. */
+    @Query("SELECT COUNT(m) FROM Matter m WHERE m.firmId = :firmId AND m.status = :status")
+    long countByFirmIdAndStatus(@Param("firmId") UUID firmId, @Param("status") MatterStatus status);
+
+    /** Total count by firm — avoids loading all matters into memory. */
+    @Query("SELECT COUNT(m) FROM Matter m WHERE m.firmId = :firmId")
+    long countByFirmId(@Param("firmId") UUID firmId);
+
+    // ── Trend queries ─────────────────────────────────────────────────────
+
+    /** Daily new matter counts grouped by date. */
+    @Query("SELECT FUNCTION('DATE', m.createdAt) as d, COUNT(m) as total, " +
+           "SUM(CASE WHEN m.status = 'ACTIVE' THEN 1 ELSE 0 END) as active, " +
+           "SUM(CASE WHEN m.status = 'CLOSED' THEN 1 ELSE 0 END) as closed " +
+           "FROM Matter m WHERE m.createdAt >= :from AND m.createdAt < :to " +
+           "GROUP BY FUNCTION('DATE', m.createdAt) ORDER BY d ASC")
+    List<Object[]> countDailyByDateRange(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /** Firm-scoped daily new matter counts. */
+    @Query("SELECT FUNCTION('DATE', m.createdAt) as d, COUNT(m) as total, " +
+           "SUM(CASE WHEN m.status = 'ACTIVE' THEN 1 ELSE 0 END) as active, " +
+           "SUM(CASE WHEN m.status = 'CLOSED' THEN 1 ELSE 0 END) as closed " +
+           "FROM Matter m WHERE m.firmId = :firmId AND m.createdAt >= :from AND m.createdAt < :to " +
+           "GROUP BY FUNCTION('DATE', m.createdAt) ORDER BY d ASC")
+    List<Object[]> countDailyByFirmIdAndDateRange(@Param("firmId") UUID firmId,
+                                                   @Param("from") LocalDateTime from,
+                                                   @Param("to") LocalDateTime to);
 }

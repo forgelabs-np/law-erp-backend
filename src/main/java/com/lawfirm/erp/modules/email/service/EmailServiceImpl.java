@@ -7,6 +7,9 @@ import com.lawfirm.erp.firm.service.FirmEmailConfigService;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
+import com.lawfirm.erp.modules.casemanagement.entity.HearingReminderLog;
+import com.lawfirm.erp.modules.casemanagement.repository.HearingReminderLogRepository;
+import com.lawfirm.erp.modules.email.dto.HearingReminderDetails;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
@@ -34,6 +38,7 @@ public class EmailServiceImpl implements EmailService {
     private final AuditService auditService;
     private final TemplateEngine templateEngine;
     private final JavaMailSender defaultMailSender;
+    private final HearingReminderLogRepository hearingReminderLogRepository;
 
     @Override
     @Async
@@ -127,9 +132,64 @@ public class EmailServiceImpl implements EmailService {
                 fullName, AuditEntity.USER);
     }
 
-    private void sendHtmlEmail(UUID firmId, UUID triggeredByUserId, String toEmail, String subject,
-                               String template, Context ctx, String recipientIdentifier,
-                               AuditEntity auditEntity) {
+    @Override
+    @Async
+    public void sendHearingReminder(UUID firmId, UUID recipientUserId, String toEmail, String fullName,
+                                    HearingReminderDetails details,
+                                    HearingReminderLog.RecipientType recipientType,
+                                    UUID reminderLogId) {
+        Map<String, String> cfg = systemConfigService.getEffectiveConfig(firmId);
+        String primaryColor = cfg.getOrDefault(SystemConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
+        String footer = cfg.getOrDefault(SystemConfigService.KEY_EMAIL_FOOTER_TEXT, "");
+        String portalUrl = cfg.getOrDefault("CLIENT_PORTAL_URL", "https://app.nepalcrm.com/portal");
+        String loginUrl = cfg.getOrDefault("LOGIN_URL", "https://app.nepalcrm.com/login");
+
+        String dateText = details.scheduledDate()
+                .format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy"));
+        String timeText = details.scheduledTime() != null
+                ? details.scheduledTime().format(DateTimeFormatter.ofPattern("h:mm a"))
+                : "To be confirmed";
+
+        String subject = (recipientType == HearingReminderLog.RecipientType.CLIENT
+                ? "Reminder: your hearing at " + details.courtName() + " is tomorrow"
+                : "Hearing reminder: " + details.courtCaseRef() + " — " + details.courtName() + " tomorrow");
+
+        Context ctx = new Context();
+        ctx.setVariable("firmName", details.firmName());
+        ctx.setVariable("fullName", fullName);
+        ctx.setVariable("recipientType", recipientType.name());
+        ctx.setVariable("matterNumber", details.matterNumber());
+        ctx.setVariable("matterTitle", details.matterTitle());
+        ctx.setVariable("courtCaseRef", details.courtCaseRef());
+        ctx.setVariable("courtName", details.courtName());
+        ctx.setVariable("hearingDate", dateText);
+        ctx.setVariable("hearingTime", timeText);
+        ctx.setVariable("courtRoom", details.courtRoom());
+        ctx.setVariable("judgeName", details.judgeName());
+        ctx.setVariable("portalUrl", portalUrl);
+        ctx.setVariable("loginUrl", loginUrl);
+        ctx.setVariable("primaryColor", primaryColor);
+        ctx.setVariable("emailFooter", footer);
+
+        boolean ok = sendHtmlEmail(firmId, recipientUserId, toEmail, subject,
+                "email/hearing-reminder", ctx, toEmail, AuditEntity.COURT_EVENT);
+        if (!ok && reminderLogId != null) {
+            try {
+                hearingReminderLogRepository.findById(reminderLogId)
+                        .ifPresent(log -> {
+                            log.setStatus(HearingReminderLog.Status.FAILED);
+                            hearingReminderLogRepository.save(log);
+                        });
+            } catch (Exception e) {
+                log.warn("Could not update hearing-reminder log {}: {}", reminderLogId, e.getMessage());
+            }
+        }
+    }
+
+    /** @return true when the email was handed to the SMTP server. */
+    private boolean sendHtmlEmail(UUID firmId, UUID triggeredByUserId, String toEmail, String subject,
+                                  String template, Context ctx, String recipientIdentifier,
+                                  AuditEntity auditEntity) {
         try {
             JavaMailSender mailSender = resolveMailSender(firmId);
             String htmlContent = templateEngine.process(template, ctx);
@@ -148,6 +208,7 @@ public class EmailServiceImpl implements EmailService {
             auditService.logExplicit(firmId, triggeredByUserId, "S",
                     AuditAction.EMAIL_SENT, auditEntity, null,
                     "Email sent to " + toEmail + ": " + subject, null);
+            return true;
 
         } catch (Exception e) {
             log.error("EMAIL_FAILED: to={}, subject={}, firmId={}, error={}",
@@ -155,6 +216,7 @@ public class EmailServiceImpl implements EmailService {
             auditService.logExplicit(firmId, triggeredByUserId, "S",
                     AuditAction.EMAIL_FAILED, auditEntity, null,
                     "Email failed to " + toEmail + ": " + e.getMessage(), null);
+            return false;
         }
     }
 

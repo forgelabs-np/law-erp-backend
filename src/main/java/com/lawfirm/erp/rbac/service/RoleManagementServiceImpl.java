@@ -12,6 +12,7 @@ import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
+import com.lawfirm.erp.rbac.entity.RolePermission;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
@@ -21,8 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -94,10 +94,11 @@ public class RoleManagementServiceImpl implements RoleManagementService {
 
         validateNotSystemRole(role, "delete");
 
-        if (roleRepository.countUsersByRoleId(roleId) > 0) {
+        int userCount = roleRepository.countUsersByRoleId(roleId);
+        if (userCount > 0) {
             throw new BusinessRuleException(
                     String.format("Cannot delete role: %s. It is currently assigned to %d user(s)",
-                            role.getRoleName(), roleRepository.countUsersByRoleId(roleId))
+                            role.getRoleName(), userCount)
             );
         }
 
@@ -220,16 +221,38 @@ public class RoleManagementServiceImpl implements RoleManagementService {
 
     @Override
     public List<RoleResponse> getAllRoles() {
-        return roleRepository.findAll().stream()
-                .map(this::convertToCompleteResponse)
-                .collect(Collectors.toList());
+        List<Role> roles = roleRepository.findAll();
+        return batchConvertToCompleteResponse(roles);
     }
 
     @Override
     public List<RoleResponse> getActiveRoles() {
-        return roleRepository.findAll().stream()
-                .filter(Role::isActive)
-                .map(this::convertToCompleteResponse)
+        List<Role> roles = roleRepository.findAllActive();
+        return batchConvertToCompleteResponse(roles);
+    }
+
+    /**
+     * Batch-load permissions for all roles in one query, then build responses.
+     * Eliminates the N+1 that was: 1 query for roles + N queries for permissions.
+     */
+    private List<RoleResponse> batchConvertToCompleteResponse(List<Role> roles) {
+        if (roles.isEmpty()) return List.of();
+
+        List<UUID> roleIds = roles.stream().map(Role::getId).collect(Collectors.toList());
+        List<RolePermission> allRPs = rolePermissionRepository.findByRoleIdIn(roleIds);
+
+        // Group permissions by role ID (single pass, no extra queries)
+        Map<UUID, List<PermissionResponse>> permsByRole = allRPs.stream()
+                .collect(Collectors.groupingBy(
+                        rp -> rp.getRole().getId(),
+                        Collectors.mapping(
+                                rp -> rbacResponseMapper.toPermissionResponse(rp.getPermission()),
+                                Collectors.toList())
+                ));
+
+        return roles.stream()
+                .map(role -> rbacResponseMapper.toRoleResponse(
+                        role, permsByRole.getOrDefault(role.getId(), List.of())))
                 .collect(Collectors.toList());
     }
 
@@ -239,7 +262,9 @@ public class RoleManagementServiceImpl implements RoleManagementService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         String.format("Role not found with id: %s", roleId)
                 ));
-        return convertToCompleteResponse(role);
+        List<PermissionResponse> permissions = rbacResponseMapper.toPermissionResponseList(
+                rolePermissionRepository.findPermissionsByRoleId(role.getId()));
+        return rbacResponseMapper.toRoleResponse(role, permissions);
     }
 
     private RoleResponse convertToMinimalResponse(Role role) {

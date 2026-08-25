@@ -1,5 +1,6 @@
 package com.lawfirm.erp.modules.projectmanagement.controller;
 
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.constant.ProjectManagementConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.modules.projectmanagement.dto.request.*;
@@ -21,12 +22,14 @@ import java.util.List;
 public class RenewalController {
 
     private final RenewalService renewalService;
+    private final PermissionEvaluator permissionEvaluator;
 
     @PostMapping
     @Operation(summary = ProjectManagementConstants.CREATE_RENEWAL)
     public ApiResponse<RenewalResponse> createRenewal(
             @PathVariable String projectCode,
             @Valid @RequestBody CreateRenewalRequest request) {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:CREATE");
         return ApiResponse.success("Renewal created",
                 renewalService.createRenewal(projectCode, request));
     }
@@ -34,6 +37,7 @@ public class RenewalController {
     @GetMapping
     @Operation(summary = ProjectManagementConstants.LIST_RENEWALS)
     public ApiResponse<List<RenewalResponse>> listRenewals(@PathVariable String projectCode) {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:VIEW");
         return ApiResponse.success(renewalService.listRenewals(projectCode));
     }
 
@@ -42,6 +46,7 @@ public class RenewalController {
     public ApiResponse<RenewalResponse> getRenewal(
             @PathVariable String projectCode,
             @PathVariable Long id) {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:VIEW");
         return ApiResponse.success(renewalService.getRenewal(projectCode, id));
     }
 
@@ -51,6 +56,7 @@ public class RenewalController {
             @PathVariable String projectCode,
             @PathVariable Long id,
             @Valid @RequestBody UpdateRenewalRequest request) {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:EDIT");
         return ApiResponse.success("Renewal updated",
                 renewalService.updateRenewal(projectCode, id, request));
     }
@@ -61,6 +67,7 @@ public class RenewalController {
             @PathVariable String projectCode,
             @PathVariable Long id,
             @RequestParam RenewalStatus status) {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:EDIT");
         return ApiResponse.success("Status updated",
                 renewalService.updateRenewalStatus(projectCode, id, status));
     }
@@ -72,6 +79,7 @@ public class RenewalController {
             @PathVariable Long renewalId,
             @PathVariable Long instanceId,
             @Valid @RequestBody UpdateInstanceStatusRequest request) {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:EDIT");
         return ApiResponse.success("Instance updated",
                 renewalService.updateInstanceStatus(projectCode, renewalId, instanceId, request));
     }

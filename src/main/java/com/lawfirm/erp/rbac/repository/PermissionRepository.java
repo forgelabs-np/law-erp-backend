@@ -23,4 +23,8 @@ public interface PermissionRepository extends JpaRepository<Permission, UUID> {
 
     @Query("SELECT COUNT(mp) FROM ModulePermission mp WHERE mp.permission.id = :permissionId")
     long countModulePermissionsByPermissionId(@Param("permissionId") UUID permissionId);
+
+    /** Active-only list — avoids loading + filtering in Java. */
+    @Query("SELECT p FROM Permission p WHERE p.active = true")
+    List<Permission> findAllActive();
 }

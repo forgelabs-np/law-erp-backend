@@ -290,7 +290,7 @@ class PermissionServiceTest {
             inactive.setId(UUID.randomUUID());
             inactive.setActive(false);
 
-            when(permissionRepository.findAll()).thenReturn(List.of(existingPermission, inactive));
+            when(permissionRepository.findAllActive()).thenReturn(List.of(existingPermission));
 
             List<PermissionResponse> responses = permissionService.findActive();
 

@@ -7,21 +7,23 @@ import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.DuplicateResourceException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.dto.admin.request.PermissionRequest;
+import com.lawfirm.erp.dto.admin.response.GroupedPermissionResponse;
 import com.lawfirm.erp.dto.admin.response.PermissionResponse;
+import com.lawfirm.erp.rbac.entity.Module;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.RolePermission;
+import com.lawfirm.erp.rbac.repository.ModulePermissionRepository;
+import com.lawfirm.erp.rbac.repository.ModuleRepository;
 import com.lawfirm.erp.rbac.repository.PermissionRepository;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +32,8 @@ import java.util.stream.Collectors;
 public class PermissionServiceImpl implements PermissionService {
 
     private final PermissionRepository permissionRepository;
+    private final ModuleRepository moduleRepository;
+    private final ModulePermissionRepository modulePermissionRepository;
     private final RoleRepository roleRepository;
     private final RolePermissionRepository rolePermissionRepository;
     private final CurrentUserResolver currentUserResolver;
@@ -146,8 +150,7 @@ public class PermissionServiceImpl implements PermissionService {
 
     @Override
     public List<PermissionResponse> findActive() {
-        return permissionRepository.findAll().stream()
-                .filter(Permission::isActive)
+        return permissionRepository.findAllActive().stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
@@ -157,6 +160,47 @@ public class PermissionServiceImpl implements PermissionService {
         Permission permission = permissionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Permission not found: " + id));
         return toResponse(permission);
+    }
+
+    @Override
+    public GroupedPermissionResponse findAllGroupedByModule() {
+        List<Module> modules = moduleRepository.findAllWithParentOrderByDisplayOrder();
+
+        // Batch-load all module-permission mappings in one query (eliminates N+1)
+        List<UUID> moduleIds = modules.stream().map(Module::getId).collect(Collectors.toList());
+        List<com.lawfirm.erp.rbac.entity.ModulePermission> allMappings = moduleIds.isEmpty()
+                ? List.of()
+                : modulePermissionRepository.findByModuleIdIn(moduleIds);
+
+        // Group permissions by module ID
+        Map<UUID, List<Permission>> permsByModule = allMappings.stream()
+                .collect(Collectors.groupingBy(
+                        mp -> mp.getModule().getId(),
+                        Collectors.mapping(com.lawfirm.erp.rbac.entity.ModulePermission::getPermission, Collectors.toList())
+                ));
+
+        List<GroupedPermissionResponse.ModulePermissions> modulePermList = modules.stream()
+                .map(module -> {
+                    List<Permission> perms = permsByModule.getOrDefault(module.getId(), List.of());
+                    List<PermissionResponse> permResponses = perms.stream()
+                            .map(this::toResponse)
+                            .collect(Collectors.toList());
+
+                    return GroupedPermissionResponse.ModulePermissions.builder()
+                            .moduleCode(module.getCode())
+                            .moduleName(module.getName())
+                            .moduleDescription(module.getDescription())
+                            .icon(module.getIcon())
+                            .path(module.getPath())
+                            .displayOrder(module.getDisplayOrder())
+                            .permissions(permResponses)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        return GroupedPermissionResponse.builder()
+                .modules(modulePermList)
+                .build();
     }
 
     // ─── Private Methods ─────────────────────────────────────────────────────

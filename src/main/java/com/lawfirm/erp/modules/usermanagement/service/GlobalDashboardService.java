@@ -5,4 +5,6 @@ import com.lawfirm.erp.modules.usermanagement.dto.response.GlobalDashboardRespon
 public interface GlobalDashboardService {
 
     GlobalDashboardResponse getDashboard();
+
+    GlobalDashboardResponse getDashboard(int days);
 }

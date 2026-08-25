@@ -159,16 +159,18 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         }
 
         // ── Ceiling check ─────────────────────────────────────────────────
-        // Firm admin cannot assign permissions beyond what the parent system
-        // role has. parentRoleId was set when the role was cloned at firm creation.
+        // A firm role may only hold permissions that its parent system role has.
+        // (This is the same set the UI presents as "available permissions".)
+        // GLOBAL-scope permissions are reserved for SUPER_ADMIN.
         if (role.getParentRoleId() != null) {
             Role parentRole = roleRepository.findById(role.getParentRoleId())
                     .orElseThrow(() -> new ResourceNotFoundException("Parent system role not found"));
 
-            PermissionScope maxScope = getMaxScopeForParent(parentRole.getRoleCode());
+            Set<UUID> parentPermIds = rolePermissionRepository.findPermissionsByRoleId(parentRole.getId())
+                    .stream().map(Permission::getId).collect(Collectors.toSet());
 
             for (Permission p : permissions) {
-                if (!isScopeAllowed(p.getScope(), maxScope)) {
+                if (!parentPermIds.contains(p.getId()) || p.getScope() == PermissionScope.GLOBAL) {
                     throw new ForbiddenException(
                             "Permission '" + p.getCode() + "' (scope: " + p.getScope()
                             + ") is not allowed for role type '" + parentRole.getRoleCode()
@@ -308,21 +310,4 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                 .build();
     }
 
-    private static PermissionScope getMaxScopeForParent(String roleCode) {
-        return switch (roleCode) {
-            case "SUPER_ADMIN" -> PermissionScope.GLOBAL;
-            case "FIRM_ADMIN"  -> PermissionScope.TENANT;
-            case "ADVOCATE", "PARALEGAL" -> PermissionScope.ASSIGNED;
-            case "CLIENT"      -> PermissionScope.OWN;
-            default            -> PermissionScope.OWN;
-        };
-    }
-
-    private static boolean isScopeAllowed(PermissionScope permScope, PermissionScope maxScope) {
-        if (maxScope == PermissionScope.GLOBAL) return true;
-        if (maxScope == PermissionScope.TENANT) return permScope != PermissionScope.GLOBAL;
-        if (maxScope == PermissionScope.ASSIGNED)
-            return permScope == PermissionScope.ASSIGNED || permScope == PermissionScope.OWN;
-        return permScope == PermissionScope.OWN;
-    }
 }

@@ -47,6 +47,12 @@ public interface CourtEventRepository extends JpaRepository<CourtEvent, UUID> {
 
     List<CourtEvent> findByScheduledDate(LocalDate date);
 
+    /** Tomorrow's real hearings — the T-1 reminder job. */
+    List<CourtEvent> findByEventTypeAndStatusAndScheduledDate(
+            com.lawfirm.erp.modules.casemanagement.enums.CourtEventType eventType,
+            com.lawfirm.erp.modules.casemanagement.enums.CourtEventStatus status,
+            LocalDate date);
+
     List<CourtEvent> findByFirmIdAndAttendingAdvocateIdAndScheduledDate(UUID firmId, UUID advocateId, LocalDate date);
 
     List<CourtEvent> findByFirmIdAndScheduledDateBetween(UUID firmId, LocalDate from, LocalDate to);

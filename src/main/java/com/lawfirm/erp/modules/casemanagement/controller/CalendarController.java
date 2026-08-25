@@ -1,5 +1,6 @@
 package com.lawfirm.erp.modules.casemanagement.controller;
 
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ForbiddenException;
@@ -11,7 +12,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -27,11 +27,11 @@ import java.util.UUID;
 @RequestMapping("/api/v1/firm/calendar")
 @RequiredArgsConstructor
 @Tag(name = "Calendar", description = "Court calendar — CourtEvents (Tarik/Peshi) as the source of truth")
-@PreAuthorize("hasAnyRole('FIRM_ADMIN', 'ADVOCATE', 'PARALEGAL')")
 public class CalendarController {
 
     private final CalendarService calendarService;
     private final CurrentUserResolver currentUserResolver;
+    private final PermissionEvaluator permissionEvaluator;
     private final ResponseHandler responseHandler;
 
     @GetMapping
@@ -42,6 +42,7 @@ public class CalendarController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(required = false) UUID advocateId) {
+        permissionEvaluator.require("CALENDAR:VIEW");
         UUID firmId = getRequiredFirmId();
 
         LocalDate fromDate = parseDate(from, LocalDate.now().minusDays(30));
@@ -60,6 +61,7 @@ public class CalendarController {
     @Operation(summary = "Today's events", description = "All Tarik/Peshi events scheduled for today, optionally filtered by advocate")
     public ResponseEntity<ApiResponse<List<CalendarEventResponse>>> getTodayEvents(
             @RequestParam(required = false) UUID advocateId) {
+        permissionEvaluator.require("CALENDAR:VIEW");
         UUID firmId = getRequiredFirmId();
         return responseHandler.ok(
                 calendarService.getTodayEvents(firmId, advocateId),
@@ -71,6 +73,7 @@ public class CalendarController {
     public ResponseEntity<ApiResponse<List<CalendarEventResponse>>> getUpcomingEvents(
             @RequestParam(defaultValue = "7") int days,
             @RequestParam(required = false) UUID advocateId) {
+        permissionEvaluator.require("CALENDAR:VIEW");
         UUID firmId = getRequiredFirmId();
 
         if (days < 1 || days > 365) {

@@ -23,4 +23,8 @@ public interface RolePermissionRepository extends JpaRepository<RolePermission, 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM RolePermission rp WHERE rp.role.id = :roleId")
     void deleteByRoleId(@Param("roleId") UUID roleId);
+
+    /** Batch-load permissions for multiple roles — eliminates N+1 in role listing. */
+    @Query("SELECT rp FROM RolePermission rp WHERE rp.role.id IN :roleIds AND rp.permission.active = true")
+    List<RolePermission> findByRoleIdIn(@Param("roleIds") List<UUID> roleIds);
 }

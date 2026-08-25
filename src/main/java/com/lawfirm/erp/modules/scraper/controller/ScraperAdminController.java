@@ -11,7 +11,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -24,7 +23,6 @@ import java.time.LocalDate;
 @RequestMapping("/api/v1/scraper/admin")
 @RequiredArgsConstructor
 @Tag(name = "Scraper Admin", description = "Manual scrape triggers and exports for backfill/testing")
-@PreAuthorize("hasAnyRole('FIRM_ADMIN')")
 public class ScraperAdminController {
 
     private final ScraperService scraperService;

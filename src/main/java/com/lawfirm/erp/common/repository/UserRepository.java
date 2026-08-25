@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -120,4 +121,42 @@ public interface UserRepository extends JpaRepository<User, UUID> {
                                             Pageable pageable);
 
     boolean existsByUsername(@Param("username") String username);
+
+    /** Count all users in a firm — avoids loading all users into memory. */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.firm.id = :firmId")
+    long countByFirmId(@Param("firmId") UUID firmId);
+
+    /** Count active users in a firm. */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.firm.id = :firmId AND u.active = true")
+    long countActiveByFirmId(@Param("firmId") UUID firmId);
+
+    /** Count users by role code in a firm — avoids N+1 in role listing. */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.firm.id = :firmId AND u.role.roleCode = :roleCode")
+    long countByFirmIdAndRoleCode(@Param("firmId") UUID firmId, @Param("roleCode") String roleCode);
+
+    /** Count users by user type. */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.userType = :userType")
+    long countByUserType(@Param("userType") UserType userType);
+
+    // ── Trend queries ─────────────────────────────────────────────────────
+
+    /** Daily new user counts with active/inactive split, grouped by date. */
+    @Query("SELECT FUNCTION('DATE', u.createdAt) as d, COUNT(u) as total, " +
+           "SUM(CASE WHEN u.active = true THEN 1 ELSE 0 END) as active, " +
+           "SUM(CASE WHEN u.active = false THEN 1 ELSE 0 END) as inactive, " +
+           "SUM(CASE WHEN u.userType = 'CLIENT' THEN 1 ELSE 0 END) as clients " +
+           "FROM User u WHERE u.createdAt >= :from AND u.createdAt < :to " +
+           "GROUP BY FUNCTION('DATE', u.createdAt) ORDER BY d ASC")
+    List<Object[]> countDailyByDateRange(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /** Firm-scoped daily new user counts. */
+    @Query("SELECT FUNCTION('DATE', u.createdAt) as d, COUNT(u) as total, " +
+           "SUM(CASE WHEN u.active = true THEN 1 ELSE 0 END) as active, " +
+           "SUM(CASE WHEN u.active = false THEN 1 ELSE 0 END) as inactive, " +
+           "SUM(CASE WHEN u.userType = 'CLIENT' THEN 1 ELSE 0 END) as clients " +
+           "FROM User u WHERE u.firm.id = :firmId AND u.createdAt >= :from AND u.createdAt < :to " +
+           "GROUP BY FUNCTION('DATE', u.createdAt) ORDER BY d ASC")
+    List<Object[]> countDailyByFirmIdAndDateRange(@Param("firmId") UUID firmId,
+                                                   @Param("from") LocalDateTime from,
+                                                   @Param("to") LocalDateTime to);
 }

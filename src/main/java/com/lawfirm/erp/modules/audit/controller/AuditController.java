@@ -1,5 +1,6 @@
 package com.lawfirm.erp.modules.audit.controller;
 
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.constant.AuditConstants;
 import com.lawfirm.erp.modules.audit.entity.AuditLog;
 import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
@@ -17,7 +18,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -29,11 +29,11 @@ import java.util.UUID;
 @RequestMapping("/api/v1/firm/audit")
 @RequiredArgsConstructor
 @Tag(name = "Firm Audit Logs", description = "Firm admin activity timeline")
-@PreAuthorize("hasRole('FIRM_ADMIN')")
 public class AuditController {
 
     private final AuditLogRepository auditLogRepository;
     private final CurrentUserResolver currentUserResolver;
+    private final PermissionEvaluator permissionEvaluator;
     private final ResponseHandler responseHandler;
 
     /**
@@ -47,6 +47,7 @@ public class AuditController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate toDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        permissionEvaluator.require("AUDIT:VIEW");
 
         UUID firmId = getRequiredFirmId();
 
@@ -71,6 +72,7 @@ public class AuditController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate toDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        permissionEvaluator.require("AUDIT:VIEW");
 
         UUID firmId = getRequiredFirmId();
 
@@ -94,6 +96,7 @@ public class AuditController {
             @PathVariable UUID entityId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        permissionEvaluator.require("AUDIT:VIEW");
 
         UUID firmId = getRequiredFirmId();
 
@@ -113,6 +116,7 @@ public class AuditController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate toDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        permissionEvaluator.require("AUDIT:VIEW");
 
         UUID firmId = getRequiredFirmId();
 

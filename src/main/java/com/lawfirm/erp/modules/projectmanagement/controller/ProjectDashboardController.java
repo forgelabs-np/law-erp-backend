@@ -1,5 +1,6 @@
 package com.lawfirm.erp.modules.projectmanagement.controller;
 
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.constant.ProjectManagementConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.modules.projectmanagement.dto.response.ProjectDashboardResponse;
@@ -18,10 +19,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProjectDashboardController {
 
     private final ProjectDashboardService dashboardService;
+    private final PermissionEvaluator permissionEvaluator;
 
     @GetMapping
     @Operation(summary = ProjectManagementConstants.PROJECT_DASHBOARD)
     public ApiResponse<ProjectDashboardResponse> getDashboard() {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:VIEW");
         return ApiResponse.success(dashboardService.getDashboard());
     }
 }

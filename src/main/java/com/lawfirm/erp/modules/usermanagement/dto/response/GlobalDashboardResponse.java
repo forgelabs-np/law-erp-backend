@@ -3,6 +3,7 @@ package com.lawfirm.erp.modules.usermanagement.dto.response;
 import lombok.Builder;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -15,6 +16,9 @@ public class GlobalDashboardResponse {
     private CaseStats caseStats;
     private ScraperStats scraperStats;
     private List<RecentActivity> recentActivity;
+    private List<UserTrend> userTrends;
+    private List<MatterTrend> matterTrends;
+    private List<FirmTrend> firmTrends;
 
     @Data
     @Builder
@@ -64,5 +68,34 @@ public class GlobalDashboardResponse {
         private String entityType;
         private String userName;
         private LocalDateTime createdAt;
+    }
+
+    @Data
+    @Builder
+    public static class UserTrend {
+        private LocalDate date;
+        private long totalUsers;
+        private long activeUsers;
+        private long inactiveUsers;
+        private long clients;
+    }
+
+    @Data
+    @Builder
+    public static class MatterTrend {
+        private LocalDate date;
+        private long totalMatters;
+        private long activeMatters;
+        private long closedMatters;
+        private long staleMatters;
+    }
+
+    @Data
+    @Builder
+    public static class FirmTrend {
+        private LocalDate date;
+        private long totalFirms;
+        private long activeFirms;
+        private long suspendedFirms;
     }
 }

@@ -71,9 +71,14 @@ public class PermissionEvaluator {
 
     private Set<String> getUserPermissions(AuthenticatedUser authUser) {
         return permissionCache.computeIfAbsent(authUser.getId(), id -> {
-            Set<String> permissions = new HashSet<>();
+            // Fast path: use the permission list already populated from JWT in the filter.
+            // Avoids 2 extra DB queries (User + RolePermission) on every request.
+            if (authUser.getPermissions() != null && !authUser.getPermissions().isEmpty()) {
+                return new HashSet<>(authUser.getPermissions());
+            }
 
-            // Source of truth: User.role (direct FK), not the user_roles join table.
+            // Fallback: load from DB (for edge cases where JWT didn't carry permissions)
+            Set<String> permissions = new HashSet<>();
             User user = userRepository.findById(id).orElse(null);
             if (user == null || user.getRole() == null) {
                 log.warn("User {} has no role assigned - zero permissions", id);

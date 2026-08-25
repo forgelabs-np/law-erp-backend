@@ -1,6 +1,7 @@
 package com.lawfirm.erp.rbac.service;
 
 import com.lawfirm.erp.dto.admin.request.PermissionRequest;
+import com.lawfirm.erp.dto.admin.response.GroupedPermissionResponse;
 import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 
 import java.util.List;
@@ -19,4 +20,6 @@ public interface PermissionService {
     List<PermissionResponse> findActive();
 
     PermissionResponse findById(UUID id);
+
+    GroupedPermissionResponse findAllGroupedByModule();
 }

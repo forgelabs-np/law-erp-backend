@@ -1,5 +1,6 @@
 package com.lawfirm.erp.modules.projectmanagement.controller;
 
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.constant.ProjectManagementConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.modules.projectmanagement.dto.request.*;
@@ -24,10 +25,12 @@ import java.util.UUID;
 public class ProjectController {
 
     private final ProjectService projectService;
+    private final PermissionEvaluator permissionEvaluator;
 
     @PostMapping
     @Operation(summary = ProjectManagementConstants.CREATE_PROJECT)
     public ApiResponse<ProjectResponse> createProject(@Valid @RequestBody CreateProjectRequest request) {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:CREATE");
         return ApiResponse.success("Project created", projectService.createProject(request));
     }
 
@@ -38,12 +41,14 @@ public class ProjectController {
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:VIEW");
         return ApiResponse.success(projectService.listProjects(status, search, page, size));
     }
 
     @GetMapping("/{projectCode}")
     @Operation(summary = ProjectManagementConstants.GET_PROJECT)
     public ApiResponse<ProjectResponse> getProject(@PathVariable String projectCode) {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:VIEW");
         return ApiResponse.success(projectService.getProject(projectCode));
     }
 
@@ -52,6 +57,7 @@ public class ProjectController {
     public ApiResponse<ProjectResponse> updateProject(
             @PathVariable String projectCode,
             @Valid @RequestBody UpdateProjectRequest request) {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:EDIT");
         return ApiResponse.success("Project updated", projectService.updateProject(projectCode, request));
     }
 
@@ -60,6 +66,7 @@ public class ProjectController {
     public ApiResponse<ProjectResponse> updateStatus(
             @PathVariable String projectCode,
             @RequestParam ProjectStatus status) {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:EDIT");
         return ApiResponse.success("Status updated", projectService.updateProjectStatus(projectCode, status));
     }
 
@@ -68,6 +75,7 @@ public class ProjectController {
     public ApiResponse<ProjectMemberResponse> addMember(
             @PathVariable String projectCode,
             @Valid @RequestBody AddMemberRequest request) {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:EDIT");
         return ApiResponse.success("Member added", projectService.addMember(projectCode, request));
     }
 
@@ -76,6 +84,7 @@ public class ProjectController {
     public ApiResponse<Void> removeMember(
             @PathVariable String projectCode,
             @PathVariable UUID userId) {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:EDIT");
         projectService.removeMember(projectCode, userId);
         return ApiResponse.success("Member removed", null);
     }
@@ -83,6 +92,7 @@ public class ProjectController {
     @GetMapping("/{projectCode}/members")
     @Operation(summary = ProjectManagementConstants.LIST_MEMBERS)
     public ApiResponse<List<ProjectMemberResponse>> listMembers(@PathVariable String projectCode) {
+        permissionEvaluator.require("PROJECT_MANAGEMENT:VIEW");
         return ApiResponse.success(projectService.listMembers(projectCode));
     }
 }

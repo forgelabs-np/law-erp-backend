@@ -24,4 +24,7 @@ public interface ModulePermissionRepository extends JpaRepository<ModulePermissi
     @Query("SELECT COUNT(mp) FROM ModulePermission mp WHERE mp.module.id = :moduleId")
     long countByModuleId(@Param("moduleId") UUID moduleId);
 
+    /** Batch-load permissions for multiple modules — eliminates N+1 in grouped listing. */
+    @Query("SELECT mp FROM ModulePermission mp WHERE mp.module.id IN :moduleIds")
+    List<ModulePermission> findByModuleIdIn(@Param("moduleIds") List<UUID> moduleIds);
 }

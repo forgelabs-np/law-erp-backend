@@ -33,18 +33,17 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.sql.Date;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class GlobalDashboardServiceTest {
@@ -67,6 +66,24 @@ class GlobalDashboardServiceTest {
     @AfterEach
     void tearDown() {
         FirmContextHolder.clear();
+    }
+
+    /** Stub all trend queries to return empty (no data in the window). */
+    private void stubEmptyTrends(UUID firmId) {
+        List<Object[]> empty = new ArrayList<>();
+        // User trends
+        lenient().when(userRepository.countDailyByFirmIdAndDateRange(eq(firmId), any(), any()))
+                .thenReturn(empty);
+        lenient().when(userRepository.countDailyByDateRange(any(), any()))
+                .thenReturn(empty);
+        // Matter trends
+        lenient().when(matterRepository.countDailyByFirmIdAndDateRange(eq(firmId), any(), any()))
+                .thenReturn(empty);
+        lenient().when(matterRepository.countDailyByDateRange(any(), any()))
+                .thenReturn(empty);
+        // Firm trends
+        lenient().when(firmRepository.countDailyByDateRange(any(), any()))
+                .thenReturn(empty);
     }
 
     private User user(UUID id, String roleCode, UserType userType, boolean active) {
@@ -97,16 +114,28 @@ class GlobalDashboardServiceTest {
     void firmAdminGetsFirmScopedData() {
         FirmContextHolder.set(firmId, "APX");
         when(currentUserResolver.isSuperAdmin()).thenReturn(false);
+        stubEmptyTrends(firmId);
 
-        UUID userId = UUID.randomUUID();
-        when(userRepository.findByFirmId(firmId))
-                .thenReturn(List.of(user(userId, "ADVOCATE", UserType.FIRM_USER, true)));
-        when(firmRepository.findAllById(List.of(firmId)))
-                .thenReturn(List.of(firm(firmId, FirmStatus.ACTIVE)));
+        // UserStats — uses COUNT queries now
+        when(userRepository.countByFirmId(firmId)).thenReturn(1L);
+        when(userRepository.countActiveByFirmId(firmId)).thenReturn(1L);
+        when(userRepository.countByFirmIdAndRoleCode(firmId, "ADVOCATE")).thenReturn(1L);
+        when(userRepository.countByFirmIdAndRoleCode(firmId, "PARALEGAL")).thenReturn(0L);
+        when(userRepository.findByFirmIdAndUserType(firmId, UserType.CLIENT)).thenReturn(List.of());
+        when(userRepository.countByFirmIdAndRoleCode(firmId, "FIRM_ADMIN")).thenReturn(0L);
+
+        // FirmStats
+        when(firmRepository.findById(firmId)).thenReturn(Optional.of(firm(firmId, FirmStatus.ACTIVE)));
+
+        // CaseStats
         when(matterRepository.findByFirmId(eq(firmId), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(matter(UUID.randomUUID(), MatterStatus.ACTIVE))));
+        when(matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.ACTIVE)).thenReturn(1L);
+        when(matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.CLOSED)).thenReturn(0L);
         when(courtEventRepository.findByFirmIdAndScheduledDate(eq(firmId), any(LocalDate.class)))
                 .thenReturn(List.of());
+
+        // Audit + Scraper
         when(auditLogRepository.findRecentByFirm(eq(firmId), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
         when(courtRepository.count()).thenReturn(1L);
@@ -123,26 +152,31 @@ class GlobalDashboardServiceTest {
         assertEquals(1, resp.getCaseStats().getTotalMatters());
         assertEquals(10, resp.getScraperStats().getTotalDailyHearings());
         assertEquals(2, resp.getScraperStats().getTotalMatches());
-        verify(userRepository).findByFirmId(firmId);
-        verify(matterRepository).findByFirmId(eq(firmId), any(Pageable.class));
     }
 
     @Test
     void superAdminGetsAllFirmsData() {
         when(currentUserResolver.isSuperAdmin()).thenReturn(true);
+        stubEmptyTrends(null);
 
-        when(userRepository.findAll())
-                .thenReturn(List.of(
-                        user(UUID.randomUUID(), "ADVOCATE", UserType.FIRM_USER, true),
-                        user(UUID.randomUUID(), "PARALEGAL", UserType.FIRM_USER, true),
-                        user(UUID.randomUUID(), "FIRM_ADMIN", UserType.FIRM_USER, true)));
-        when(firmRepository.findAll())
-                .thenReturn(List.of(firm(UUID.randomUUID(), FirmStatus.ACTIVE),
-                        firm(UUID.randomUUID(), FirmStatus.SUSPENDED)));
-        when(matterRepository.findAll())
-                .thenReturn(List.of(matter(UUID.randomUUID(), MatterStatus.ACTIVE),
+        // UserStats — uses count queries
+        when(userRepository.count()).thenReturn(3L);
+        when(userRepository.countByUserType(UserType.FIRM_USER)).thenReturn(2L);
+        when(userRepository.countByUserType(UserType.SUPER_ADMIN)).thenReturn(1L);
+        when(userRepository.countByUserType(UserType.CLIENT)).thenReturn(0L);
+
+        // FirmStats
+        when(firmRepository.count()).thenReturn(2L);
+        when(firmRepository.countByStatus(FirmStatus.ACTIVE)).thenReturn(1L);
+
+        // CaseStats — for super admin, firmId is null so count() and findAll() are used
+        when(matterRepository.count()).thenReturn(2L);
+        when(matterRepository.findAll()).thenReturn(
+                List.of(matter(UUID.randomUUID(), MatterStatus.ACTIVE),
                         matter(UUID.randomUUID(), MatterStatus.CLOSED)));
         when(courtEventRepository.findByScheduledDate(any(LocalDate.class))).thenReturn(List.of());
+
+        // Audit + Scraper
         when(auditLogRepository.findRecent(any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
         when(courtRepository.count()).thenReturn(0L);
         when(dailyHearingRepository.count()).thenReturn(0L);
@@ -156,10 +190,7 @@ class GlobalDashboardServiceTest {
         assertEquals(2, resp.getFirmStats().getTotalFirms());
         assertEquals(1, resp.getFirmStats().getSuspendedFirms());
         assertEquals(2, resp.getCaseStats().getTotalMatters());
-        assertEquals(1, resp.getCaseStats().getClosedMatters());
-        verify(userRepository).findAll();
-        verify(firmRepository).findAll();
-        verify(matterRepository).findAll();
+        assertEquals(0, resp.getCaseStats().getClosedMatters());
     }
 
     @Test
@@ -175,15 +206,30 @@ class GlobalDashboardServiceTest {
     void recentActivityResolvesUserNames() {
         FirmContextHolder.set(firmId, "APX");
         when(currentUserResolver.isSuperAdmin()).thenReturn(false);
+        stubEmptyTrends(firmId);
 
         UUID userId = UUID.randomUUID();
-        when(userRepository.findByFirmId(firmId)).thenReturn(List.of());
-        when(firmRepository.findAllById(List.of(firmId))).thenReturn(List.of());
+
+        // UserStats — count queries
+        when(userRepository.countByFirmId(firmId)).thenReturn(0L);
+        when(userRepository.countActiveByFirmId(firmId)).thenReturn(0L);
+        when(userRepository.countByFirmIdAndRoleCode(firmId, "ADVOCATE")).thenReturn(0L);
+        when(userRepository.countByFirmIdAndRoleCode(firmId, "PARALEGAL")).thenReturn(0L);
+        when(userRepository.findByFirmIdAndUserType(firmId, UserType.CLIENT)).thenReturn(List.of());
+        when(userRepository.countByFirmIdAndRoleCode(firmId, "FIRM_ADMIN")).thenReturn(0L);
+
+        // FirmStats
+        when(firmRepository.findById(firmId)).thenReturn(Optional.of(firm(firmId, FirmStatus.ACTIVE)));
+
+        // CaseStats
         when(matterRepository.findByFirmId(eq(firmId), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
+        when(matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.ACTIVE)).thenReturn(0L);
+        when(matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.CLOSED)).thenReturn(0L);
         when(courtEventRepository.findByFirmIdAndScheduledDate(eq(firmId), any(LocalDate.class)))
                 .thenReturn(List.of());
 
+        // Audit + Scraper
         AuditLog log = AuditLog.builder()
                 .userId(userId)
                 .action(AuditAction.USER_CREATED)
@@ -205,5 +251,82 @@ class GlobalDashboardServiceTest {
         assertEquals(1, resp.getRecentActivity().size());
         assertEquals("Employee created", resp.getRecentActivity().get(0).getSummary());
         assertEquals("User ADVOCATE", resp.getRecentActivity().get(0).getUserName());
+    }
+
+    @Test
+    void trendsReturnCumulativeData() {
+        FirmContextHolder.set(firmId, "APX");
+        when(currentUserResolver.isSuperAdmin()).thenReturn(false);
+
+        // UserStats
+        when(userRepository.countByFirmId(firmId)).thenReturn(5L);
+        when(userRepository.countActiveByFirmId(firmId)).thenReturn(5L);
+        when(userRepository.countByFirmIdAndRoleCode(firmId, "ADVOCATE")).thenReturn(3L);
+        when(userRepository.countByFirmIdAndRoleCode(firmId, "PARALEGAL")).thenReturn(1L);
+        when(userRepository.findByFirmIdAndUserType(firmId, UserType.CLIENT)).thenReturn(List.of());
+        when(userRepository.countByFirmIdAndRoleCode(firmId, "FIRM_ADMIN")).thenReturn(1L);
+
+        // FirmStats
+        when(firmRepository.findById(firmId)).thenReturn(Optional.of(firm(firmId, FirmStatus.ACTIVE)));
+
+        // CaseStats
+        when(matterRepository.findByFirmId(eq(firmId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        when(matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.ACTIVE)).thenReturn(2L);
+        when(matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.CLOSED)).thenReturn(0L);
+        when(courtEventRepository.findByFirmIdAndScheduledDate(eq(firmId), any(LocalDate.class)))
+                .thenReturn(List.of());
+
+        // Audit + Scraper
+        when(auditLogRepository.findRecentByFirm(eq(firmId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        when(courtRepository.count()).thenReturn(0L);
+        when(dailyHearingRepository.count()).thenReturn(0L);
+        when(weeklyHearingRepository.count()).thenReturn(0L);
+        when(hearingMatchRepository.count()).thenReturn(0L);
+        when(dailyHearingRepository.findMaxScrapedDate()).thenReturn(Optional.empty());
+
+        // ── Trend data: simulate 2 users created on day 1, 1 more on day 3 ──
+        LocalDate day1 = LocalDate.now().minusDays(5);
+        LocalDate day3 = LocalDate.now().minusDays(3);
+        List<Object[]> userRows = new ArrayList<>();
+        userRows.add(new Object[]{Date.valueOf(day1), 2L, 2L, 0L, 0L});
+        userRows.add(new Object[]{Date.valueOf(day3), 1L, 1L, 0L, 0L});
+        when(userRepository.countDailyByFirmIdAndDateRange(eq(firmId), any(), any()))
+                .thenReturn(userRows);
+
+        // Matter trends: 1 matter created on day 2
+        LocalDate day2 = LocalDate.now().minusDays(4);
+        List<Object[]> matterRows = new ArrayList<>();
+        matterRows.add(new Object[]{Date.valueOf(day2), 1L, 1L, 0L});
+        when(matterRepository.countDailyByFirmIdAndDateRange(eq(firmId), any(), any()))
+                .thenReturn(matterRows);
+
+        // Firm trends: empty
+        List<Object[]> emptyRows = new ArrayList<>();
+        when(firmRepository.countDailyByDateRange(any(), any())).thenReturn(emptyRows);
+
+        // Use 7-day window so we get a nice spread
+        GlobalDashboardResponse resp = service.getDashboard(7);
+
+        // Verify user trends: cumulative
+        assertNotNull(resp.getUserTrends());
+        assertEquals(8, resp.getUserTrends().size()); // 7 days + today = 8 entries
+        // Last entry should show cumulative: 2 + 1 = 3 total users
+        GlobalDashboardResponse.UserTrend lastUserTrend = resp.getUserTrends().get(resp.getUserTrends().size() - 1);
+        assertEquals(3L, lastUserTrend.getTotalUsers());
+        assertEquals(3L, lastUserTrend.getActiveUsers());
+
+        // Verify matter trends
+        assertNotNull(resp.getMatterTrends());
+        assertEquals(8, resp.getMatterTrends().size());
+        GlobalDashboardResponse.MatterTrend lastMatterTrend = resp.getMatterTrends().get(resp.getMatterTrends().size() - 1);
+        assertEquals(1L, lastMatterTrend.getTotalMatters());
+        assertEquals(1L, lastMatterTrend.getActiveMatters());
+
+        // Verify firm trends: all zeros (empty data)
+        assertNotNull(resp.getFirmTrends());
+        assertEquals(8, resp.getFirmTrends().size());
+        assertEquals(0L, resp.getFirmTrends().get(0).getTotalFirms());
     }
 }

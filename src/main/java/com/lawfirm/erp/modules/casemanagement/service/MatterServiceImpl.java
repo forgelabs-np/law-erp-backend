@@ -160,8 +160,11 @@ public class MatterServiceImpl implements MatterService {
         UUID firmId = getRequiredFirmId();
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
-        LocalDateTime fromDt = from != null ? from.atStartOfDay() : null;
-        LocalDateTime toDt = to != null ? to.plusDays(1).atStartOfDay() : null;
+        // Null-safe window: sentinel bounds far outside any real data, so the
+        // query never binds null LocalDateTime params (Hibernate 7 + Postgres
+        // throws 42P18 on "? IS NULL" for datetimes).
+        LocalDateTime fromDt = from != null ? from.atStartOfDay() : LocalDateTime.of(1900, 1, 1, 0, 0);
+        LocalDateTime toDt = to != null ? to.plusDays(1).atStartOfDay() : LocalDateTime.of(2999, 12, 31, 23, 59, 59);
 
         Page<MatterTimelineEvent> events =
                 matterTimelineRepository.findFirmEvents(firmId, matterType, status, fromDt, toDt, pageable);

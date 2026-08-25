@@ -59,29 +59,31 @@ public class RolePermissionServiceImpl implements RolePermissionService {
             );
         }
 
-        if (role.getParentRoleId() != null) {
-            Role parentRole = roleRepository.findById(role.getParentRoleId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Parent system role not found"));
-
-            PermissionScope maxScope = getMaxScopeForParent(parentRole.getRoleCode());
-
-            for (UUID permId : request.getPermissionIds()) {
-                Permission perm = permissionRepository.findById(permId)
-                        .orElseThrow(() -> new ResourceNotFoundException("Permission not found: " + permId));
-                if (!isScopeAllowed(perm.getScope(), maxScope)) {
-                    throw new ForbiddenException(
-                            "Permission '" + perm.getCode() + "' (scope: " + perm.getScope()
-                            + ") exceeds your role's ceiling. This scope is not available for role type '"
-                            + parentRole.getRoleCode() + "'."
-                    );
-                }
-            }
-        }
-
         // Verify all permissions exist
         List<Permission> permissions = permissionRepository.findAllById(request.getPermissionIds());
         if (permissions.size() != request.getPermissionIds().size()) {
             throw new ResourceNotFoundException("One or more permission IDs are invalid");
+        }
+
+        // ── Ceiling check ─────────────────────────────────────────────────
+        // A custom role may only hold permissions that its parent system role
+        // has. GLOBAL-scope permissions are reserved for SUPER_ADMIN.
+        if (role.getParentRoleId() != null) {
+            Role parentRole = roleRepository.findById(role.getParentRoleId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Parent system role not found"));
+
+            Set<UUID> parentPermIds = rolePermissionRepository.findPermissionsByRoleId(parentRole.getId())
+                    .stream().map(Permission::getId).collect(Collectors.toSet());
+
+            for (Permission perm : permissions) {
+                if (!parentPermIds.contains(perm.getId()) || perm.getScope() == PermissionScope.GLOBAL) {
+                    throw new ForbiddenException(
+                            "Permission '" + perm.getCode() + "' (scope: " + perm.getScope()
+                            + ") is not allowed for role type '" + parentRole.getRoleCode()
+                            + "'. Exceeds system ceiling."
+                    );
+                }
+            }
         }
 
         // Remove existing permissions
@@ -134,21 +136,4 @@ public class RolePermissionServiceImpl implements RolePermissionService {
 
 
 
-    private static PermissionScope getMaxScopeForParent(String roleCode) {
-        return switch (roleCode) {
-            case "SUPER_ADMIN" -> PermissionScope.GLOBAL;
-            case "FIRM_ADMIN"  -> PermissionScope.TENANT;
-            case "ADVOCATE", "PARALEGAL" -> PermissionScope.ASSIGNED;
-            case "CLIENT"      -> PermissionScope.OWN;
-            default            -> PermissionScope.OWN;
-        };
-    }
-
-    private static boolean isScopeAllowed(PermissionScope permScope, PermissionScope maxScope) {
-        if (maxScope == PermissionScope.GLOBAL) return true;
-        if (maxScope == PermissionScope.TENANT) return permScope != PermissionScope.GLOBAL;
-        if (maxScope == PermissionScope.ASSIGNED)
-            return permScope == PermissionScope.ASSIGNED || permScope == PermissionScope.OWN;
-        return permScope == PermissionScope.OWN;
-    }
 }

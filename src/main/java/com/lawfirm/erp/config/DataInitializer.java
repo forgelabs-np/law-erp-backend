@@ -1,5 +1,6 @@
 package com.lawfirm.erp.config;
 
+import com.lawfirm.erp.common.constant.RoleCode;
 import com.lawfirm.erp.common.enums.FirmStatus;
 import com.lawfirm.erp.common.enums.FirmType;
 import com.lawfirm.erp.common.enums.PermissionAction;
@@ -8,6 +9,8 @@ import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
+import com.lawfirm.erp.firm.entity.FirmModule;
+import com.lawfirm.erp.firm.repository.FirmModuleRepository;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.projectmanagement.entity.RenewalType;
 import com.lawfirm.erp.modules.projectmanagement.repository.RenewalTypeRepository;
@@ -68,6 +71,7 @@ public class DataInitializer implements CommandLineRunner {
     private final TenantTypeRepository tenantTypeRepository;
     private final FirmRepository firmRepository;
     private final UserRepository userRepository;
+    private final FirmModuleRepository firmModuleRepository;
     private final RenewalTypeRepository renewalTypeRepository;
 
     private static final String FULL      = "FULL";
@@ -81,12 +85,13 @@ public class DataInitializer implements CommandLineRunner {
         log.info("=== DataInitializer: starting system seed ===");
 
         createTenantTypes();
-        createSystemFirmForSuperAdmin();
+        Firm systemFirm = createSystemFirmForSuperAdmin();
         migrateExistingSuperAdminMfa();
         createSystemRoles();
         createModulesAndPermissions();
         assignPermissionsToRoles();
         seedDefaultRenewalTypes();
+        seedModulesForSystemFirm(systemFirm);
 
         log.info("=== DataInitializer: seed complete ===");
     }
@@ -115,17 +120,18 @@ public class DataInitializer implements CommandLineRunner {
     // ========================================================================
     // System firm
     // ========================================================================
-    private void createSystemFirmForSuperAdmin() {
-        if (firmRepository.findByLawFirmCode("SYSTEM").isEmpty()) {
+    private Firm createSystemFirmForSuperAdmin() {
+        return firmRepository.findByLawFirmCode("SYSTEM").orElseGet(() -> {
             Firm systemFirm = Firm.builder()
                     .lawFirmCode("SYSTEM")
                     .name("System Platform")
                     .firmType(FirmType.SOLO)
                     .status(FirmStatus.ACTIVE)
                     .build();
-            firmRepository.save(systemFirm);
+            systemFirm = firmRepository.save(systemFirm);
             log.info("  + System firm created");
-        }
+            return systemFirm;
+        });
     }
 
     // ========================================================================
@@ -147,24 +153,24 @@ public class DataInitializer implements CommandLineRunner {
     // ========================================================================
     private void createSystemRoles() {
         Object[][] roles = {
-                {"SUPER_ADMIN", "SUPER_ADMIN", "Full system access - controls everything", true, null},
-                {"FIRM_ADMIN", "FIRM_ADMIN", "Manages law firm operations", true, UserType.FIRM_USER},
-                {"ADVOCATE", "ADVOCATE", "Practicing lawyer", true, UserType.FIRM_USER},
-                {"PARALEGAL", "PARALEGAL", "Support staff", true, UserType.FIRM_USER},
-                {"CLIENT", "CLIENT", "Client of the firm", true, UserType.CLIENT}
+                {RoleCode.SUPER_ADMIN, "Full system access - controls everything", true, null},
+                {RoleCode.FIRM_ADMIN,  "Manages law firm operations", true, UserType.FIRM_USER},
+                {RoleCode.ADVOCATE,    "Practicing lawyer", true, UserType.FIRM_USER},
+                {RoleCode.PARALEGAL,   "Support staff", true, UserType.FIRM_USER},
+                {RoleCode.CLIENT,      "Client of the firm", true, UserType.CLIENT}
         };
 
         for (Object[] roleData : roles) {
-            String roleCode = (String) roleData[1];
+            String roleCode = (String) roleData[0];
             if (!roleRepository.existsByRoleCode(roleCode)) {
                 Role role = new Role();
-                role.setRoleName((String) roleData[0]);
+                role.setRoleName(roleCode);
                 role.setRoleCode(roleCode);
-                role.setDescription((String) roleData[2]);
-                role.setIsSystem((Boolean) roleData[3]);
+                role.setDescription((String) roleData[1]);
+                role.setIsSystem((Boolean) roleData[2]);
                 role.setActive(true);
-                if (roleData[4] != null) {
-                    role.setApplicableTo((UserType) roleData[4]);
+                if (roleData[3] != null) {
+                    role.setApplicableTo((UserType) roleData[3]);
                 }
                 roleRepository.save(role);
                 log.info("  + Role: {}", roleCode);
@@ -238,7 +244,7 @@ public class DataInitializer implements CommandLineRunner {
                         Permission p = new Permission();
                         p.setCode(permCode);
                         p.setAction(action);
-                        p.setScope(PermissionScope.TENANT); // default; OWN is applied at query layer for CLIENT
+                        p.setScope(PermissionScope.TENANT); // default; overridden to GLOBAL for SUPER_ADMIN below
                         p.setModuleCode(moduleCode);
                         p.setDescription(def[1] + " - " + action.name());
                         p.setActive(true);
@@ -284,7 +290,7 @@ public class DataInitializer implements CommandLineRunner {
                 {"PROJECT_MANAGEMENT",   FULL, FULL, READ_ONLY, READ_ONLY, OWN},
         };
 
-        String[] roleCodes = {"SUPER_ADMIN", "FIRM_ADMIN", "ADVOCATE", "PARALEGAL", "CLIENT"};
+        String[] roleCodes = {RoleCode.SUPER_ADMIN, RoleCode.FIRM_ADMIN, RoleCode.ADVOCATE, RoleCode.PARALEGAL, RoleCode.CLIENT};
 
         for (String[] row : matrix) {
             String moduleCode = row[0];
@@ -304,15 +310,23 @@ public class DataInitializer implements CommandLineRunner {
                 List<Permission> perms = getPermissionsForAccessLevel(moduleCode, accessLevel);
                 List<Permission> alreadyAssigned = rolePermissionRepository.findPermissionsByRoleId(role.getId());
 
+                boolean isSuperAdmin = RoleCode.SUPER_ADMIN.equals(roleCode);
+
                 for (Permission perm : perms) {
                     boolean alreadyHas = alreadyAssigned.stream().anyMatch(p -> p.getId().equals(perm.getId()));
                     if (!alreadyHas) {
+                        // SUPER_ADMIN permissions get GLOBAL scope — cross-firm access
+                        if (isSuperAdmin && perm.getScope() != PermissionScope.GLOBAL) {
+                            perm.setScope(PermissionScope.GLOBAL);
+                            permissionRepository.save(perm);
+                        }
+
                         RolePermission rp = RolePermission.builder()
                                 .role(role)
                                 .permission(perm)
                                 .build();
                         rolePermissionRepository.save(rp);
-                        log.info("    [{}] {} -> {}", accessLevel, roleCode, perm.getCode());
+                        log.info("    [{}] {} -> {} (scope: {})", accessLevel, roleCode, perm.getCode(), perm.getScope());
                     }
                 }
             }
@@ -344,6 +358,25 @@ public class DataInitializer implements CommandLineRunner {
                     .toList();
             default -> List.of();
         };
+    }
+
+    // ========================================================================
+    // Seed FirmModules for SYSTEM firm — all modules enabled by default
+    // ========================================================================
+    private void seedModulesForSystemFirm(Firm systemFirm) {
+        List<Module> allModules = moduleRepository.findAll();
+        for (Module module : allModules) {
+            boolean exists = firmModuleRepository.findByFirmIdAndModuleId(systemFirm.getId(), module.getId()).isPresent();
+            if (!exists) {
+                FirmModule fm = FirmModule.builder()
+                        .firm(systemFirm)
+                        .module(module)
+                        .isEnabled(true)
+                        .build();
+                firmModuleRepository.save(fm);
+                log.info("  + FirmModule (SYSTEM): {} enabled", module.getCode());
+            }
+        }
     }
 
     // ========================================================================

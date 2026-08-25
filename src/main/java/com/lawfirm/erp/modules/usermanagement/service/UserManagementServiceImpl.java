@@ -2,6 +2,7 @@ package com.lawfirm.erp.modules.usermanagement.service;
 
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import com.lawfirm.erp.auth.security.PermissionEvaluator;
+import com.lawfirm.erp.common.constant.RoleCode;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.UserType;
@@ -289,8 +290,8 @@ public class UserManagementServiceImpl implements UserManagementService {
         if (!newRole.isActive()) {
             throw new BusinessRuleException("Cannot assign an inactive role");
         }
-        if ("FIRM_ADMIN".equals(newRole.getRoleCode())) {
-            throw new ForbiddenException("Cannot assign FIRM_ADMIN role. Only Super Admin can create Firm Admins.");
+        if (RoleCode.FIRM_ADMIN.equals(newRole.getRoleCode())) {
+            throw new ForbiddenException("Cannot assign " + RoleCode.FIRM_ADMIN + " role. Only Super Admin can create Firm Admins.");
         }
 
         List<String> failed = new ArrayList<>();
