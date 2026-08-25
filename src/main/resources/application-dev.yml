@@ -4,9 +4,9 @@ spring:
       on-profile: dev
 
   datasource:
-    url: jdbc:postgresql://aws-1-ap-south-1.pooler.supabase.com:6543/postgres?prepareThreshold=0
-    username: postgres.fpqmxvcdglizgdymrelw
-    password: "@Ashishthapa46"
+    url: ${DB_URL:jdbc:postgresql://aws-1-ap-south-1.pooler.supabase.com:6543/postgres?prepareThreshold=0}
+    username: ${DB_USERNAME:postgres.fpqmxvcdglizgdymrelw}
+    password: ${DB_PASSWORD:@Ashishthapa46}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 20
@@ -39,7 +39,7 @@ spring:
             enable: true
 
 jwt:
-  secret: YnBPN15lvxCkxOAAe5duFQ4MYVLf6B2e8AIkND8L35kRO7ByvtLrJQ1YKtLYbR6me0FysLcvtq8UFKAWiQyKeT
+  secret: ${JWT_SECRET:YnBPN15lvxCkxOAAe5duFQ4MYVLf6B2e8AIkND8L35kRO7ByvtLrJQ1YKtLYbR6me0FysLcvtq8UFKAWiQyKeT}
   access-expiry: 86400000
   refresh-expiry: 604800000
   token-expiry: 86400000
@@ -48,5 +48,5 @@ security:
   max-login-attempts: 5
 
 super-admin:
-  registration-secret: "cdae9adca9e7cb0ab2afb82e2a2a74b7"
+  registration-secret: ${SUPER_ADMIN_REGISTRATION_SECRET:cdae9adca9e7cb0ab2afb82e2a2a74b7}
 

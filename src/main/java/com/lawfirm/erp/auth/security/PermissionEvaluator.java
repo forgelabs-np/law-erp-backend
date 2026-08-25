@@ -7,6 +7,7 @@ import com.lawfirm.erp.firm.repository.FirmModuleRepository;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -39,7 +40,14 @@ public class PermissionEvaluator {
     private final RolePermissionRepository rolePermissionRepository;
     private final FirmModuleRepository firmModuleRepository;
     private final CurrentUserResolver currentUserResolver;
-    private final ConcurrentHashMap<UUID, Set<String>> permissionCache = new ConcurrentHashMap<>();
+
+    /** Cache entry holding permissions and the timestamp when they were loaded. */
+    private record CacheEntry(Set<String> permissions, long loadedAt) {}
+
+    private final ConcurrentHashMap<UUID, CacheEntry> permissionCache = new ConcurrentHashMap<>();
+
+    @Value("${permissions.cache.ttl-ms:300000}") // default 5 minutes
+    private long cacheTtlMs;
 
     public void require(String permissionCode) {
         AuthenticatedUser currentUser = getCurrentUser();
@@ -70,32 +78,46 @@ public class PermissionEvaluator {
     }
 
     private Set<String> getUserPermissions(AuthenticatedUser authUser) {
-        return permissionCache.computeIfAbsent(authUser.getId(), id -> {
-            // Fast path: use the permission list already populated from JWT in the filter.
-            // Avoids 2 extra DB queries (User + RolePermission) on every request.
-            if (authUser.getPermissions() != null && !authUser.getPermissions().isEmpty()) {
-                return new HashSet<>(authUser.getPermissions());
-            }
+        UUID userId = authUser.getId();
+        CacheEntry entry = permissionCache.get(userId);
+        long now = System.currentTimeMillis();
 
-            // Fallback: load from DB (for edge cases where JWT didn't carry permissions)
-            Set<String> permissions = new HashSet<>();
-            User user = userRepository.findById(id).orElse(null);
-            if (user == null || user.getRole() == null) {
-                log.warn("User {} has no role assigned - zero permissions", id);
-                return permissions;
-            }
+        // Return cached entry if still valid
+        if (entry != null && (now - entry.loadedAt()) < cacheTtlMs) {
+            return entry.permissions();
+        }
 
-            var rolePermissions = rolePermissionRepository.findByRole(user.getRole());
-            for (var rp : rolePermissions) {
-                if (Boolean.TRUE.equals(rp.getPermission().isActive())) {
-                    permissions.add(rp.getPermission().getCode());
-                }
-            }
+        // Compute fresh permissions (with TTL)
+        CacheEntry fresh = new CacheEntry(loadPermissions(authUser), now);
+        permissionCache.put(userId, fresh);
+        return fresh.permissions();
+    }
 
-            log.debug("Loaded {} permissions for user: {} (role: {})",
-                    permissions.size(), authUser.getUsername(), user.getRole().getRoleCode());
+    private Set<String> loadPermissions(AuthenticatedUser authUser) {
+        // Fast path: use the permission list already populated from JWT in the filter.
+        // Avoids 2 extra DB queries (User + RolePermission) on every request.
+        if (authUser.getPermissions() != null && !authUser.getPermissions().isEmpty()) {
+            return new HashSet<>(authUser.getPermissions());
+        }
+
+        // Fallback: load from DB (for edge cases where JWT didn't carry permissions)
+        Set<String> permissions = new HashSet<>();
+        User user = userRepository.findById(authUser.getId()).orElse(null);
+        if (user == null || user.getRole() == null) {
+            log.warn("User {} has no role assigned - zero permissions", authUser.getId());
             return permissions;
-        });
+        }
+
+        var rolePermissions = rolePermissionRepository.findByRole(user.getRole());
+        for (var rp : rolePermissions) {
+            if (Boolean.TRUE.equals(rp.getPermission().isActive())) {
+                permissions.add(rp.getPermission().getCode());
+            }
+        }
+
+        log.debug("Loaded {} permissions for user: {} (role: {})",
+                permissions.size(), authUser.getUsername(), user.getRole().getRoleCode());
+        return permissions;
     }
 
     private AuthenticatedUser getCurrentUser() {

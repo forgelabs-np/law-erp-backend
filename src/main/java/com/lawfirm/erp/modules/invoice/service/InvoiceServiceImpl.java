@@ -93,36 +93,46 @@ public class InvoiceServiceImpl implements InvoiceService {
         Firm firm = firmRepository.findById(request.getFirmId())
                 .orElseThrow(() -> new ResourceNotFoundException("Firm not found: " + request.getFirmId()));
 
-        Invoice invoice = Invoice.builder()
-                .firmId(request.getFirmId())
-                .invoiceNumber(generateInvoiceNumber())
-                .status(InvoiceStatus.DRAFT)
-                .issueDate(request.getIssueDate())
-                .dueDate(request.getDueDate())
-                .taxRate(request.getTaxRate() != null ? request.getTaxRate() : BigDecimal.ZERO)
-                .paymentTerms(request.getPaymentTerms())
-                .notes(request.getNotes())
-                .createdBy(adminId)
-                .build();
+        // Retry on invoice number collision (race condition between concurrent requests)
+        Invoice invoice = null;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            try {
+                invoice = Invoice.builder()
+                        .firmId(request.getFirmId())
+                        .invoiceNumber(generateInvoiceNumber())
+                        .status(InvoiceStatus.DRAFT)
+                        .issueDate(request.getIssueDate())
+                        .dueDate(request.getDueDate())
+                        .taxRate(request.getTaxRate() != null ? request.getTaxRate() : BigDecimal.ZERO)
+                        .paymentTerms(request.getPaymentTerms())
+                        .notes(request.getNotes())
+                        .createdBy(adminId)
+                        .build();
 
-        // Build line items
-        List<InvoiceItem> items = new ArrayList<>();
-        for (int i = 0; i < request.getItems().size(); i++) {
-            InvoiceItemRequest itemReq = request.getItems().get(i);
-            InvoiceItem item = InvoiceItem.builder()
-                    .invoice(invoice)
-                    .description(itemReq.getDescription())
-                    .quantity(itemReq.getQuantity())
-                    .unitPrice(itemReq.getUnitPrice())
-                    .sortOrder(i)
-                    .build();
-            item.recalculateAmount();
-            items.add(item);
+                // Build line items
+                List<InvoiceItem> items = new ArrayList<>();
+                for (int i = 0; i < request.getItems().size(); i++) {
+                    InvoiceItemRequest itemReq = request.getItems().get(i);
+                    InvoiceItem item = InvoiceItem.builder()
+                            .invoice(invoice)
+                            .description(itemReq.getDescription())
+                            .quantity(itemReq.getQuantity())
+                            .unitPrice(itemReq.getUnitPrice())
+                            .sortOrder(i)
+                            .build();
+                    item.recalculateAmount();
+                    items.add(item);
+                }
+                invoice.setItems(items);
+                invoice.recalculateTotals();
+
+                invoice = invoiceRepository.save(invoice);
+                break; // success
+            } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                if (attempt == 4) throw e; // give up after 5 tries
+                log.warn("Invoice number collision on attempt {}, retrying...", attempt + 1);
+            }
         }
-        invoice.setItems(items);
-        invoice.recalculateTotals();
-
-        invoice = invoiceRepository.save(invoice);
 
         auditService.log(AuditAction.INVOICE_CREATED, AuditEntity.INVOICE,
                 invoice.getId(), "Invoice created: " + invoice.getInvoiceNumber()

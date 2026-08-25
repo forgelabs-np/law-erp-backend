@@ -22,7 +22,10 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.stereotype.Component;
 
+import org.springframework.beans.factory.annotation.Value;
+
 import java.util.Arrays;
+import java.util.List;
 
 @Component
 @EnableWebSecurity
@@ -33,6 +36,9 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final AuthEntryPoint authEntryPoint;
+
+    @Value("${cors.allowed-origins:}")
+    private String corsAllowedOrigins;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
@@ -69,14 +75,19 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // Allow frontend origins
-        configuration.setAllowedOrigins(Arrays.asList(
-                "http://localhost:5173",
-                "http://localhost:5175",
-                "http://127.0.0.1:3000",
-                "http://localhost:5173",
-                "http://127.0.0.1:5173"
-        ));
+        // Allow frontend origins — configurable via env var for production
+        List<String> origins;
+        if (corsAllowedOrigins != null && !corsAllowedOrigins.isBlank()) {
+            origins = Arrays.asList(corsAllowedOrigins.split(","));
+        } else {
+            origins = Arrays.asList(
+                    "http://localhost:5173",
+                    "http://localhost:5175",
+                    "http://127.0.0.1:3000",
+                    "http://127.0.0.1:5173"
+            );
+        }
+        configuration.setAllowedOrigins(origins);
 
         // Allow all HTTP methods
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
