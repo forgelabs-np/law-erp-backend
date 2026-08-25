@@ -25,4 +25,9 @@ public interface EmailService {
                              com.lawfirm.erp.modules.email.dto.HearingReminderDetails details,
                              com.lawfirm.erp.modules.casemanagement.entity.HearingReminderLog.RecipientType recipientType,
                              UUID reminderLogId);
+
+    /** Send invoice PDF as email attachment to firm admin. */
+    void sendInvoiceEmail(UUID firmId, UUID recipientUserId, String toEmail,
+                          String firmName, String invoiceNumber,
+                          java.math.BigDecimal total, byte[] pdfBytes);
 }

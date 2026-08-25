@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { background: #1A237E; color: white; padding: 30px; text-align: center; }
+        .header h1 { margin: 0; font-size: 22px; }
+        .body { padding: 30px; color: #333; line-height: 1.6; }
+        .body h2 { color: #1A237E; margin-top: 0; }
+        .invoice-box { background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px; margin: 20px 0; text-align: center; }
+        .invoice-box .amount { font-size: 28px; font-weight: 700; color: #1A237E; }
+        .invoice-box .label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+        .footer { padding: 20px 30px; background: #f8f9fa; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #eee; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>NepalCRM Platform</h1>
+        </div>
+        <div class="body">
+            <h2>Invoice Attached</h2>
+            <p>Dear <strong th:text="${firmName}">Firm Name</strong>,</p>
+            <p>Please find attached your invoice <strong th:text="${invoiceNumber}">INV-2025-0001</strong>.</p>
+            <div class="invoice-box">
+                <div class="label">Total Amount Due</div>
+                <div class="amount" th:text="'NPR ' + ${#numbers.formatDecimal(total, 1, 2)}">NPR 0.00</div>
+            </div>
+            <p>Please review the attached PDF for full details including line items and payment instructions.</p>
+            <p>If you have any questions about this invoice, please contact our support team.</p>
+            <p>Thank you for using <strong th:text="${appName}">NepalCRM</strong>.</p>
+        </div>
+        <div class="footer">
+            <p>This is an automated email. Please do not reply directly to this message.</p>
+        </div>
+    </div>
+</body>
+</html>

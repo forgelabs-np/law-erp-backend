@@ -62,6 +62,7 @@ public enum AuditAction {
     // ── Billing ──────────────────────────────
     INVOICE_CREATED,
     INVOICE_UPDATED,
+    INVOICE_DELETED,
     INVOICE_APPROVED,
     INVOICE_SENT,
     PAYMENT_RECORDED,

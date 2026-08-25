@@ -22,6 +22,8 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
+import org.springframework.core.io.ByteArrayResource;
+import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.Optional;
@@ -183,6 +185,48 @@ public class EmailServiceImpl implements EmailService {
             } catch (Exception e) {
                 log.warn("Could not update hearing-reminder log {}: {}", reminderLogId, e.getMessage());
             }
+        }
+    }
+
+    @Override
+    @Async
+    public void sendInvoiceEmail(UUID firmId, UUID recipientUserId, String toEmail,
+                                 String firmName, String invoiceNumber,
+                                 BigDecimal total, byte[] pdfBytes) {
+        String subject = "Invoice " + invoiceNumber + " from NepalCRM Platform";
+
+        Context ctx = new Context();
+        ctx.setVariable("firmName", firmName);
+        ctx.setVariable("invoiceNumber", invoiceNumber);
+        ctx.setVariable("total", total);
+        ctx.setVariable("appName", "NepalCRM Platform");
+
+        try {
+            JavaMailSender mailSender = resolveMailSender(firmId);
+            String htmlContent = templateEngine.process("email/invoice", ctx);
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            helper.setText(htmlContent, true);
+            helper.addAttachment(invoiceNumber + ".pdf", new ByteArrayResource(pdfBytes), "application/pdf");
+
+            String fromAddress = resolveFromAddress(firmId);
+            String fromName = resolveFromName(firmId);
+            helper.setFrom(fromAddress, fromName);
+
+            mailSender.send(message);
+
+            log.info("INVOICE_EMAIL_SENT: to={}, invoice={}, firmId={}", toEmail, invoiceNumber, firmId);
+            auditService.logExplicit(firmId, recipientUserId, "S",
+                    AuditAction.EMAIL_SENT, AuditEntity.INVOICE, null,
+                    "Invoice email sent to " + toEmail + ": " + invoiceNumber, null);
+
+        } catch (Exception e) {
+            log.error("INVOICE_EMAIL_FAILED: to={}, invoice={}, error={}", toEmail, invoiceNumber, e.getMessage());
+            auditService.logExplicit(firmId, recipientUserId, "S",
+                    AuditAction.EMAIL_FAILED, AuditEntity.INVOICE, null,
+                    "Invoice email failed to " + toEmail + ": " + e.getMessage(), null);
         }
     }
 
