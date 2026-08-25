@@ -111,9 +111,14 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         List<Permission> current = rolePermissionRepository.findPermissionsByRoleId(role.getId());
 
         // Ceiling — what the parent system role allows
+        // GLOBAL-scope permissions are filtered out: they are reserved for SUPER_ADMIN
+        // and cannot be assigned to firm-scoped roles.
         List<Permission> ceiling = List.of();
         if (role.getParentRoleId() != null) {
-            ceiling = rolePermissionRepository.findPermissionsByRoleId(role.getParentRoleId());
+            ceiling = rolePermissionRepository.findPermissionsByRoleId(role.getParentRoleId())
+                    .stream()
+                    .filter(p -> p.getScope() != PermissionScope.GLOBAL)
+                    .toList();
         }
 
         Set<UUID> currentIds = current.stream().map(Permission::getId).collect(Collectors.toSet());

@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: NepalCRM-Test
+  profiles:
+    active: test
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    defer-datasource-initialization: true
+  sql:
+    init:
+      mode: never
+  mail:
+    host: localhost
+    port: 25
+  thymeleaf:
+    check-template-location: false
+
+server:
+  port: 0
+
+jwt:
+  secret: test-secret-key-that-is-long-enough-for-hmac-sha512-algorithm-please-must-be-64-bytes!!
+  access-expiry: 86400000
+  refresh-expiry: 604800000
+  token-expiry: 86400000
+
+security:
+  max-login-attempts: 5
+
+super-admin:
+  registration-secret: test-super-admin-secret-key-12345
+
+config:
+  encryption:
+    key: udVnpX0p9MRyQ6w3ephfq9NtttKoqpv+miRg0My2TtQ=
+
+permissions:
+  cache:
+    ttl-ms: 60000
+
+cors:
+  allowed-origins:
+
+logging:
+  level:
+    com.lawfirm.erp: DEBUG
+    org.springframework.security: DEBUG

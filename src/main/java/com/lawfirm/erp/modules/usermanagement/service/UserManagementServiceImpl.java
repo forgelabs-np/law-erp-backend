@@ -56,18 +56,23 @@ public class UserManagementServiceImpl implements UserManagementService {
 
     @Override
     public List<UserSummaryResponse> listUsers(UserType userType, UUID roleId, Boolean isActive) {
-        UUID firmId = getRequiredFirmId();
+        boolean superAdmin = currentUserResolver.isSuperAdmin();
+        UUID firmId = superAdmin ? null : getRequiredFirmId();
 
         List<User> users;
         if (roleId != null) {
-            users = userRepository.findByFirmIdAndRoleId(firmId, roleId);
+            users = superAdmin
+                    ? userRepository.findByRoleId(roleId)
+                    : userRepository.findByFirmIdAndRoleId(firmId, roleId);
             if (userType != null) {
                 users = users.stream().filter(u -> u.getUserType() == userType).toList();
             }
         } else if (userType != null) {
-            users = userRepository.findByFirmIdAndUserType(firmId, userType);
+            users = superAdmin
+                    ? userRepository.findByUserType(userType)
+                    : userRepository.findByFirmIdAndUserType(firmId, userType);
         } else {
-            users = userRepository.findByFirmId(firmId);
+            users = superAdmin ? userRepository.findAll() : userRepository.findByFirmId(firmId);
         }
 
         if (isActive != null) {
@@ -79,15 +84,18 @@ public class UserManagementServiceImpl implements UserManagementService {
 
     @Override
     public List<UserSummaryResponse> searchUsers(String query) {
-        UUID firmId = getRequiredFirmId();
-
         if (query == null || query.isBlank()) {
             return listUsers(null, null, null);
         }
 
         String q = query.toLowerCase().trim();
 
-        return userRepository.findByFirmId(firmId).stream()
+        boolean superAdmin = currentUserResolver.isSuperAdmin();
+        List<User> users = superAdmin
+                ? userRepository.findAll()
+                : userRepository.findByFirmId(getRequiredFirmId());
+
+        return users.stream()
                 .filter(u ->
                         (u.getFullName() != null && u.getFullName().toLowerCase().contains(q)) ||
                         (u.getEmail() != null && u.getEmail().toLowerCase().contains(q)) ||
@@ -361,8 +369,10 @@ public class UserManagementServiceImpl implements UserManagementService {
     private User getValidatedUser(UUID userId, UUID firmId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        if (user.getFirm() == null || !user.getFirm().getId().equals(firmId)) {
-            throw new ForbiddenException("User does not belong to your firm");
+        if (!currentUserResolver.isSuperAdmin()) {
+            if (user.getFirm() == null || !user.getFirm().getId().equals(firmId)) {
+                throw new ForbiddenException("User does not belong to your firm");
+            }
         }
         return user;
     }

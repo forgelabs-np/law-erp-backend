@@ -315,12 +315,6 @@ public class DataInitializer implements CommandLineRunner {
                 for (Permission perm : perms) {
                     boolean alreadyHas = alreadyAssigned.stream().anyMatch(p -> p.getId().equals(perm.getId()));
                     if (!alreadyHas) {
-                        // SUPER_ADMIN permissions get GLOBAL scope — cross-firm access
-                        if (isSuperAdmin && perm.getScope() != PermissionScope.GLOBAL) {
-                            perm.setScope(PermissionScope.GLOBAL);
-                            permissionRepository.save(perm);
-                        }
-
                         RolePermission rp = RolePermission.builder()
                                 .role(role)
                                 .permission(perm)
