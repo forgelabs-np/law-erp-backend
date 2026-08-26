@@ -46,7 +46,7 @@ mybatis:
 # Generate with: openssl rand -base64 32
 config:
   encryption:
-    key: ${CONFIG_ENCRYPTION_KEY:xK9mP2vL5nQ8rS3tU6wY1zA4bC7eF0hJ=}
+    key: ${CONFIG_ENCRYPTION_KEY:rFBpF36+KeLlIKw+m6RiNCJmEmRZcoLXVgeKRY+bNWw=}
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:}
