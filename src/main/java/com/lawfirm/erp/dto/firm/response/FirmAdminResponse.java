@@ -17,6 +17,10 @@ public class FirmAdminResponse {
     private UUID firmId;
     private String firmName;
     private String firmCode;
+    private String firmEmail;
+    private String firmType;
+    private String firmAddress;
+    private String firmPhone;
     private Boolean isActive;
     private LocalDateTime createdAt;
 }

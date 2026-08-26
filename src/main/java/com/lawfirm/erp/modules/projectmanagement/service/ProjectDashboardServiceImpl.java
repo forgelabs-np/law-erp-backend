@@ -3,6 +3,7 @@ package com.lawfirm.erp.modules.projectmanagement.service;
 import com.lawfirm.erp.auth.security.FirmContextHolder;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.modules.projectmanagement.dto.response.ProjectDashboardResponse;
+import com.lawfirm.erp.modules.projectmanagement.entity.Project;
 import com.lawfirm.erp.modules.projectmanagement.entity.Renewal;
 import com.lawfirm.erp.modules.projectmanagement.entity.RenewalInstance;
 import com.lawfirm.erp.modules.projectmanagement.enums.ProjectStatus;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -53,7 +55,15 @@ public class ProjectDashboardServiceImpl implements ProjectDashboardService {
         LocalDate today = LocalDate.now();
         LocalDate threeMonthsAhead = today.plusMonths(3);
 
+        // Batch-load project info for all projects
+        Map<UUID, Project> projectMap = projectRepository.findAllById(allProjectIds).stream()
+                .collect(Collectors.toMap(Project::getId, p -> p));
+
         for (UUID projectId : allProjectIds) {
+            Project project = projectMap.get(projectId);
+            String projectCode = project != null ? project.getProjectCode() : null;
+            String projectName = project != null ? project.getName() : null;
+
             List<Renewal> renewals = renewalRepository.findByProjectIdAndActive(projectId, true);
             for (Renewal renewal : renewals) {
                 List<RenewalInstance> instances = instanceRepository
@@ -65,8 +75,9 @@ public class ProjectDashboardServiceImpl implements ProjectDashboardService {
                 for (RenewalInstance inst : instances) {
                     if (inst.getStatus() == RenewalInstanceStatus.OVERDUE) {
                         int daysOverdue = (int) (LocalDate.now().toEpochDay() - inst.getDueDate().toEpochDay());
-                        // Note: project name/code would need batch resolution for full implementation
                         overdueItems.add(ProjectDashboardResponse.OverdueItem.builder()
+                                .projectCode(projectCode)
+                                .projectName(projectName)
                                 .renewalTitle(renewal.getTitle())
                                 .renewalTypeName(typeName)
                                 .dueDate(inst.getDueDate())
@@ -76,6 +87,8 @@ public class ProjectDashboardServiceImpl implements ProjectDashboardService {
                             && !inst.getDueDate().isAfter(threeMonthsAhead)) {
                         int daysUntilDue = (int) (inst.getDueDate().toEpochDay() - LocalDate.now().toEpochDay());
                         upcomingItems.add(ProjectDashboardResponse.UpcomingItem.builder()
+                                .projectCode(projectCode)
+                                .projectName(projectName)
                                 .renewalTitle(renewal.getTitle())
                                 .renewalTypeName(typeName)
                                 .dueDate(inst.getDueDate())

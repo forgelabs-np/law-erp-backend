@@ -39,4 +39,8 @@ public interface CourtCaseRepository extends JpaRepository<CourtCase, UUID> {
     /** Returns the set of parentCourtCaseIds that have at least one child. */
     @Query("SELECT DISTINCT cc.parentCourtCaseId FROM CourtCase cc WHERE cc.parentCourtCaseId IN :parentIds")
     Set<UUID> findParentIdsWithChildren(@Param("parentIds") Collection<UUID> parentIds);
+
+    /** Court case IDs for given matter IDs — for employee calendar filtering. */
+    @Query("SELECT cc.id FROM CourtCase cc WHERE cc.matterId IN :matterIds")
+    List<UUID> findIdsByMatterIdIn(@Param("matterIds") Collection<UUID> matterIds);
 }

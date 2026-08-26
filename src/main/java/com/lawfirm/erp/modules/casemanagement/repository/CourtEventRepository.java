@@ -60,6 +60,14 @@ public interface CourtEventRepository extends JpaRepository<CourtEvent, UUID> {
     List<CourtEvent> findByFirmIdAndAttendingAdvocateIdAndScheduledDateBetween(UUID firmId, UUID advocateId,
                                                                                LocalDate from, LocalDate to);
 
+    /** Events for specific court cases on a date — for employee calendar filtering. */
+    List<CourtEvent> findByCourtCaseIdInAndFirmIdAndAttendingAdvocateIdAndScheduledDate(
+            List<UUID> courtCaseIds, UUID firmId, UUID advocateId, LocalDate date);
+
+    /** Events for specific court cases between dates — for employee calendar filtering. */
+    List<CourtEvent> findByCourtCaseIdInAndFirmIdAndAttendingAdvocateIdAndScheduledDateBetween(
+            List<UUID> courtCaseIds, UUID firmId, UUID advocateId, LocalDate from, LocalDate to);
+
     /**
      * Overlap check: same advocate, same date, time ranges intersect, event not canceled.
      * excludeId is null on create, the event's own id on update.

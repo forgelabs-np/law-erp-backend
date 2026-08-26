@@ -21,7 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * E2E tests for module access control:
- * - Firm modules are enabled at creation
+ * - No modules are auto-enabled at firm creation (SuperAdmin enables manually)
  * - Firm admin can view enabled modules
  * - SuperAdmin can list all modules
  */
@@ -71,28 +71,23 @@ class ModuleAccessE2ETest extends BaseIntegrationTest {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // 1. Modules Enabled at Firm Creation
+    // 1. No Modules Enabled at Firm Creation (SuperAdmin enables manually)
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
     @Order(1)
-    @DisplayName("All modules are enabled when firm is created")
-    void firmCreation_enablesAllModules() throws Exception {
+    @DisplayName("No modules are auto-enabled when firm is created")
+    void firmCreation_doesNotEnableAnyModules() throws Exception {
         setupFirm();
 
         List<FirmModule> modules = firmModuleRepository.findByFirmIdWithModule(testFirm.getId());
-        Assertions.assertFalse(modules.isEmpty(), "Firm should have modules enabled");
-
-        for (FirmModule fm : modules) {
-            Assertions.assertTrue(fm.getIsEnabled(),
-                    "Module " + fm.getModule().getCode() + " should be enabled");
-        }
+        Assertions.assertTrue(modules.isEmpty(), "New firm should have NO modules enabled — SuperAdmin enables them manually");
     }
 
     @Test
     @Order(2)
-    @DisplayName("Firm admin can list enabled modules")
-    void firmAdmin_listModules() throws Exception {
+    @DisplayName("Firm admin sees no enabled modules when none are configured")
+    void firmAdmin_listModules_emptyByDefault() throws Exception {
         setupFirm();
 
         MvcResult result = authGet(firmAdminToken, "/api/v1/firm/modules");
@@ -100,13 +95,7 @@ class ModuleAccessE2ETest extends BaseIntegrationTest {
 
         JsonNode data = parseResponse(result).path("data");
         Assertions.assertTrue(data.isArray(), "Response should be an array");
-        Assertions.assertTrue(data.size() > 0, "Should have at least one module");
-
-        for (JsonNode module : data) {
-            Assertions.assertTrue(module.has("moduleCode"), "Module should have moduleCode");
-            Assertions.assertTrue(module.has("isEnabled"), "Module should have isEnabled");
-            Assertions.assertTrue(module.has("moduleName"), "Module should have moduleName");
-        }
+        Assertions.assertEquals(0, data.size(), "New firm should have no enabled modules — SuperAdmin enables them manually");
     }
 
     // ═══════════════════════════════════════════════════════════════════════

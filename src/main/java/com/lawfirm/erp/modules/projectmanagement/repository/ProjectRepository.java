@@ -31,6 +31,14 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
                                               @Param("userId") UUID userId,
                                               Pageable pageable);
 
+    /** Projects where the user is a member, filtered by status. */
+    @Query("SELECT p FROM Project p WHERE p.firmId = :firmId AND p.status = :status AND p.id IN " +
+           "(SELECT pm.projectId FROM ProjectMember pm WHERE pm.userId = :userId)")
+    Page<Project> findProjectsByMemberUserIdAndStatus(@Param("firmId") UUID firmId,
+                                                       @Param("userId") UUID userId,
+                                                       @Param("status") ProjectStatus status,
+                                                       Pageable pageable);
+
     /** Projects visible to a specific client user (client portal). */
     List<Project> findByClientUserIdAndActive(UUID clientUserId, boolean active);
 

@@ -202,6 +202,33 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (request.getEmail() != null) user.setEmail(request.getEmail());
         if (request.getMobileNo() != null) user.setMobileNo(request.getMobileNo());
 
+        // Handle role update if roleId is provided
+        Role newRole = null;
+        if (request.getRoleId() != null) {
+            newRole = validateFirmRole(request.getRoleId(), firmId);
+            String oldRoleCode = user.getRole() != null ? user.getRole().getRoleCode() : "none";
+
+            userRoleRepository.deleteByUserId(employeeId);
+
+            UserRole userRole = UserRole.builder()
+                    .user(user)
+                    .role(newRole)
+                    .build();
+            userRoleRepository.save(userRole);
+
+            user.setRole(newRole);
+
+            permissionEvaluator.clearUserCache(user.getId());
+            userRepository.incrementPermissionVersion(user.getId());
+
+            auditService.log(
+                    AuditAction.USER_ROLE_CHANGED,
+                    AuditEntity.USER,
+                    user.getId(),
+                    "Role changed for " + user.getUsername() + ": " + oldRoleCode + " → " + newRole.getRoleCode()
+            );
+        }
+
         user = userRepository.save(user);
 
         auditService.log(
@@ -212,7 +239,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         );
 
         log.info("Employee updated: {}", user.getUsername());
-        return toResponse(user, user.getRole(), profile);
+        return toResponse(user, newRole != null ? newRole : user.getRole(), profile);
     }
 
     @Transactional

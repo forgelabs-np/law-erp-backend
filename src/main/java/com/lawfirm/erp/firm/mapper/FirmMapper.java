@@ -62,6 +62,7 @@ public class FirmMapper {
     }
 
     public FirmAdminResponse toFirmAdminResponse(User user) {
+        Firm firm = user.getFirm();
         return FirmAdminResponse.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -69,8 +70,12 @@ public class FirmMapper {
                 .mobileNo(user.getMobileNo())
                 .fullName(user.getFullName())
                 .firmId(user.getFirmId())
-                .firmName(user.getFirm() != null ? user.getFirm().getName() : null)
-                .firmCode(user.getFirm() != null ? user.getFirm().getLawFirmCode() : null)
+                .firmName(firm != null ? firm.getName() : null)
+                .firmCode(firm != null ? firm.getLawFirmCode() : null)
+                .firmEmail(firm != null ? firm.getEmail() : null)
+                .firmType(firm != null && firm.getFirmType() != null ? firm.getFirmType().name() : null)
+                .firmAddress(firm != null ? firm.getAddress() : null)
+                .firmPhone(firm != null ? firm.getPhone() : null)
                 .isActive(user.isActive())
                 .createdAt(user.getCreatedAt())
                 .build();

@@ -14,15 +14,11 @@ import com.lawfirm.erp.dto.firm.request.CreateFirmRequest;
 import com.lawfirm.erp.dto.firm.response.FirmCreationResponse;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
-import com.lawfirm.erp.firm.entity.FirmModule;
-import com.lawfirm.erp.firm.repository.FirmModuleRepository;
 import com.lawfirm.erp.firm.repository.FirmRepository;
-import com.lawfirm.erp.rbac.entity.Module;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.entity.RolePermission;
 import com.lawfirm.erp.rbac.entity.UserRole;
-import com.lawfirm.erp.rbac.repository.ModuleRepository;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
 import com.lawfirm.erp.rbac.repository.UserRoleRepository;
@@ -44,8 +40,6 @@ public class FirmServiceImpl implements FirmService {
     private final RoleRepository roleRepository;
     private final RolePermissionRepository rolePermissionRepository;
     private final UserRoleRepository userRoleRepository;
-    private final FirmModuleRepository firmModuleRepository;
-    private final ModuleRepository moduleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
     private final EmailService emailService;
@@ -115,9 +109,6 @@ public class FirmServiceImpl implements FirmService {
 
         log.info("Firm '{}' created with admin '{}'", firm.getLawFirmCode(), admin.getUsername());
 
-        // Enable all modules for the new firm by default
-        enableAllModulesForFirm(firm);
-
         emailService.sendWelcomeFirmAdmin(
                 firm.getId(),
                 admin.getId(),
@@ -158,22 +149,6 @@ public class FirmServiceImpl implements FirmService {
                 .adminUsername(admin.getUsername())
                 .message("Firm created successfully. Share lawFirmCode and credentials with admin.")
                 .build();
-    }
-
-    private void enableAllModulesForFirm(Firm firm) {
-        List<Module> allModules = moduleRepository.findAll();
-        for (Module module : allModules) {
-            boolean exists = firmModuleRepository.findByFirmIdAndModuleId(firm.getId(), module.getId()).isPresent();
-            if (!exists) {
-                FirmModule fm = FirmModule.builder()
-                        .firm(firm)
-                        .module(module)
-                        .isEnabled(true)
-                        .build();
-                firmModuleRepository.save(fm);
-                log.info("  + FirmModule: {} enabled for firm {}", module.getCode(), firm.getLawFirmCode());
-            }
-        }
     }
 
     private void cloneSystemRolesForFirm(Firm firm) {

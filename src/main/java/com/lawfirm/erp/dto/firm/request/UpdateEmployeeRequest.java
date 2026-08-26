@@ -6,10 +6,13 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.util.UUID;
 
 
 @Data
 public class UpdateEmployeeRequest {
+    private UUID roleId;
+
     @Email(message = "Invalid email format")
     private String email;
 

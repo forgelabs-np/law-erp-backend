@@ -49,6 +49,11 @@ public interface MatterRepository extends JpaRepository<Matter, UUID> {
     @Query("SELECT COUNT(m) FROM Matter m WHERE m.firmId = :firmId")
     long countByFirmId(@Param("firmId") UUID firmId);
 
+    /** Matter IDs where the user is the assigned partner — for employee calendar filtering. */
+    @Query("SELECT m.id FROM Matter m WHERE m.firmId = :firmId AND m.assignedPartnerId = :userId")
+    List<UUID> findIdsByFirmIdAndAssignedPartnerId(@Param("firmId") UUID firmId,
+                                                    @Param("userId") UUID userId);
+
     // ── Trend queries ─────────────────────────────────────────────────────
 
     /** Daily new matter counts grouped by date. */

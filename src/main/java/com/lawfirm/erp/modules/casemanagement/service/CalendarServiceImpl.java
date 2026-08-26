@@ -34,10 +34,13 @@ public class CalendarServiceImpl implements CalendarService {
     public List<CalendarEventResponse> getCalendar(UUID firmId, LocalDate from, LocalDate to, UUID advocateId) {
         List<CourtEvent> events;
         if (advocateId != null) {
+            List<UUID> assignedCourtCaseIds = getAssignedCourtCaseIds(firmId, advocateId);
+            if (assignedCourtCaseIds.isEmpty()) {
+                return List.of();
+            }
             events = courtEventRepository
-                    .findByFirmIdAndAttendingAdvocateIdAndScheduledDateBetweenOrderByScheduledDateAscScheduledTimeAsc(
-                            firmId, advocateId, from, to, Pageable.unpaged())
-                    .getContent();
+                    .findByCourtCaseIdInAndFirmIdAndAttendingAdvocateIdAndScheduledDateBetween(
+                            assignedCourtCaseIds, firmId, advocateId, from, to);
         } else {
             events = courtEventRepository
                     .findByFirmIdAndScheduledDateBetweenOrderByScheduledDateAscScheduledTimeAsc(
@@ -49,19 +52,49 @@ public class CalendarServiceImpl implements CalendarService {
 
     public List<CalendarEventResponse> getTodayEvents(UUID firmId, UUID advocateId) {
         LocalDate today = LocalDate.now();
-        List<CourtEvent> events = advocateId != null
-                ? courtEventRepository.findByFirmIdAndAttendingAdvocateIdAndScheduledDate(firmId, advocateId, today)
-                : courtEventRepository.findByFirmIdAndScheduledDate(firmId, today);
+        List<CourtEvent> events;
+        if (advocateId != null) {
+            List<UUID> assignedCourtCaseIds = getAssignedCourtCaseIds(firmId, advocateId);
+            if (assignedCourtCaseIds.isEmpty()) {
+                return List.of();
+            }
+            events = courtEventRepository
+                    .findByCourtCaseIdInAndFirmIdAndAttendingAdvocateIdAndScheduledDate(
+                            assignedCourtCaseIds, firmId, advocateId, today);
+        } else {
+            events = courtEventRepository.findByFirmIdAndScheduledDate(firmId, today);
+        }
         return enrich(events);
     }
 
     public List<CalendarEventResponse> getUpcomingEvents(UUID firmId, int days, UUID advocateId) {
         LocalDate from = LocalDate.now();
         LocalDate to = from.plusDays(days);
-        List<CourtEvent> events = advocateId != null
-                ? courtEventRepository.findByFirmIdAndAttendingAdvocateIdAndScheduledDateBetween(firmId, advocateId, from, to)
-                : courtEventRepository.findByFirmIdAndScheduledDateBetween(firmId, from, to);
+        List<CourtEvent> events;
+        if (advocateId != null) {
+            List<UUID> assignedCourtCaseIds = getAssignedCourtCaseIds(firmId, advocateId);
+            if (assignedCourtCaseIds.isEmpty()) {
+                return List.of();
+            }
+            events = courtEventRepository
+                    .findByCourtCaseIdInAndFirmIdAndAttendingAdvocateIdAndScheduledDateBetween(
+                            assignedCourtCaseIds, firmId, advocateId, from, to);
+        } else {
+            events = courtEventRepository.findByFirmIdAndScheduledDateBetween(firmId, from, to);
+        }
         return enrich(events);
+    }
+
+    /**
+     * Returns court case IDs for matters where the employee is the assigned partner.
+     * This ensures employees only see calendar events from matters they own.
+     */
+    private List<UUID> getAssignedCourtCaseIds(UUID firmId, UUID advocateId) {
+        List<UUID> matterIds = matterRepository.findIdsByFirmIdAndAssignedPartnerId(firmId, advocateId);
+        if (matterIds.isEmpty()) {
+            return List.of();
+        }
+        return courtCaseRepository.findIdsByMatterIdIn(matterIds);
     }
 
     /**

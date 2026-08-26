@@ -108,13 +108,24 @@ public class ProjectServiceImpl implements ProjectService {
     public Page<ProjectSummaryResponse> listProjects(ProjectStatus status, String search,
                                                       int page, int size) {
         UUID firmId = getRequiredFirmId();
+        UUID currentUserId = currentUserResolver.getCurrentUserId();
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
+        // Firm admins see all firm projects; employees only see projects they're members of
+        boolean isAdmin = isFirmAdmin();
         Page<Project> projects;
-        if (status != null) {
-            projects = projectRepository.findByFirmIdAndStatus(firmId, status, pageable);
+        if (isAdmin) {
+            if (status != null) {
+                projects = projectRepository.findByFirmIdAndStatus(firmId, status, pageable);
+            } else {
+                projects = projectRepository.findByFirmId(firmId, pageable);
+            }
         } else {
-            projects = projectRepository.findByFirmId(firmId, pageable);
+            if (status != null) {
+                projects = projectRepository.findProjectsByMemberUserIdAndStatus(firmId, currentUserId, status, pageable);
+            } else {
+                projects = projectRepository.findProjectsByMemberUserId(firmId, currentUserId, pageable);
+            }
         }
 
         return projects.map(p -> {
@@ -240,6 +251,11 @@ public class ProjectServiceImpl implements ProjectService {
         UUID firmId = FirmContextHolder.getFirmId();
         if (firmId == null) throw new ForbiddenException("Firm context required");
         return firmId;
+    }
+
+    private boolean isFirmAdmin() {
+        var user = currentUserResolver.getCurrentUser();
+        return user != null && user.getRoles() != null && user.getRoles().contains("FIRM_ADMIN");
     }
 
     private final CurrentUserResolver currentUserResolver;

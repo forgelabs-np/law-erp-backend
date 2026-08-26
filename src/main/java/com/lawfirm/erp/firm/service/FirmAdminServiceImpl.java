@@ -9,6 +9,7 @@ import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.firm.response.FirmAdminResponse;
 import com.lawfirm.erp.entity.User;
+import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import com.lawfirm.erp.auth.security.PermissionEvaluator;
@@ -118,6 +119,7 @@ public class FirmAdminServiceImpl implements FirmAdminService {
     }
 
     private FirmAdminResponse toResponse(User user) {
+        Firm firm = user.getFirm();
         return FirmAdminResponse.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -125,8 +127,12 @@ public class FirmAdminServiceImpl implements FirmAdminService {
                 .mobileNo(user.getMobileNo())
                 .fullName(user.getFullName())
                 .firmId(user.getFirmId())
-                .firmName(user.getFirm() != null ? user.getFirm().getName() : null)
-                .firmCode(user.getFirm() != null ? user.getFirm().getLawFirmCode() : null)
+                .firmName(firm != null ? firm.getName() : null)
+                .firmCode(firm != null ? firm.getLawFirmCode() : null)
+                .firmEmail(firm != null ? firm.getEmail() : null)
+                .firmType(firm != null && firm.getFirmType() != null ? firm.getFirmType().name() : null)
+                .firmAddress(firm != null ? firm.getAddress() : null)
+                .firmPhone(firm != null ? firm.getPhone() : null)
                 .isActive(user.isActive())
                 .createdAt(user.getCreatedAt())
                 .build();
