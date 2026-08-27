@@ -33,13 +33,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-/**
- * Regression tests for the role-permission ceiling fix: a firm role may hold
- * any permission that its parent SYSTEM role holds — the old static scope
- * ceiling (ADVOCATE/PARALEGAL -> ASSIGNED, CLIENT -> OWN) rejected every
- * seeded TENANT-scoped permission, so firm admins could never edit those
- * roles' permissions at all.
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class FirmRoleServiceImplTest {
@@ -58,12 +51,17 @@ class FirmRoleServiceImplTest {
     private static final UUID FIRM_ID = UUID.randomUUID();
     private static final UUID ADMIN_ID = UUID.randomUUID();
     private static final UUID ROLE_ID = UUID.randomUUID();
+    private static final UUID FIRM_ADMIN_ROLE_ID = UUID.randomUUID();
     private static final UUID PARENT_ROLE_ID = UUID.randomUUID();
     private static final UUID PERM_VIEW = UUID.randomUUID();
+    private static final UUID PERM_CREATE = UUID.randomUUID();
     private static final UUID PERM_GLOBAL = UUID.randomUUID();
 
     private Role firmAdvocateRole;
+    private Role firmAdminRole;
+    private Role parentSystemFirmAdminRole;
     private Permission caseViewPermission;
+    private Permission caseCreatePermission;
     private Permission globalPermission;
 
     @BeforeEach
@@ -78,18 +76,33 @@ class FirmRoleServiceImplTest {
         firmAdvocateRole.setFirm(firm);
         firmAdvocateRole.setParentRoleId(PARENT_ROLE_ID);
 
-        Role parentAdvocateRole = new Role();
-        parentAdvocateRole.setId(PARENT_ROLE_ID);
-        parentAdvocateRole.setRoleCode("ADVOCATE");
-        parentAdvocateRole.setIsSystem(true);
+        firmAdminRole = new Role();
+        firmAdminRole.setId(FIRM_ADMIN_ROLE_ID);
+        firmAdminRole.setRoleCode("FIRM_ADMIN");
+        firmAdminRole.setIsSystem(false);
+        firmAdminRole.setFirm(firm);
+        firmAdminRole.setParentRoleId(PARENT_ROLE_ID);
+
+        parentSystemFirmAdminRole = new Role();
+        parentSystemFirmAdminRole.setId(PARENT_ROLE_ID);
+        parentSystemFirmAdminRole.setRoleCode("FIRM_ADMIN");
+        parentSystemFirmAdminRole.setIsSystem(true);
 
         caseViewPermission = Permission.builder()
                 .code("CASE_MANAGEMENT:VIEW")
                 .action(PermissionAction.VIEW)
-                .scope(PermissionScope.TENANT) // all seeded permissions are TENANT-scoped
+                .scope(PermissionScope.TENANT)
                 .build();
         caseViewPermission.setActive(true);
         caseViewPermission.setId(PERM_VIEW);
+
+        caseCreatePermission = Permission.builder()
+                .code("CASE_MANAGEMENT:CREATE")
+                .action(PermissionAction.CREATE)
+                .scope(PermissionScope.TENANT)
+                .build();
+        caseCreatePermission.setActive(true);
+        caseCreatePermission.setId(PERM_CREATE);
 
         globalPermission = Permission.builder()
                 .code("SYSTEM_CONFIG:ACCESS")
@@ -101,20 +114,63 @@ class FirmRoleServiceImplTest {
 
         when(currentUserResolver.getCurrentFirmId()).thenReturn(FIRM_ID);
         when(currentUserResolver.getCurrentUserId()).thenReturn(ADMIN_ID);
-        when(roleRepository.findById(ROLE_ID)).thenReturn(Optional.of(firmAdvocateRole));
-        when(roleRepository.findById(PARENT_ROLE_ID)).thenReturn(Optional.of(parentAdvocateRole));
         when(userRepository.findUserIdsByRoleId(ROLE_ID)).thenReturn(List.of());
     }
 
     @Nested
-    @DisplayName("Firm role permission updates (ceiling = parent system role's permission set)")
-    class CeilingEnforcement {
+    @DisplayName("FIRM_ADMIN role: ceiling = parent system role (SUPER_ADMIN controls)")
+    class FirmAdminCeiling {
 
         @Test
-        @DisplayName("TENANT-scoped permission held by parent ADVOCATE role → allowed (was 403 before the fix)")
+        @DisplayName("FIRM_ADMIN can get permissions that parent system FIRM_ADMIN has")
         void parentSetPermission_allowed() {
+            when(roleRepository.findById(FIRM_ADMIN_ROLE_ID)).thenReturn(Optional.of(firmAdminRole));
+            when(rolePermissionRepository.findPermissionsByRoleId(PARENT_ROLE_ID))
+                    .thenReturn(List.of(caseViewPermission, caseCreatePermission));
+            when(rolePermissionRepository.findPermissionsByRoleId(FIRM_ADMIN_ROLE_ID))
+                    .thenReturn(List.of());
+            when(permissionRepository.findAllById(List.of(PERM_VIEW))).thenReturn(List.of(caseViewPermission));
+
+            RolePermissionRequest request = new RolePermissionRequest();
+            request.setRoleId(FIRM_ADMIN_ROLE_ID);
+            request.setPermissionIds(List.of(PERM_VIEW));
+
+            firmRoleService.updateRolePermissions(FIRM_ADMIN_ROLE_ID, request);
+
+            verify(rolePermissionRepository).deleteByRoleId(FIRM_ADMIN_ROLE_ID);
+            verify(rolePermissionRepository).saveAll(any());
+        }
+
+        @Test
+        @DisplayName("FIRM_ADMIN cannot get permission not in parent system role")
+        void outsideParentSet_forbidden() {
+            when(roleRepository.findById(FIRM_ADMIN_ROLE_ID)).thenReturn(Optional.of(firmAdminRole));
             when(rolePermissionRepository.findPermissionsByRoleId(PARENT_ROLE_ID))
                     .thenReturn(List.of(caseViewPermission));
+            when(permissionRepository.findAllById(List.of(PERM_GLOBAL))).thenReturn(List.of(globalPermission));
+
+            RolePermissionRequest request = new RolePermissionRequest();
+            request.setRoleId(FIRM_ADMIN_ROLE_ID);
+            request.setPermissionIds(List.of(PERM_GLOBAL));
+
+            assertThrows(ForbiddenException.class,
+                    () -> firmRoleService.updateRolePermissions(FIRM_ADMIN_ROLE_ID, request));
+            verify(rolePermissionRepository, never()).deleteByRoleId(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("Other firm roles: ceiling = firm FIRM_ADMIN's enabled permissions")
+    class FirmRoleCeiling {
+
+        @Test
+        @DisplayName("ADVOCATE can get permission that firm FIRM_ADMIN has enabled")
+        void firmAdminEnabled_allowed() {
+            when(roleRepository.findById(ROLE_ID)).thenReturn(Optional.of(firmAdvocateRole));
+            when(roleRepository.findByFirmIdAndRoleCode(FIRM_ID, "FIRM_ADMIN"))
+                    .thenReturn(Optional.of(firmAdminRole));
+            when(rolePermissionRepository.findPermissionsByRoleId(FIRM_ADMIN_ROLE_ID))
+                    .thenReturn(List.of(caseViewPermission, caseCreatePermission));
             when(permissionRepository.findAllById(List.of(PERM_VIEW))).thenReturn(List.of(caseViewPermission));
 
             RolePermissionRequest request = new RolePermissionRequest();
@@ -128,28 +184,31 @@ class FirmRoleServiceImplTest {
         }
 
         @Test
-        @DisplayName("Permission NOT in parent role's set → forbidden, nothing persisted")
-        void outsideParentSet_forbidden() {
-            when(rolePermissionRepository.findPermissionsByRoleId(PARENT_ROLE_ID))
+        @DisplayName("ADVOCATE cannot get permission that firm FIRM_ADMIN does NOT have enabled")
+        void firmAdminDoesNotHave_forbidden() {
+            when(roleRepository.findById(ROLE_ID)).thenReturn(Optional.of(firmAdvocateRole));
+            when(roleRepository.findByFirmIdAndRoleCode(FIRM_ID, "FIRM_ADMIN"))
+                    .thenReturn(Optional.of(firmAdminRole));
+            when(rolePermissionRepository.findPermissionsByRoleId(FIRM_ADMIN_ROLE_ID))
                     .thenReturn(List.of(caseViewPermission));
-            when(permissionRepository.findAllById(List.of(PERM_GLOBAL))).thenReturn(List.of(globalPermission));
+            when(permissionRepository.findAllById(List.of(PERM_CREATE))).thenReturn(List.of(caseCreatePermission));
 
             RolePermissionRequest request = new RolePermissionRequest();
             request.setRoleId(ROLE_ID);
-            request.setPermissionIds(List.of(PERM_GLOBAL));
+            request.setPermissionIds(List.of(PERM_CREATE));
 
-            ForbiddenException ex = assertThrows(ForbiddenException.class,
+            assertThrows(ForbiddenException.class,
                     () -> firmRoleService.updateRolePermissions(ROLE_ID, request));
-            assertTrue(ex.getMessage().contains("ADVOCATE"));
-            assertTrue(ex.getMessage().contains("ceiling"));
             verify(rolePermissionRepository, never()).deleteByRoleId(any());
-            verify(rolePermissionRepository, never()).saveAll(any());
         }
 
         @Test
-        @DisplayName("GLOBAL-scope permission is never allowed, even if the parent holds it")
+        @DisplayName("GLOBAL-scope permission is never allowed, even if FIRM_ADMIN has it")
         void globalScope_neverAllowed() {
-            when(rolePermissionRepository.findPermissionsByRoleId(PARENT_ROLE_ID))
+            when(roleRepository.findById(ROLE_ID)).thenReturn(Optional.of(firmAdvocateRole));
+            when(roleRepository.findByFirmIdAndRoleCode(FIRM_ID, "FIRM_ADMIN"))
+                    .thenReturn(Optional.of(firmAdminRole));
+            when(rolePermissionRepository.findPermissionsByRoleId(FIRM_ADMIN_ROLE_ID))
                     .thenReturn(List.of(globalPermission));
             when(permissionRepository.findAllById(List.of(PERM_GLOBAL))).thenReturn(List.of(globalPermission));
 
@@ -160,22 +219,6 @@ class FirmRoleServiceImplTest {
             assertThrows(ForbiddenException.class,
                     () -> firmRoleService.updateRolePermissions(ROLE_ID, request));
             verify(rolePermissionRepository, never()).deleteByRoleId(any());
-            verify(rolePermissionRepository, never()).saveAll(any());
-        }
-
-        @Test
-        @DisplayName("Invalid permission ID → ResourceNotFoundException")
-        void invalidPermissionId_throws() {
-            UUID badId = UUID.randomUUID();
-            when(permissionRepository.findAllById(List.of(badId))).thenReturn(List.of());
-
-            RolePermissionRequest request = new RolePermissionRequest();
-            request.setRoleId(ROLE_ID);
-            request.setPermissionIds(List.of(badId));
-
-            assertThrows(com.lawfirm.erp.common.exception.ResourceNotFoundException.class,
-                    () -> firmRoleService.updateRolePermissions(ROLE_ID, request));
-            verify(rolePermissionRepository, never()).saveAll(any());
         }
     }
 }

@@ -15,11 +15,8 @@ import com.lawfirm.erp.dto.firm.response.FirmCreationResponse;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
-import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
-import com.lawfirm.erp.rbac.entity.RolePermission;
 import com.lawfirm.erp.rbac.entity.UserRole;
-import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
 import com.lawfirm.erp.rbac.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
@@ -38,7 +35,6 @@ public class FirmServiceImpl implements FirmService {
     private final FirmRepository firmRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
-    private final RolePermissionRepository rolePermissionRepository;
     private final UserRoleRepository userRoleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
@@ -178,19 +174,8 @@ public class FirmServiceImpl implements FirmService {
             firmRole.setActive(true);
             firmRole = roleRepository.save(firmRole);
 
-            List<Permission> systemPermissions = rolePermissionRepository
-                    .findPermissionsByRoleId(systemRole.getId());
-
-            for (Permission permission : systemPermissions) {
-                RolePermission rp = RolePermission.builder()
-                        .role(firmRole)
-                        .permission(permission)
-                        .build();
-                rolePermissionRepository.save(rp);
-            }
-
-            log.info("Cloned role '{}' with {} permissions for firm '{}'",
-                    systemRole.getRoleCode(), systemPermissions.size(), firm.getLawFirmCode());
+            log.info("Cloned role '{}' for firm '{}' (no permissions — SUPER_ADMIN assigns via system role)",
+                    systemRole.getRoleCode(), firm.getLawFirmCode());
         }
     }
 }

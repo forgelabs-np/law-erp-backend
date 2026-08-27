@@ -100,26 +100,17 @@ public class FirmRoleServiceImpl implements FirmRoleService {
 
     // ═══════════════════════════════════════════════════════════════════════
     // GET /api/v1/firm/roles/{roleId}/permissions
-    // What permissions does this role currently have?
-    // Also shows ceiling — what the parent system role allows
+    // Two-tier ceiling:
+    //   - FIRM_ADMIN role: ceiling = parent system role (SUPER_ADMIN controls)
+    //   - Other firm roles: ceiling = firm FIRM_ADMIN's enabled perms
     // ═══════════════════════════════════════════════════════════════════════
     public FirmRolePermissionsResponse getRolePermissions(UUID roleId) {
         UUID firmId = getRequiredFirmId();
         Role role = getValidatedFirmRole(roleId, firmId);
 
-        // Current permissions on this firm-scoped role
         List<Permission> current = rolePermissionRepository.findPermissionsByRoleId(role.getId());
 
-        // Ceiling — what the parent system role allows
-        // GLOBAL-scope permissions are filtered out: they are reserved for SUPER_ADMIN
-        // and cannot be assigned to firm-scoped roles.
-        List<Permission> ceiling = List.of();
-        if (role.getParentRoleId() != null) {
-            ceiling = rolePermissionRepository.findPermissionsByRoleId(role.getParentRoleId())
-                    .stream()
-                    .filter(p -> p.getScope() != PermissionScope.GLOBAL)
-                    .toList();
-        }
+        List<Permission> ceiling = computeCeiling(role, firmId);
 
         Set<UUID> currentIds = current.stream().map(Permission::getId).collect(Collectors.toSet());
 
@@ -127,10 +118,7 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                 .roleId(role.getId())
                 .roleName(role.getRoleName())
                 .roleCode(role.getRoleCode())
-                // Permissions currently assigned to this role
                 .currentPermissions(current.stream().map(this::toPermResponse).collect(Collectors.toList()))
-                // All permissions available to assign (from parent ceiling)
-                // Frontend uses this to build the checkbox list
                 .availablePermissions(ceiling.stream()
                         .map(p -> FirmRolePermissionsResponse.AvailablePermission.builder()
                                 .id(p.getId())
@@ -164,24 +152,15 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         }
 
         // ── Ceiling check ─────────────────────────────────────────────────
-        // A firm role may only hold permissions that its parent system role has.
-        // (This is the same set the UI presents as "available permissions".)
-        // GLOBAL-scope permissions are reserved for SUPER_ADMIN.
-        if (role.getParentRoleId() != null) {
-            Role parentRole = roleRepository.findById(role.getParentRoleId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Parent system role not found"));
+        List<Permission> ceiling = computeCeiling(role, firmId);
+        Set<UUID> ceilingPermIds = ceiling.stream().map(Permission::getId).collect(Collectors.toSet());
 
-            Set<UUID> parentPermIds = rolePermissionRepository.findPermissionsByRoleId(parentRole.getId())
-                    .stream().map(Permission::getId).collect(Collectors.toSet());
-
-            for (Permission p : permissions) {
-                if (!parentPermIds.contains(p.getId()) || p.getScope() == PermissionScope.GLOBAL) {
-                    throw new ForbiddenException(
-                            "Permission '" + p.getCode() + "' (scope: " + p.getScope()
-                            + ") is not allowed for role type '" + parentRole.getRoleCode()
-                            + "'. Exceeds system ceiling."
-                    );
-                }
+        for (Permission p : permissions) {
+            if (!ceilingPermIds.contains(p.getId()) || p.getScope() == PermissionScope.GLOBAL) {
+                throw new ForbiddenException(
+                        "Permission '" + p.getCode() + "' (scope: " + p.getScope()
+                        + ") exceeds the ceiling for role '" + role.getRoleCode() + "'."
+                );
             }
         }
 
@@ -229,6 +208,44 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                 .roleCode(role.getRoleCode())
                 .permissions(permissions.stream().map(this::toPermResponse).collect(Collectors.toList()))
                 .build();
+    }
+
+    // ─── Ceiling logic ─────────────────────────────────────────────────────
+
+    /**
+     * Two-tier ceiling:
+     *   - FIRM_ADMIN role: parent system role's permissions (SUPER_ADMIN controls)
+     *   - Other firm roles: firm FIRM_ADMIN's enabled permissions (FIRM_ADMIN controls)
+     */
+    private List<Permission> computeCeiling(Role role, UUID firmId) {
+        if (isFirmAdminRole(role)) {
+            // FIRM_ADMIN ceiling comes from the system role (SUPER_ADMIN sets this)
+            if (role.getParentRoleId() != null) {
+                return rolePermissionRepository.findPermissionsByRoleId(role.getParentRoleId())
+                        .stream()
+                        .filter(p -> p.getScope() != PermissionScope.GLOBAL)
+                        .toList();
+            }
+            return List.of();
+        }
+
+        // For all other firm roles: ceiling = firm FIRM_ADMIN's enabled permissions
+        Role firmAdmin = findFirmAdminRole(firmId);
+        if (firmAdmin == null) {
+            return List.of();
+        }
+        return rolePermissionRepository.findPermissionsByRoleId(firmAdmin.getId())
+                .stream()
+                .filter(p -> p.getScope() != PermissionScope.GLOBAL)
+                .toList();
+    }
+
+    private boolean isFirmAdminRole(Role role) {
+        return "FIRM_ADMIN".equals(role.getRoleCode());
+    }
+
+    private Role findFirmAdminRole(UUID firmId) {
+        return roleRepository.findByFirmIdAndRoleCode(firmId, "FIRM_ADMIN").orElse(null);
     }
 
     // ─── Guards ───────────────────────────────────────────────────────────

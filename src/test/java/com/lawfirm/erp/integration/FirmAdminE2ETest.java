@@ -18,13 +18,6 @@ import java.util.stream.Collectors;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-/**
- * E2E tests for FirmAdmin flows:
- * - List firm roles
- * - View role permissions (current + ceiling)
- * - Update role permissions
- * - Assign users to roles
- */
 @Transactional
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class FirmAdminE2ETest extends BaseIntegrationTest {
@@ -36,25 +29,21 @@ class FirmAdminE2ETest extends BaseIntegrationTest {
     private com.lawfirm.erp.rbac.repository.RolePermissionRepository rolePermissionRepository;
 
     private String firmToken;
+    private String saToken;
     private Firm testFirm;
     private Role advocateRole;
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // Setup — create firm via SA token, then login as firm admin
-    // ═══════════════════════════════════════════════════════════════════════
+    private Role firmAdminRole;
+    private User firmAdminUser;
 
     private void setupFirmWithAdmin() throws Exception {
-        // Register super admin
         registerSuperAdmin("firmsa", "firmsa@test.com", "Pass123!",
                 "Firm SA", "9810000001", "test-super-admin-secret-key-12345");
 
-        // Get SA user directly (bypass MFA) for firm creation
         Role saRole = getSystemRole("SUPER_ADMIN");
         User saUser = createSystemUser("firmsa", "firmsa@test.com", "Pass123!",
                 UserType.SUPER_ADMIN, saRole);
-        String saToken = generateAccessToken(saUser);
+        saToken = generateAccessToken(saUser);
 
-        // Create firm via API
         var firmRequest = apiRequest(Map.of(
                 "lawFirmCode", "FIRMRBAC",
                 "name", "Firm RBAC Test",
@@ -67,7 +56,6 @@ class FirmAdminE2ETest extends BaseIntegrationTest {
         ));
 
         MvcResult result = authPost(saToken, "/api/v1/super-admin/firms", firmRequest);
-
         int status = result.getResponse().getStatus();
         Assertions.assertEquals(200, status,
                 "Firm creation should succeed, got: " + status + " — " +
@@ -76,22 +64,20 @@ class FirmAdminE2ETest extends BaseIntegrationTest {
         String firmId = parseResponse(result).path("data").path("firmId").asText();
         testFirm = firmRepository.findById(UUID.fromString(firmId)).orElseThrow();
 
-        // Get the firm admin user and generate token directly (bypass MFA)
-        Role firmAdminRole = roleRepository.findByFirmIdAndRoleCode(testFirm.getId(), "FIRM_ADMIN")
+        firmAdminRole = roleRepository.findByFirmIdAndRoleCode(testFirm.getId(), "FIRM_ADMIN")
                 .orElseThrow();
-        User firmAdmin = userRepository.findByUsernameAndFirmId("rbacadmin", testFirm.getId())
-                .orElseThrow();
-
-        firmToken = generateAccessToken(firmAdmin);
-
-        // Get the firm-scoped ADVOCATE role
         advocateRole = roleRepository.findByFirmIdAndRoleCode(testFirm.getId(), "ADVOCATE")
                 .orElseThrow(() -> new RuntimeException("ADVOCATE role not cloned"));
+
+        firmAdminUser = userRepository.findByUsernameAndFirmId("rbacadmin", testFirm.getId())
+                .orElseThrow();
+        firmToken = generateAccessToken(firmAdminUser);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 1. List Firm Roles
-    // ═══════════════════════════════════════════════════════════════════════
+    private String refreshToken() {
+        User fresh = userRepository.findById(firmAdminUser.getId()).orElseThrow();
+        return generateAccessToken(fresh);
+    }
 
     @Test
     @Order(1)
@@ -106,142 +92,179 @@ class FirmAdminE2ETest extends BaseIntegrationTest {
         Assertions.assertTrue(data.isArray(), "Response should be an array");
         Assertions.assertTrue(data.size() >= 4, "Should have at least 4 roles (FIRM_ADMIN, ADVOCATE, PARALEGAL, CLIENT)");
 
-        // Verify SUPER_ADMIN is NOT in the list
         for (JsonNode role : data) {
             Assertions.assertNotEquals("SUPER_ADMIN", role.path("code").asText(),
                     "SUPER_ADMIN should not appear in firm roles");
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 2. View Role Permissions (Current + Ceiling)
-    // ═══════════════════════════════════════════════════════════════════════
-
     @Test
     @Order(2)
-    @DisplayName("Firm admin can view role permissions with ceiling")
-    void viewRolePermissions_withCeiling() throws Exception {
+    @DisplayName("FIRM_ADMIN starts with 0 permissions, ceiling comes from system FIRM_ADMIN")
+    void firmAdminStartsWithEmptyPermissions() throws Exception {
         setupFirmWithAdmin();
 
-        MvcResult result = authGet(firmToken, "/api/v1/firm/roles/" + advocateRole.getId() + "/permissions");
+        MvcResult result = authGet(firmToken, "/api/v1/firm/roles/" + firmAdminRole.getId() + "/permissions");
         assertSuccess(result);
 
         JsonNode data = parseResponse(result).path("data");
-
-        Assertions.assertTrue(data.has("currentPermissions"), "Should have currentPermissions");
-        Assertions.assertTrue(data.has("availablePermissions"), "Should have availablePermissions");
-        Assertions.assertEquals("ADVOCATE", data.path("roleCode").asText());
-
         JsonNode current = data.path("currentPermissions");
-        Assertions.assertTrue(current.isArray(), "currentPermissions should be an array");
-        Assertions.assertTrue(current.size() > 0, "ADVOCATE should have some permissions");
-
         JsonNode available = data.path("availablePermissions");
-        // Collect available permission codes
-        Set<String> availableCodes = new HashSet<>();
+
+        Assertions.assertTrue(current.isArray() && current.size() == 0,
+                "FIRM_ADMIN should start with 0 permissions, got: " + current.size());
+        Assertions.assertTrue(available.isArray() && available.size() > 0,
+                "FIRM_ADMIN ceiling should show system role permissions as available");
+
+        Role systemFirmAdmin = getSystemRole("FIRM_ADMIN");
+        Set<String> systemPermCodes = rolePermissionRepository.findPermissionsByRoleId(systemFirmAdmin.getId())
+                .stream().map(Permission::getCode).collect(Collectors.toSet());
+
         for (JsonNode p : available) {
-            availableCodes.add(p.path("code").asText());
-        }
-        // All non-GLOBAL current permissions should be in the ceiling
-        for (JsonNode p : current) {
-            if (!"GLOBAL".equals(p.path("scope").asText())) {
-                Assertions.assertTrue(availableCodes.contains(p.path("code").asText()),
-                        "Non-GLOBAL permission " + p.path("code").asText() + " should be in ceiling");
-            }
+            Assertions.assertTrue(systemPermCodes.contains(p.path("code").asText()),
+                    "Available permission " + p.path("code").asText() + " should be in system FIRM_ADMIN role");
         }
     }
 
     @Test
     @Order(3)
-    @DisplayName("Ceiling available permissions are all from parent system role")
-    void viewRolePermissions_ceilingMatchesParent() throws Exception {
+    @DisplayName("FIRM_ADMIN can enable permissions for itself from system ceiling")
+    void firmAdminEnablesOwnPermissions() throws Exception {
         setupFirmWithAdmin();
 
-        MvcResult result = authGet(firmToken, "/api/v1/firm/roles/" + advocateRole.getId() + "/permissions");
+        MvcResult ceilingResult = authGet(firmToken, "/api/v1/firm/roles/" + firmAdminRole.getId() + "/permissions");
+        JsonNode available = parseResponse(ceilingResult).path("data").path("availablePermissions");
+
+        List<UUID> permIds = new ArrayList<>();
+        for (int i = 0; i < Math.min(3, available.size()); i++) {
+            permIds.add(UUID.fromString(available.get(i).path("id").asText()));
+        }
+
+        var request = apiRequest(Map.of("roleId", firmAdminRole.getId(), "permissionIds", permIds));
+        MvcResult result = authPut(firmToken,
+                "/api/v1/firm/roles/" + firmAdminRole.getId() + "/permissions", request);
         assertSuccess(result);
 
-        JsonNode available = parseResponse(result).path("data").path("availablePermissions");
-
-        // Verify all available permissions are in the parent system ADVOCATE role
-        Role parentRole = getSystemRole("ADVOCATE");
-        Set<String> parentPermCodes = rolePermissionRepository.findPermissionsByRoleId(parentRole.getId())
-                .stream().map(Permission::getCode).collect(Collectors.toSet());
-
-        for (JsonNode perm : available) {
-            Assertions.assertTrue(parentPermCodes.contains(perm.path("code").asText()),
-                    "Permission " + perm.path("code").asText() + " should be in parent system role");
-        }
+        JsonNode data = parseResponse(result).path("data");
+        Assertions.assertEquals(permIds.size(), data.path("permissions").size(),
+                "FIRM_ADMIN should now have the permissions it enabled");
     }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // 3. Update Role Permissions
-    // ═══════════════════════════════════════════════════════════════════════
 
     @Test
     @Order(4)
-    @DisplayName("Firm admin can update role permissions within ceiling")
-    void updateRolePermissions_withinCeiling() throws Exception {
+    @DisplayName("ADVOCATE ceiling = firm FIRM_ADMIN enabled permissions (not system role)")
+    void advocateCeilingFromFirmAdmin() throws Exception {
         setupFirmWithAdmin();
 
-        MvcResult permResult = authGet(firmToken, "/api/v1/firm/roles/" + advocateRole.getId() + "/permissions");
-        JsonNode available = parseResponse(permResult).path("data").path("availablePermissions");
+        MvcResult ceilingResult = authGet(firmToken, "/api/v1/firm/roles/" + firmAdminRole.getId() + "/permissions");
+        JsonNode available = parseResponse(ceilingResult).path("data").path("availablePermissions");
+
+        List<UUID> permIds = new ArrayList<>();
+        for (int i = 0; i < Math.min(3, available.size()); i++) {
+            permIds.add(UUID.fromString(available.get(i).path("id").asText()));
+        }
+        var enableReq = apiRequest(Map.of("roleId", firmAdminRole.getId(), "permissionIds", permIds));
+        authPut(firmToken, "/api/v1/firm/roles/" + firmAdminRole.getId() + "/permissions", enableReq);
+
+        String freshToken = refreshToken();
+
+        MvcResult result = authGet(freshToken, "/api/v1/firm/roles/" + advocateRole.getId() + "/permissions");
+        assertSuccess(result);
+
+        JsonNode data = parseResponse(result).path("data");
+        JsonNode current = data.path("currentPermissions");
+        JsonNode advocateAvailable = data.path("availablePermissions");
+
+        Assertions.assertTrue(current.isArray() && current.size() == 0,
+                "ADVOCATE should start with 0 permissions");
+
+        Set<String> advocateAvailableCodes = new HashSet<>();
+        for (JsonNode p : advocateAvailable) {
+            advocateAvailableCodes.add(p.path("code").asText());
+        }
+
+        Set<UUID> firmAdminEnabledIds = new HashSet<>(permIds);
+        for (JsonNode p : advocateAvailable) {
+            UUID permId = UUID.fromString(p.path("id").asText());
+            Assertions.assertTrue(firmAdminEnabledIds.contains(permId),
+                    "Available permission " + p.path("code").asText() +
+                            " should be in FIRM_ADMIN's enabled set, not system role");
+        }
+    }
+
+    @Test
+    @Order(5)
+    @DisplayName("ADVOCATE can get permissions that FIRM_ADMIN has enabled")
+    void advocateGetsPermissionsFromFirmAdminCeiling() throws Exception {
+        setupFirmWithAdmin();
+
+        MvcResult ceilingResult = authGet(firmToken, "/api/v1/firm/roles/" + firmAdminRole.getId() + "/permissions");
+        JsonNode available = parseResponse(ceilingResult).path("data").path("availablePermissions");
+
+        List<UUID> permIds = new ArrayList<>();
+        for (int i = 0; i < Math.min(3, available.size()); i++) {
+            permIds.add(UUID.fromString(available.get(i).path("id").asText()));
+        }
+        var enableReq = apiRequest(Map.of("roleId", firmAdminRole.getId(), "permissionIds", permIds));
+        authPut(firmToken, "/api/v1/firm/roles/" + firmAdminRole.getId() + "/permissions", enableReq);
+
+        String freshToken = refreshToken();
+
+        List<UUID> assignToAdvocate = permIds.subList(0, Math.min(2, permIds.size()));
+        var request = apiRequest(Map.of("roleId", advocateRole.getId(), "permissionIds", assignToAdvocate));
+        MvcResult result = authPut(freshToken,
+                "/api/v1/firm/roles/" + advocateRole.getId() + "/permissions", request);
+        assertSuccess(result);
+
+        JsonNode data = parseResponse(result).path("data");
+        Assertions.assertEquals(assignToAdvocate.size(), data.path("permissions").size());
+    }
+
+    @Test
+    @Order(6)
+    @DisplayName("ADVOCATE cannot get permission FIRM_ADMIN has NOT enabled")
+    void advocateCannotExceedFirmAdminCeiling() throws Exception {
+        setupFirmWithAdmin();
+
+        MvcResult ceilingResult = authGet(firmToken, "/api/v1/firm/roles/" + firmAdminRole.getId() + "/permissions");
+        JsonNode available = parseResponse(ceilingResult).path("data").path("availablePermissions");
 
         List<UUID> permIds = new ArrayList<>();
         for (int i = 0; i < Math.min(2, available.size()); i++) {
             permIds.add(UUID.fromString(available.get(i).path("id").asText()));
         }
+        var enableReq = apiRequest(Map.of("roleId", firmAdminRole.getId(), "permissionIds", permIds));
+        authPut(firmToken, "/api/v1/firm/roles/" + firmAdminRole.getId() + "/permissions", enableReq);
 
-        var request = apiRequest(Map.of("roleId", advocateRole.getId(), "permissionIds", permIds));
-        MvcResult result = authPut(firmToken,
-                "/api/v1/firm/roles/" + advocateRole.getId() + "/permissions", request);
-        assertSuccess(result);
+        String freshToken = refreshToken();
 
-        JsonNode data = parseResponse(result).path("data");
-        Assertions.assertEquals("ADVOCATE", data.path("roleCode").asText());
-        Assertions.assertEquals(permIds.size(), data.path("permissions").size());
-    }
+        Set<String> firmAdminEnabledCodes = rolePermissionRepository.findPermissionsByRoleId(firmAdminRole.getId())
+                .stream().map(Permission::getCode).collect(Collectors.toSet());
 
-    @Test
-    @Order(5)
-    @DisplayName("Firm admin CANNOT assign permissions beyond ceiling")
-    void updateRolePermissions_exceedsCeiling_rejected() throws Exception {
-        setupFirmWithAdmin();
-
-        MvcResult ceilingResult = authGet(firmToken,
-                "/api/v1/firm/roles/" + advocateRole.getId() + "/permissions");
-        JsonNode available = parseResponse(ceilingResult).path("data").path("availablePermissions");
-        Set<String> availableCodes = new HashSet<>();
-        for (JsonNode p : available) {
-            availableCodes.add(p.path("code").asText());
-        }
-
-        // Find a permission NOT in the ceiling
-        Permission outsideCeiling = permissionRepository.findAll().stream()
-                .filter(p -> !availableCodes.contains(p.getCode()))
+        Role systemFirmAdmin = getSystemRole("FIRM_ADMIN");
+        Permission outsideCeiling = rolePermissionRepository.findPermissionsByRoleId(systemFirmAdmin.getId())
+                .stream()
+                .filter(p -> !firmAdminEnabledCodes.contains(p.getCode()))
                 .findFirst()
                 .orElse(null);
 
         if (outsideCeiling == null) {
-            Assertions.assertTrue(true, "All permissions in ceiling, ceiling enforcement not testable here");
+            Assertions.assertTrue(true, "All system permissions enabled, cannot test ceiling enforcement");
             return;
         }
 
         var request = apiRequest(Map.of("roleId", advocateRole.getId(), "permissionIds", List.of(outsideCeiling.getId())));
-        MvcResult result = authPut(firmToken,
+        MvcResult result = authPut(freshToken,
                 "/api/v1/firm/roles/" + advocateRole.getId() + "/permissions", request);
 
         int status = result.getResponse().getStatus();
         Assertions.assertEquals(403, status,
-                "Should reject permission outside ceiling, got: " + status +
+                "Should reject permission outside FIRM_ADMIN ceiling, got: " + status +
                         " — " + result.getResponse().getContentAsString());
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 4. Firm Admin Cannot Modify System Roles
-    // ═══════════════════════════════════════════════════════════════════════
-
     @Test
-    @Order(6)
+    @Order(7)
     @DisplayName("Firm admin cannot modify system roles")
     void updateSystemRole_rejected() throws Exception {
         setupFirmWithAdmin();
@@ -257,12 +280,8 @@ class FirmAdminE2ETest extends BaseIntegrationTest {
                 "Should reject system role modification, got: " + status);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // 5. Firm Admin Can List Role Users
-    // ═══════════════════════════════════════════════════════════════════════
-
     @Test
-    @Order(7)
+    @Order(8)
     @DisplayName("Firm admin can list users assigned to a role")
     void listRoleUsers() throws Exception {
         setupFirmWithAdmin();

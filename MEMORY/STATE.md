@@ -1,24 +1,18 @@
 # State
-_Last updated: 2026-08-25_
+_Last updated: 2026-08-27_
 
 ## Active work
-- Invoice Generator module complete — entities, CRUD, PDF generation (Thymeleaf + OpenHTMLtoPDF), email send. SUPER_ADMIN only for now.
-- Query optimization done — 6 hotspots fixed, 178 tests pass.
-- Dashboard trends feature done — configurable `days` param, cumulative daily data.
+- Two-Tier Permission Ceiling implemented — firm roles start empty, FIRM_ADMIN enables from system ceiling, distributes to other roles
+- Invoice Generator module complete — SUPER_ADMIN only for now
+- Query optimization done — 6 hotspots fixed, 178+ tests pass
+- Dashboard trends feature done
 
 ## Recent decisions (keep ~6, drop the oldest)
-- Invoice module scoped to SUPER_ADMIN only — firm-scoped billing is a follow-up
-- OpenHTMLtoPDF chosen for PDF generation (Thymeleaf HTML → PDF) — requires openhtmltopdf-core + openhtmltopdf-pdfbox 1.0.10
-- Dashboard trends use GROUP BY DATE(createdAt) with cumulative sums — no snapshot table, reconstructed from entity creation timestamps
-- Query optimization approach: COUNT/aggregate SQL instead of findAll+stream; batch repository methods for N+1 elimination; JWT fast-path in PermissionEvaluator
-- Strix removed entirely (skills, CLI, runs) — not needed; manual/curl testing instead
-- Test-mode security items (MFA 123456, committed JWT/AES/registration secrets) INTENTIONAL for now — user will move to env/SystemConfig before go-live
-
-## Recent decisions (keep ~6, drop the oldest)
-- All modules follow Controller → Service (interface) → ServiceImpl → Mapper pattern
-- Response building extracted from services into mapper classes per module
-- Swagger summaries/descriptions centralized as constants in `common/constant/`
-- Project mgmt module + RBAC permission layer have NO enforcement — top go-live blockers
+- Two-Tier Ceiling: FIRM_ADMIN ceiling = parent system role (SUPER_ADMIN); other roles ceiling = firm FIRM_ADMIN enabled perms
+- Firm roles start with ZERO permissions on creation (no more auto-cloning from system roles)
+- SUPER_ADMIN manually assigns permissions to system FIRM_ADMIN role — no auto-sync
+- When new modules/permissions added, SUPER_ADMIN assigns to system FIRM_ADMIN, then all firms see them as available
+- FIRM_ADMIN enables for itself, then distributes to PARALEGAL/LAWYER/custom roles
 - @Transactional must be on public methods only, never private
 - Permission scope is GLOBAL for SUPER_ADMIN, TENANT for FIRM_ADMIN, ASSIGNED for ADVOCATE/PARALEGAL, OWN for CLIENT
 
@@ -36,6 +30,7 @@ _Last updated: 2026-08-25_
 - PDF via Thymeleaf + OpenHTMLtoPDF
 
 ## Session history
+- Two-Tier Permission Ceiling overhaul → memory/2026-08-27.md
 - Invoice Generator module + query optimization + dashboard trends → memory/2026-08-25.md
 - Full E2E test session + authz fixes + hearing reminders → memory/2026-08-23.md
 - Strix security skills install + manual-only policy → memory/2026-08-22.md

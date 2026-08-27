@@ -202,7 +202,11 @@ public class DataInitializer implements CommandLineRunner {
                 {"AUDIT", "Audit Logs", "View system audit logs", 8, 80, "ShieldIcon", "/audit",
                         new PermissionAction[]{}},
                 {"PROJECT_MANAGEMENT", "Project Management", "Manage client projects, credentials, and renewals", 9, 90, "ClipboardIcon", "/projects",
-                        new PermissionAction[]{PermissionAction.CREDENTIAL_VIEW, PermissionAction.CREDENTIAL_REVEAL}}
+                        new PermissionAction[]{PermissionAction.CREDENTIAL_VIEW, PermissionAction.CREDENTIAL_REVEAL}},
+                {"ROLE_MANAGEMENT", "Role Management", "Manage roles and role permissions", 10, 100, "ShieldCheckIcon", "/roles",
+                        new PermissionAction[]{}},
+                {"FIRM_MANAGEMENT", "Firm Management", "Manage firm profile, config, modules, and roles", 11, 110, "BuildingIcon", "/firm",
+                        new PermissionAction[]{}}
         };
 
         PermissionAction[] standard = {
@@ -288,6 +292,8 @@ public class DataInitializer implements CommandLineRunner {
                 {"REPORTS",             FULL, FULL, READ_ONLY, NO_ACCESS, NO_ACCESS},
                 {"AUDIT",               FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
                 {"PROJECT_MANAGEMENT",   FULL, FULL, READ_ONLY, READ_ONLY, OWN},
+                {"ROLE_MANAGEMENT",       FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+                {"FIRM_MANAGEMENT",       FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
         };
 
         String[] roleCodes = {RoleCode.SUPER_ADMIN, RoleCode.FIRM_ADMIN, RoleCode.ADVOCATE, RoleCode.PARALEGAL, RoleCode.CLIENT};
