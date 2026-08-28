@@ -1,5 +1,6 @@
 package com.lawfirm.erp.rbac.controller;
 
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.constant.RbacConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
@@ -13,7 +14,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,16 +23,17 @@ import java.util.UUID;
 @RequestMapping("/api/v1/admin/modules")
 @RequiredArgsConstructor
 @Tag(name = "Admin - Module Management", description = "Super Admin module management APIs")
-@PreAuthorize("hasRole('SUPER_ADMIN')")
 public class ModuleController {
 
     private final ModuleService moduleService;
+    private final PermissionEvaluator permissionEvaluator;
     private final ResponseHandler responseHandler;
 
     @PostMapping
     @Operation(summary = RbacConstants.UPSERT_MODULE_SUMMARY)
     public ResponseEntity<ApiResponse<ModuleResponse>> upsertModule(
             @Valid @RequestBody ApiRequest<ModuleRequest> request) {
+        permissionEvaluator.require("MENU_MANAGEMENT:CREATE");
         return responseHandler.ok(
                 moduleService.upsertModule(request.getData()),
                 "Module saved successfully"
@@ -42,6 +43,7 @@ public class ModuleController {
     @GetMapping
     @Operation(summary = RbacConstants.GET_ALL_MODULES_SUMMARY)
     public ResponseEntity<ApiResponse<List<ModuleResponse>>> getAllModules() {
+        permissionEvaluator.require("MENU_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 moduleService.getAllModules(),
                 "Modules fetched successfully"
@@ -51,6 +53,7 @@ public class ModuleController {
     @GetMapping("/active")
     @Operation(summary = RbacConstants.GET_ACTIVE_MODULES_SUMMARY)
     public ResponseEntity<ApiResponse<List<ModuleResponse>>> getActiveModules() {
+        permissionEvaluator.require("MENU_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 moduleService.getActiveModules(),
                 "Active modules fetched successfully"
@@ -60,6 +63,7 @@ public class ModuleController {
     @GetMapping("/{moduleId}")
     @Operation(summary = RbacConstants.GET_MODULE_BY_ID_SUMMARY)
     public ResponseEntity<ApiResponse<ModuleResponse>> getModuleById(@PathVariable UUID moduleId) {
+        permissionEvaluator.require("MENU_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 moduleService.getModuleById(moduleId),
                 "Module fetched successfully"
@@ -69,6 +73,7 @@ public class ModuleController {
     @DeleteMapping("/{moduleId}")
     @Operation(summary = RbacConstants.DELETE_MODULE_SUMMARY)
     public ResponseEntity<ApiResponse<Void>> deleteModule(@PathVariable UUID moduleId) {
+        permissionEvaluator.require("MENU_MANAGEMENT:DELETE");
         moduleService.deleteModule(moduleId);
         return responseHandler.ok(null, "Module deleted successfully");
     }
@@ -76,6 +81,7 @@ public class ModuleController {
     @PatchMapping("/{moduleId}/toggle")
     @Operation(summary = RbacConstants.TOGGLE_MODULE_SUMMARY)
     public ResponseEntity<ApiResponse<ModuleResponse>> toggleModuleStatus(@PathVariable UUID moduleId) {
+        permissionEvaluator.require("MENU_MANAGEMENT:EDIT");
         return responseHandler.ok(
                 moduleService.toggleModuleStatus(moduleId),
                 "Module status toggled successfully"
@@ -87,6 +93,7 @@ public class ModuleController {
     public ResponseEntity<ApiResponse<ModuleResponse>> assignPermissionsToModule(
             @PathVariable UUID moduleId,
             @Valid @RequestBody ApiRequest<AssignPermissionsRequest> request) {
+        permissionEvaluator.require("MENU_MANAGEMENT:EDIT");
         return responseHandler.ok(
                 moduleService.assignPermissionsToModule(moduleId, request.getData().getPermissionIds()),
                 "Permissions assigned to module successfully"

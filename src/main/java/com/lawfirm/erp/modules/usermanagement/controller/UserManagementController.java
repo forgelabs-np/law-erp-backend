@@ -42,7 +42,7 @@ public class UserManagementController {
             @RequestParam(required = false) UserType userType,
             @RequestParam(required = false) UUID roleId,
             @RequestParam(required = false) Boolean isActive) {
-        permissionEvaluator.require("EMPLOYEE:VIEW");
+        permissionEvaluator.require("USER_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 userManagementService.listUsers(userType, roleId, isActive),
                 "Users fetched successfully"
@@ -53,7 +53,7 @@ public class UserManagementController {
     @Operation(summary = UserManagementConstants.SEARCH_USERS_SUMMARY, description = UserManagementConstants.SEARCH_USERS_DESCRIPTION)
     public ResponseEntity<ApiResponse<List<UserSummaryResponse>>> searchUsers(
             @RequestParam String q) {
-        permissionEvaluator.require("EMPLOYEE:VIEW");
+        permissionEvaluator.require("USER_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 userManagementService.searchUsers(q),
                 "Search results fetched"
@@ -64,7 +64,7 @@ public class UserManagementController {
     @Operation(summary = UserManagementConstants.GET_PROFILE_SUMMARY, description = UserManagementConstants.GET_PROFILE_DESCRIPTION)
     public ResponseEntity<ApiResponse<UserProfileResponse>> getUserProfile(
             @PathVariable UUID userId) {
-        permissionEvaluator.require("EMPLOYEE:VIEW");
+        permissionEvaluator.require("USER_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 userManagementService.getUserProfile(userId),
                 "User profile fetched"
@@ -75,7 +75,7 @@ public class UserManagementController {
     @Operation(summary = UserManagementConstants.GET_PERMISSIONS_SUMMARY, description = UserManagementConstants.GET_PERMISSIONS_DESCRIPTION)
     public ResponseEntity<ApiResponse<UserPermissionsResponse>> getUserPermissions(
             @PathVariable UUID userId) {
-        permissionEvaluator.require("EMPLOYEE:VIEW");
+        permissionEvaluator.require("USER_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 userManagementService.getUserPermissions(userId),
                 "User permissions fetched"
@@ -86,7 +86,7 @@ public class UserManagementController {
     @Operation(summary = UserManagementConstants.GET_ACTIVITY_SUMMARY, description = UserManagementConstants.GET_ACTIVITY_DESCRIPTION)
     public ResponseEntity<ApiResponse<List<UserProfileResponse.ActivityEntry>>> getUserActivity(
             @PathVariable UUID userId,
-            // permissionEvaluator.require("EMPLOYEE:VIEW") — already checked at list/search level
+            // permissionEvaluator.require("USER_MANAGEMENT:VIEW") — already checked at list/search level
             @RequestParam(required = false)
                 @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false)
@@ -104,7 +104,7 @@ public class UserManagementController {
     public ResponseEntity<ApiResponse<Void>> resetPassword(
             @PathVariable UUID userId,
             @Valid @RequestBody ApiRequest<ResetPasswordRequest> request) {
-        permissionEvaluator.require("EMPLOYEE:EDIT");
+        permissionEvaluator.require("USER_MANAGEMENT:EDIT");
         userManagementService.resetPassword(userId, request.getData());
         return responseHandler.ok(null, "Password reset successfully. User must re-login.");
     }
@@ -113,7 +113,7 @@ public class UserManagementController {
     @Operation(summary = UserManagementConstants.BULK_DEACTIVATE_SUMMARY, description = UserManagementConstants.BULK_DEACTIVATE_DESCRIPTION)
     public ResponseEntity<ApiResponse<BulkOperationResult>> bulkDeactivate(
             @Valid @RequestBody ApiRequest<BulkDeactivateRequest> request) {
-        permissionEvaluator.require("EMPLOYEE:DELETE");
+        permissionEvaluator.require("USER_MANAGEMENT:DELETE");
         return responseHandler.ok(
                 userManagementService.bulkDeactivate(request.getData()),
                 "Bulk deactivation complete"
@@ -124,7 +124,7 @@ public class UserManagementController {
     @Operation(summary = UserManagementConstants.BULK_ROLE_CHANGE_SUMMARY, description = UserManagementConstants.BULK_ROLE_CHANGE_DESCRIPTION)
     public ResponseEntity<ApiResponse<BulkOperationResult>> bulkRoleChange(
             @Valid @RequestBody ApiRequest<BulkRoleChangeRequest> request) {
-        permissionEvaluator.require("EMPLOYEE:EDIT");
+        permissionEvaluator.require("USER_MANAGEMENT:EDIT");
         return responseHandler.ok(
                 userManagementService.bulkRoleChange(request.getData()),
                 "Bulk role change complete"

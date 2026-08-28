@@ -1,6 +1,7 @@
 package com.lawfirm.erp.modules.usermanagement.controller;
 
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.constant.UserManagementConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ForbiddenException;
@@ -21,12 +22,14 @@ public class GlobalDashboardController {
 
     private final GlobalDashboardService dashboardService;
     private final CurrentUserResolver currentUserResolver;
+    private final PermissionEvaluator permissionEvaluator;
     private final ResponseHandler responseHandler;
 
     @GetMapping
     @Operation(summary = UserManagementConstants.GET_DASHBOARD_SUMMARY, description = UserManagementConstants.GET_DASHBOARD_DESCRIPTION)
     public ResponseEntity<ApiResponse<GlobalDashboardResponse>> getDashboard(
             @RequestParam(defaultValue = "30") int days) {
+        permissionEvaluator.require("DASHBOARD_MANAGEMENT:VIEW");
         // SUPER_ADMIN sees all firms; FIRM_ADMIN sees own firm only — enforced in service
         if (!currentUserResolver.isSuperAdmin() && currentUserResolver.getCurrentFirmId() == null) {
             throw new ForbiddenException("Firm context required");

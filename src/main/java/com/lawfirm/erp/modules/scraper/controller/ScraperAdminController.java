@@ -1,5 +1,6 @@
 package com.lawfirm.erp.modules.scraper.controller;
 
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.constant.ScraperConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -27,6 +28,7 @@ public class ScraperAdminController {
 
     private final ScraperService scraperService;
     private final HearingExportService exportService;
+    private final PermissionEvaluator permissionEvaluator;
     private final ResponseHandler responseHandler;
 
     @PostMapping("/scrape")
@@ -35,6 +37,7 @@ public class ScraperAdminController {
             @RequestParam Integer courtId,
             @RequestParam(required = false) String date,
             @RequestParam(defaultValue = "daily") String mode) {
+        permissionEvaluator.require("SCRAPER_MANAGEMENT:CREATE");
         if ("weekly".equalsIgnoreCase(mode)) {
             ScrapeRunResult result = scraperService.runWeeklyScrapeForCourt(courtId);
             return responseHandler.ok(result,
@@ -49,6 +52,7 @@ public class ScraperAdminController {
     @PostMapping("/export")
     @Operation(summary = ScraperConstants.EXPORT_SUMMARY, description = ScraperConstants.EXPORT_DESCRIPTION)
     public ResponseEntity<ApiResponse<String>> exportLastWeek() {
+        permissionEvaluator.require("SCRAPER_MANAGEMENT:EXPORT");
         Path file = exportService.exportLastWeek();
         return responseHandler.ok(file.toAbsolutePath().toString(), "Weekly export written");
     }

@@ -24,7 +24,7 @@ public class ProjectDashboardController {
     @GetMapping
     @Operation(summary = ProjectManagementConstants.PROJECT_DASHBOARD)
     public ApiResponse<ProjectDashboardResponse> getDashboard() {
-        permissionEvaluator.require("PROJECT_MANAGEMENT:VIEW");
+        permissionEvaluator.require("DASHBOARD_MANAGEMENT:VIEW");
         return ApiResponse.success(dashboardService.getDashboard());
     }
 }

@@ -33,7 +33,7 @@ public class PermissionController {
     @Operation(summary = RbacConstants.UPSERT_PERMISSION_SUMMARY)
     public ResponseEntity<ApiResponse<PermissionResponse>> upsert(
             @Valid @RequestBody ApiRequest<PermissionRequest> request) {
-        permissionEvaluator.require("ROLE_MANAGEMENT:EDIT");
+        permissionEvaluator.require("PERMISSION_MANAGEMENT:CREATE");
         return responseHandler.ok(
                 permissionService.upsert(request.getData()),
                 "Permission saved successfully"
@@ -43,7 +43,7 @@ public class PermissionController {
     @GetMapping
     @Operation(summary = RbacConstants.GET_ALL_PERMISSIONS_SUMMARY)
     public ResponseEntity<ApiResponse<List<PermissionResponse>>> findAll() {
-        permissionEvaluator.require("ROLE_MANAGEMENT:VIEW");
+        permissionEvaluator.require("PERMISSION_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 permissionService.findAll(),
                 "Permissions fetched successfully"
@@ -54,7 +54,7 @@ public class PermissionController {
     @Operation(summary = "Get all permissions grouped by module",
             description = "Returns permissions nested under each module. Use this for the permission management UI — renders a module card with checkboxes for each action.")
     public ResponseEntity<ApiResponse<GroupedPermissionResponse>> findGrouped() {
-        permissionEvaluator.require("ROLE_MANAGEMENT:VIEW");
+        permissionEvaluator.require("PERMISSION_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 permissionService.findAllGroupedByModule(),
                 "Permissions grouped by module fetched successfully"
@@ -64,7 +64,7 @@ public class PermissionController {
     @GetMapping("/active")
     @Operation(summary = RbacConstants.GET_ACTIVE_PERMISSIONS_SUMMARY)
     public ResponseEntity<ApiResponse<List<PermissionResponse>>> findActive() {
-        permissionEvaluator.require("ROLE_MANAGEMENT:VIEW");
+        permissionEvaluator.require("PERMISSION_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 permissionService.findActive(),
                 "Active permissions fetched successfully"
@@ -74,7 +74,7 @@ public class PermissionController {
     @GetMapping("/{id}")
     @Operation(summary = RbacConstants.GET_PERMISSION_BY_ID_SUMMARY)
     public ResponseEntity<ApiResponse<PermissionResponse>> findById(@PathVariable UUID id) {
-        permissionEvaluator.require("ROLE_MANAGEMENT:VIEW");
+        permissionEvaluator.require("PERMISSION_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 permissionService.findById(id),
                 "Permission fetched successfully"
@@ -84,7 +84,7 @@ public class PermissionController {
     @DeleteMapping("/{id}")
     @Operation(summary = RbacConstants.DELETE_PERMISSION_SUMMARY)
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
-        permissionEvaluator.require("ROLE_MANAGEMENT:DELETE");
+        permissionEvaluator.require("PERMISSION_MANAGEMENT:DELETE");
         permissionService.delete(id);
         return responseHandler.ok(null, "Permission deleted successfully");
     }
@@ -92,7 +92,7 @@ public class PermissionController {
     @PatchMapping("/{id}/toggle")
     @Operation(summary = RbacConstants.TOGGLE_PERMISSION_SUMMARY)
     public ResponseEntity<ApiResponse<PermissionResponse>> toggle(@PathVariable UUID id) {
-        permissionEvaluator.require("ROLE_MANAGEMENT:EDIT");
+        permissionEvaluator.require("PERMISSION_MANAGEMENT:EDIT");
         return responseHandler.ok(
                 permissionService.toggleStatus(id),
                 "Permission status toggled successfully"

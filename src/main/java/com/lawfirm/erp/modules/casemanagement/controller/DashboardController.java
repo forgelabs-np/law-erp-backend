@@ -28,7 +28,7 @@ public class DashboardController {
             description = "Firm-wide stats for FIRM_ADMIN; assigned-matters-only for ADVOCATE/PARALEGAL. "
                     + "Includes total/active/stale counts, today's events, and case positioning summaries.")
     public ResponseEntity<ApiResponse<DashboardResponse>> getDashboard() {
-        permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
+        permissionEvaluator.require("DASHBOARD_MANAGEMENT:VIEW");
         return responseHandler.ok(dashboardService.getDashboard(), "Dashboard fetched successfully");
     }
 }

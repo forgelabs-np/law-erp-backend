@@ -206,6 +206,16 @@ public class DataInitializer implements CommandLineRunner {
                 {"ROLE_MANAGEMENT", "Role Management", "Manage roles and role permissions", 10, 100, "ShieldCheckIcon", "/roles",
                         new PermissionAction[]{}},
                 {"FIRM_MANAGEMENT", "Firm Management", "Manage firm profile, config, modules, and roles", 11, 110, "BuildingIcon", "/firm",
+                        new PermissionAction[]{}},
+                {"MENU_MANAGEMENT", "Menu Management", "Manage navigation menus and module visibility", 12, 120, "MenuIcon", "/menus",
+                        new PermissionAction[]{}},
+                {"PERMISSION_MANAGEMENT", "Permission Management", "Manage system permissions and action grants", 13, 130, "KeyIcon", "/permissions",
+                        new PermissionAction[]{}},
+                {"SCRAPER_MANAGEMENT", "Scraper Management", "Manage court scraper, exports, and hearing ingestion", 14, 140, "GlobeIcon", "/scraper",
+                        new PermissionAction[]{PermissionAction.EXPORT}},
+                {"USER_MANAGEMENT", "User Management", "Manage firm users, profiles, and bulk operations", 15, 150, "UsersIcon", "/users",
+                        new PermissionAction[]{}},
+                {"DASHBOARD_MANAGEMENT", "Dashboard", "View dashboards and aggregated stats", 16, 160, "LayoutDashboardIcon", "/dashboard",
                         new PermissionAction[]{}}
         };
 
@@ -294,6 +304,11 @@ public class DataInitializer implements CommandLineRunner {
                 {"PROJECT_MANAGEMENT",   FULL, FULL, READ_ONLY, READ_ONLY, OWN},
                 {"ROLE_MANAGEMENT",       FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
                 {"FIRM_MANAGEMENT",       FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+                {"MENU_MANAGEMENT",        FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+                {"PERMISSION_MANAGEMENT",  FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+                {"SCRAPER_MANAGEMENT",     FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+                {"USER_MANAGEMENT",        FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+                {"DASHBOARD_MANAGEMENT",   FULL, FULL, READ_ONLY, READ_ONLY, NO_ACCESS},
         };
 
         String[] roleCodes = {RoleCode.SUPER_ADMIN, RoleCode.FIRM_ADMIN, RoleCode.ADVOCATE, RoleCode.PARALEGAL, RoleCode.CLIENT};
