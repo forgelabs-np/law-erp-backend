@@ -126,6 +126,8 @@ public class FirmAdminServiceImpl implements FirmAdminService {
                 .email(user.getEmail())
                 .mobileNo(user.getMobileNo())
                 .fullName(user.getFullName())
+                .roleId(user.getRole() != null ? user.getRole().getId() : null)
+                .roleName(user.getRole() != null ? user.getRole().getRoleCode() : null)
                 .firmId(user.getFirmId())
                 .firmName(firm != null ? firm.getName() : null)
                 .firmCode(firm != null ? firm.getLawFirmCode() : null)

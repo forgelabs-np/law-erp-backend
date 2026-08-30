@@ -14,6 +14,8 @@ public class FirmAdminResponse {
     private String email;
     private String mobileNo;
     private String fullName;
+    private UUID roleId;
+    private String roleName;
     private UUID firmId;
     private String firmName;
     private String firmCode;
