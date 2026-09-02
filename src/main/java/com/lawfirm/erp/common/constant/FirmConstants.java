@@ -5,46 +5,60 @@ public final class FirmConstants {
     private FirmConstants() {}
 
     // ClientController
-    public static final String CREATE_CLIENT_SUMMARY = "Create a new client";
-    public static final String GET_ALL_CLIENTS_SUMMARY = "Get all clients";
+    public static final String CREATE_CLIENT_SUMMARY = "Create client";
+    public static final String GET_ALL_CLIENTS_SUMMARY = "Get all clients (paginated)";
     public static final String GET_CLIENT_BY_ID_SUMMARY = "Get client by ID";
-    public static final String TOGGLE_CLIENT_PORTAL_SUMMARY = "Toggle client portal access";
+    public static final String TOGGLE_CLIENT_PORTAL_SUMMARY = "Enable/disable client portal access";
 
     // EmployeeController
-    public static final String CREATE_EMPLOYEE_SUMMARY = "Create a new employee";
-    public static final String GET_ALL_EMPLOYEES_SUMMARY = "Get all employees";
+    public static final String CREATE_EMPLOYEE_SUMMARY = "Create employee";
+    public static final String GET_ALL_EMPLOYEES_SUMMARY = "Get all employees (paginated)";
     public static final String GET_EMPLOYEE_BY_ID_SUMMARY = "Get employee by ID";
-    public static final String UPDATE_EMPLOYEE_SUMMARY = "Update employee details";
+    public static final String UPDATE_EMPLOYEE_SUMMARY = "Update employee";
     public static final String UPDATE_EMPLOYEE_ROLE_SUMMARY = "Update employee role";
-    public static final String TOGGLE_EMPLOYEE_STATUS_SUMMARY = "Toggle employee active status";
-
-    // FirmConfigController
-    public static final String CREATE_FIRM_SUMMARY = "Create a new firm";
-
-    // FirmAdminController
-    public static final String GET_ALL_FIRM_ADMINS_SUMMARY = "Get all firm admins";
-    public static final String GET_FIRM_ADMINS_BY_FIRM_SUMMARY = "Get firm admins by firm";
-    public static final String GET_FIRM_ADMIN_BY_ID_SUMMARY = "Get firm admin by ID";
-    public static final String TOGGLE_FIRM_ADMIN_STATUS_SUMMARY = "Toggle firm admin status";
+    public static final String TOGGLE_EMPLOYEE_STATUS_SUMMARY = "Toggle employee status";
 
     // FirmProfileController
     public static final String GET_FIRM_PROFILE_SUMMARY = "Get firm profile";
     public static final String UPDATE_FIRM_PROFILE_SUMMARY = "Update firm profile";
 
     // FirmModuleController
-    public static final String ENABLE_MODULE_SUMMARY = "Enable/configure module for firm";
-    public static final String GET_MODULE_CONFIG_SUMMARY = "Get module configuration";
-    public static final String GET_FIRM_MODULES_SUMMARY = "Get all firm modules";
-    public static final String GET_MY_ENABLED_MODULES_SUMMARY = "Get my enabled modules";
+    public static final String GET_MY_ENABLED_MODULES_SUMMARY = "Get enabled modules for my firm";
+
+    // FirmModuleAdminController (Super Admin)
+    public static final String ENABLE_MODULE_FOR_FIRM_SUMMARY = "Enable/disable a module for a firm";
+    public static final String GET_FIRM_MODULES_STATUS_SUMMARY = "Get all modules with status for a firm";
+
+    // FirmAdminController (Super Admin)
+    public static final String CREATE_FIRM_SUMMARY = "Create a new firm with Firm Admin";
+    public static final String GET_ALL_FIRM_ADMINS_SUMMARY = "Get all firm admins across all firms";
+    public static final String GET_FIRM_ADMINS_BY_FIRM_SUMMARY = "Get all firm admins for a specific firm";
+    public static final String GET_FIRM_ADMIN_BY_ID_SUMMARY = "Get firm admin by ID";
+    public static final String TOGGLE_FIRM_ADMIN_STATUS_SUMMARY = "Toggle firm admin status (activate/deactivate)";
+
+    // FirmConfigController
+    public static final String GET_FIRM_CONFIG_SUMMARY = "Get firm config values";
+    public static final String GET_FIRM_CONFIG_DESCRIPTION = "Returns brand colors, email footer, timezone, etc.";
+    public static final String UPDATE_FIRM_CONFIG_SUMMARY = "Update firm config values";
+    public static final String UPDATE_FIRM_CONFIG_DESCRIPTION = "Bulk update brand colors, email footer, timezone, etc.";
 
     // FirmEmailConfigController
-    public static final String SAVE_EMAIL_CONFIG_SUMMARY = "Save email configuration";
-    public static final String TEST_EMAIL_CONNECTION_SUMMARY = "Test email connection";
-    public static final String DELETE_EMAIL_CONFIG_SUMMARY = "Delete email configuration";
+    public static final String GET_EMAIL_CONFIG_SUMMARY = "Get firm email config";
+    public static final String GET_EMAIL_CONFIG_DESCRIPTION = "Returns SMTP config WITHOUT the password. smtpPasswordSet indicates if a password was configured.";
+    public static final String SAVE_EMAIL_CONFIG_SUMMARY = "Create or update firm email config";
+    public static final String SAVE_EMAIL_CONFIG_DESCRIPTION = "Set SMTP settings. Use smtpPassword = \"__UNCHANGED__\" to keep existing password without resending it.";
+    public static final String TEST_EMAIL_CONNECTION_SUMMARY = "Test SMTP connection";
+    public static final String TEST_EMAIL_CONNECTION_DESCRIPTION = "Attempts to connect to the configured SMTP server. Updates testedAt and testPassed fields.";
+    public static final String DELETE_EMAIL_CONFIG_SUMMARY = "Delete firm email config";
+    public static final String DELETE_EMAIL_CONFIG_DESCRIPTION = "Removes the firm's SMTP config. All emails will use platform global SMTP.";
 
     // FirmRoleController
-    public static final String GET_FIRM_ROLES_SUMMARY = "Get all firm roles";
-    public static final String GET_ROLE_PERMISSIONS_SUMMARY = "Get role permissions";
-    public static final String UPDATE_ROLE_PERMISSIONS_SUMMARY = "Update role permissions";
-    public static final String GET_ROLE_USERS_SUMMARY = "Get users assigned to role";
+    public static final String GET_FIRM_ROLES_SUMMARY = "Get all roles for this firm";
+    public static final String GET_FIRM_ROLES_DESCRIPTION = "Returns firm-scoped roles only. System templates are excluded. These are the roles firm admin can assign to employees.";
+    public static final String GET_ROLE_PERMISSIONS_SUMMARY = "Get permissions for a firm role";
+    public static final String GET_ROLE_PERMISSIONS_DESCRIPTION = "Returns two lists: (1) currentPermissions — what this role currently has. (2) availablePermissions — everything the system ceiling allows, with 'assigned' flag showing which are active. Use availablePermissions to build the checkbox UI for editing.";
+    public static final String GET_ROLE_USERS_SUMMARY = "Get users assigned to this role";
+    public static final String GET_ROLE_USERS_DESCRIPTION = "Lists all users within the firm who hold this role.";
+    public static final String UPDATE_ROLE_PERMISSIONS_SUMMARY = "Update permissions for a firm role";
+    public static final String UPDATE_ROLE_PERMISSIONS_DESCRIPTION = "Replaces all permissions on a firm-scoped role. Ceiling enforced — cannot assign permissions beyond what the system role allows. All users holding this role will have their JWT invalidated immediately and must re-login to get the updated permissions.";
 }

@@ -1,5 +1,6 @@
 package com.lawfirm.erp.firm.controller;
 
+import com.lawfirm.erp.common.constant.FirmConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.dto.firm.response.FirmModuleResponse;
@@ -26,7 +27,7 @@ public class FirmModuleController {
     private final ResponseHandler responseHandler;
 
     @GetMapping
-    @Operation(summary = "Get enabled modules for my firm")
+    @Operation(summary = FirmConstants.GET_MY_ENABLED_MODULES_SUMMARY)
     public ResponseEntity<ApiResponse<List<FirmModuleResponse>>> getMyModules() {
         return responseHandler.ok(
                 firmModuleService.getMyEnabledModules(),

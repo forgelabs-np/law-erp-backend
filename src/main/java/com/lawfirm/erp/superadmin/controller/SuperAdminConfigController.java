@@ -1,6 +1,7 @@
 package com.lawfirm.erp.superadmin.controller;
 
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
+import com.lawfirm.erp.common.constant.SuperAdminConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
@@ -33,7 +34,7 @@ public class SuperAdminConfigController {
     // Global config
 
     @GetMapping("/config")
-    @Operation(summary = "Get all global system config values")
+    @Operation(summary = SuperAdminConstants.GET_GLOBAL_CONFIG_SUMMARY)
     public ResponseEntity<ApiResponse<Map<String, String>>> getGlobalConfig() {
         return responseHandler.ok(
                 systemConfigService.getAllGlobal(),
@@ -42,7 +43,7 @@ public class SuperAdminConfigController {
     }
 
     @PutMapping("/config")
-    @Operation(summary = "Bulk upsert global system config values")
+    @Operation(summary = SuperAdminConstants.UPDATE_GLOBAL_CONFIG_SUMMARY)
     public ResponseEntity<ApiResponse<Void>> updateGlobalConfig(
             @RequestBody Map<String, String> config) {
         systemConfigService.setGlobalBulk(config);
@@ -56,7 +57,7 @@ public class SuperAdminConfigController {
     }
 
     @DeleteMapping("/config/{key}")
-    @Operation(summary = "Delete a global config value")
+    @Operation(summary = SuperAdminConstants.DELETE_GLOBAL_CONFIG_SUMMARY)
     public ResponseEntity<ApiResponse<Void>> deleteGlobalConfig(
             @PathVariable String key) {
         systemConfigService.deleteGlobal(key);
@@ -72,7 +73,7 @@ public class SuperAdminConfigController {
     // Per-firm config
 
     @GetMapping("/firms/{firmId}/config")
-    @Operation(summary = "Get all config values for a specific firm")
+    @Operation(summary = SuperAdminConstants.GET_FIRM_CONFIG_SUMMARY)
     public ResponseEntity<ApiResponse<Map<String, String>>> getFirmConfig(
             @PathVariable UUID firmId) {
         return responseHandler.ok(
@@ -82,7 +83,7 @@ public class SuperAdminConfigController {
     }
 
     @PutMapping("/firms/{firmId}/config")
-    @Operation(summary = "Bulk upsert config values for a specific firm")
+    @Operation(summary = SuperAdminConstants.UPDATE_FIRM_CONFIG_SUMMARY)
     public ResponseEntity<ApiResponse<Void>> updateFirmConfig(
             @PathVariable UUID firmId,
             @RequestBody Map<String, String> config) {

@@ -1,5 +1,6 @@
 package com.lawfirm.erp.superadmin.controller;
 
+import com.lawfirm.erp.common.constant.FirmConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -28,7 +29,7 @@ public class FirmModuleAdminController {
     private final ResponseHandler responseHandler;
 
     @PostMapping
-    @Operation(summary = "Enable/disable a module for a firm")
+    @Operation(summary = FirmConstants.ENABLE_MODULE_FOR_FIRM_SUMMARY)
     public ResponseEntity<ApiResponse<FirmModuleResponse>> enableModule(
             @PathVariable UUID firmId,
             @Valid @RequestBody ApiRequest<EnableModuleRequest> request) {
@@ -39,7 +40,7 @@ public class FirmModuleAdminController {
     }
 
     @GetMapping
-    @Operation(summary = "Get all modules with status for a firm")
+    @Operation(summary = FirmConstants.GET_FIRM_MODULES_STATUS_SUMMARY)
     public ResponseEntity<ApiResponse<List<FirmModuleResponse>>> getFirmModules(
             @PathVariable UUID firmId) {
         return responseHandler.ok(

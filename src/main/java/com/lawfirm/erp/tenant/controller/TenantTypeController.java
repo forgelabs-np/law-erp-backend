@@ -1,5 +1,6 @@
 package com.lawfirm.erp.tenant.controller;
 
+import com.lawfirm.erp.common.constant.TenantConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -30,7 +31,7 @@ public class TenantTypeController {
     private final CurrentUserResolver currentUserResolver;
 
     @PostMapping
-    @Operation(summary = "Create tenant type", description = "Create a new tenant type (SOLO, LAW_FIRM, etc.)")
+    @Operation(summary = TenantConstants.CREATE_TENANT_TYPE_SUMMARY, description = TenantConstants.CREATE_TENANT_TYPE_DESCRIPTION)
     public ResponseEntity<ApiResponse<TenantTypeResponse>> createTenantType(
             @Valid @RequestBody ApiRequest<TenantTypeRequest> request) {
         UUID adminId = currentUserResolver.getCurrentUserId();
@@ -41,7 +42,7 @@ public class TenantTypeController {
     }
 
     @GetMapping
-    @Operation(summary = "Get all tenant types", description = "Get all tenant types")
+    @Operation(summary = TenantConstants.GET_ALL_TENANT_TYPES_SUMMARY, description = TenantConstants.GET_ALL_TENANT_TYPES_DESCRIPTION)
     public ResponseEntity<ApiResponse<List<TenantTypeResponse>>> getAllTenantTypes() {
         return responseHandler.ok(
                 tenantTypeService.getAllTenantTypes(),
@@ -50,7 +51,7 @@ public class TenantTypeController {
     }
 
     @GetMapping("/active")
-    @Operation(summary = "Get active tenant types", description = "Get only active tenant types")
+    @Operation(summary = TenantConstants.GET_ACTIVE_TENANT_TYPES_SUMMARY, description = TenantConstants.GET_ACTIVE_TENANT_TYPES_DESCRIPTION)
     public ResponseEntity<ApiResponse<List<TenantTypeResponse>>> getActiveTenantTypes() {
         return responseHandler.ok(
                 tenantTypeService.getActiveTenantTypes(),
@@ -59,7 +60,7 @@ public class TenantTypeController {
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get tenant type by ID")
+    @Operation(summary = TenantConstants.GET_TENANT_TYPE_BY_ID_SUMMARY)
     public ResponseEntity<ApiResponse<TenantTypeResponse>> getTenantTypeById(@PathVariable UUID id) {
         return responseHandler.ok(
                 tenantTypeService.getTenantTypeById(id),
@@ -68,7 +69,7 @@ public class TenantTypeController {
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "Update tenant type")
+    @Operation(summary = TenantConstants.UPDATE_TENANT_TYPE_SUMMARY)
     public ResponseEntity<ApiResponse<TenantTypeResponse>> updateTenantType(
             @PathVariable UUID id,
             @Valid @RequestBody ApiRequest<TenantTypeRequest> request) {
@@ -80,7 +81,7 @@ public class TenantTypeController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Delete tenant type")
+    @Operation(summary = TenantConstants.DELETE_TENANT_TYPE_SUMMARY)
     public ResponseEntity<ApiResponse<Void>> deleteTenantType(@PathVariable UUID id) {
         UUID adminId = currentUserResolver.getCurrentUserId();
         tenantTypeService.deleteTenantType(id, adminId);
@@ -88,7 +89,7 @@ public class TenantTypeController {
     }
 
     @PatchMapping("/{id}/toggle")
-    @Operation(summary = "Toggle tenant type status")
+    @Operation(summary = TenantConstants.TOGGLE_TENANT_TYPE_SUMMARY)
     public ResponseEntity<ApiResponse<TenantTypeResponse>> toggleTenantType(@PathVariable UUID id) {
         UUID adminId = currentUserResolver.getCurrentUserId();
         return responseHandler.ok(

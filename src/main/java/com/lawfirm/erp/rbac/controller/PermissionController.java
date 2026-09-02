@@ -51,8 +51,8 @@ public class PermissionController {
     }
 
     @GetMapping("/grouped")
-    @Operation(summary = "Get all permissions grouped by module",
-            description = "Returns permissions nested under each module. Use this for the permission management UI — renders a module card with checkboxes for each action.")
+    @Operation(summary = RbacConstants.GET_GROUPED_PERMISSIONS_SUMMARY,
+            description = RbacConstants.GET_GROUPED_PERMISSIONS_DESCRIPTION)
     public ResponseEntity<ApiResponse<GroupedPermissionResponse>> findGrouped() {
         permissionEvaluator.require("PERMISSION_MANAGEMENT:VIEW");
         return responseHandler.ok(

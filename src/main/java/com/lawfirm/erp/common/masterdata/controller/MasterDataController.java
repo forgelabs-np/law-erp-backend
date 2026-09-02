@@ -1,5 +1,6 @@
 package com.lawfirm.erp.common.masterdata.controller;
 
+import com.lawfirm.erp.common.constant.MasterDataConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.common.masterdata.dto.DistrictResponse;
@@ -34,13 +35,13 @@ public class MasterDataController {
     private final ResponseHandler responseHandler;
 
     @GetMapping("/provinces")
-    @Operation(summary = "All provinces", description = "All 7 Nepal provinces (cached). Each includes districtCount.")
+    @Operation(summary = MasterDataConstants.GET_PROVINCES_SUMMARY, description = MasterDataConstants.GET_PROVINCES_DESCRIPTION)
     public ResponseEntity<ApiResponse<List<ProvinceResponse>>> getProvinces() {
         return responseHandler.ok(masterDataService.getAllProvinces(), "Provinces fetched successfully");
     }
 
     @GetMapping("/provinces/{provinceId}/districts")
-    @Operation(summary = "Districts of a province", description = "Districts belonging to one province (cached per province)")
+    @Operation(summary = MasterDataConstants.GET_DISTRICTS_BY_PROVINCE_SUMMARY, description = MasterDataConstants.GET_DISTRICTS_BY_PROVINCE_DESCRIPTION)
     public ResponseEntity<ApiResponse<List<DistrictResponse>>> getDistrictsByProvince(
             @PathVariable UUID provinceId) {
         return responseHandler.ok(
@@ -49,19 +50,19 @@ public class MasterDataController {
     }
 
     @GetMapping("/districts")
-    @Operation(summary = "All districts", description = "All 77 Nepal districts with province info (cached)")
+    @Operation(summary = MasterDataConstants.GET_ALL_DISTRICTS_SUMMARY, description = MasterDataConstants.GET_ALL_DISTRICTS_DESCRIPTION)
     public ResponseEntity<ApiResponse<List<DistrictResponse>>> getDistricts() {
         return responseHandler.ok(masterDataService.getAllDistricts(), "Districts fetched successfully");
     }
 
     @GetMapping("/cache/stats")
-    @Operation(summary = "Cache telemetry", description = "Hits/misses/evictions/size of the masterData Ehcache — for ops sanity checks")
+    @Operation(summary = MasterDataConstants.GET_CACHE_STATS_SUMMARY, description = MasterDataConstants.GET_CACHE_STATS_DESCRIPTION)
     public ResponseEntity<ApiResponse<Map<String, Object>>> getCacheStats() {
         return responseHandler.ok(masterDataService.cacheStats(), "Cache stats fetched successfully");
     }
 
     @PostMapping("/cache/refresh")
-    @Operation(summary = "Refresh master data cache", description = "Re-seeds from classpath JSON, evicts the cache and warms it. Idempotent.")
+    @Operation(summary = MasterDataConstants.REFRESH_CACHE_SUMMARY, description = MasterDataConstants.REFRESH_CACHE_DESCRIPTION)
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','FIRM_ADMIN')")
     public ResponseEntity<ApiResponse<Map<String, Object>>> refreshCache() {
         masterDataSeeder.seed();

@@ -1,6 +1,7 @@
 package com.lawfirm.erp.modules.casemanagement.controller;
 
 import com.lawfirm.erp.auth.security.PermissionEvaluator;
+import com.lawfirm.erp.common.constant.CaseManagementConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -30,7 +31,7 @@ public class CourtEventController {
     private final ResponseHandler responseHandler;
 
     @PostMapping("/court-cases/{ourCourtCaseRef}/events")
-    @Operation(summary = "Schedule a Tarik/Peshi event", description = "Conflict detection against all of the advocate's events firm-wide")
+    @Operation(summary = CaseManagementConstants.SCHEDULE_EVENT_SUMMARY, description = CaseManagementConstants.SCHEDULE_EVENT_DESCRIPTION)
     public ResponseEntity<ApiResponse<CourtEventResponse>> scheduleEvent(
             @PathVariable String ourCourtCaseRef,
             @Valid @RequestBody ApiRequest<ScheduleCourtEventRequest> request) {
@@ -40,7 +41,7 @@ public class CourtEventController {
     }
 
     @GetMapping("/court-cases/{ourCourtCaseRef}/events")
-    @Operation(summary = "List events for a court case", description = "Chained Tarik/Peshi stream, ordered by sequence")
+    @Operation(summary = CaseManagementConstants.LIST_EVENTS_SUMMARY, description = CaseManagementConstants.LIST_EVENTS_DESCRIPTION)
     public ResponseEntity<ApiResponse<List<CourtEventResponse>>> listEvents(
             @PathVariable String ourCourtCaseRef) {
         permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
@@ -49,7 +50,7 @@ public class CourtEventController {
     }
 
     @GetMapping("/court-events/{eventId}")
-    @Operation(summary = "Get event details")
+    @Operation(summary = CaseManagementConstants.GET_EVENT_SUMMARY)
     public ResponseEntity<ApiResponse<CourtEventResponse>> getEvent(@PathVariable UUID eventId) {
         permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
         return responseHandler.ok(courtEventService.getEvent(eventId),
@@ -57,7 +58,7 @@ public class CourtEventController {
     }
 
     @PutMapping("/court-events/{eventId}")
-    @Operation(summary = "Update event details")
+    @Operation(summary = CaseManagementConstants.UPDATE_EVENT_SUMMARY)
     public ResponseEntity<ApiResponse<CourtEventResponse>> updateEvent(
             @PathVariable UUID eventId,
             @Valid @RequestBody ApiRequest<UpdateCourtEventRequest> request) {
@@ -67,7 +68,7 @@ public class CourtEventController {
     }
 
     @PostMapping("/court-events/{eventId}/held")
-    @Operation(summary = "Mark event held", description = "Records outcome and creates the next Tarik/Peshi event the court gave")
+    @Operation(summary = CaseManagementConstants.MARK_HELD_SUMMARY, description = CaseManagementConstants.MARK_HELD_DESCRIPTION)
     public ResponseEntity<ApiResponse<CourtEventResponse>> markHeld(
             @PathVariable UUID eventId,
             @Valid @RequestBody ApiRequest<MarkCourtEventHeldRequest> request) {
@@ -77,7 +78,7 @@ public class CourtEventController {
     }
 
     @DeleteMapping("/court-events/{eventId}")
-    @Operation(summary = "Cancel an event")
+    @Operation(summary = CaseManagementConstants.CANCEL_EVENT_SUMMARY)
     public ResponseEntity<ApiResponse<Void>> cancelEvent(@PathVariable UUID eventId) {
         permissionEvaluator.require("CASE_MANAGEMENT:DELETE");
         courtEventService.cancelEvent(eventId);

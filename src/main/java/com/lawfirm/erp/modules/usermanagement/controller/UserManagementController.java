@@ -115,7 +115,7 @@ public class UserManagementController {
     }
 
     @DeleteMapping("/{userId}")
-    @Operation(summary = "Delete user", description = "Soft-deletes a user by deactivating their account")
+    @Operation(summary = UserManagementConstants.DELETE_USER_SUMMARY, description = UserManagementConstants.DELETE_USER_DESCRIPTION)
     public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable UUID userId) {
         permissionEvaluator.require("USER_MANAGEMENT:DELETE");
         userManagementService.deleteUser(userId);

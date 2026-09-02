@@ -1,6 +1,7 @@
 package com.lawfirm.erp.modules.casemanagement.controller;
 
 import com.lawfirm.erp.auth.security.PermissionEvaluator;
+import com.lawfirm.erp.common.constant.CaseManagementConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -41,7 +42,7 @@ public class MatterController {
     private final ResponseHandler responseHandler;
 
     @PostMapping
-    @Operation(summary = "Create a matter", description = "Creates the Matter + ORIGINAL CourtCase at the originating court level, with optional parties")
+    @Operation(summary = CaseManagementConstants.CREATE_MATTER_SUMMARY, description = CaseManagementConstants.CREATE_MATTER_DESCRIPTION)
     public ResponseEntity<ApiResponse<MatterResponse>> createMatter(
             @Valid @RequestBody ApiRequest<CreateMatterRequest> request) {
         permissionEvaluator.require("CASE_MANAGEMENT:CREATE");
@@ -50,7 +51,7 @@ public class MatterController {
     }
 
     @GetMapping
-    @Operation(summary = "List matters", description = "Paginated list with filters (matterType, status, search)")
+    @Operation(summary = CaseManagementConstants.LIST_MATTERS_SUMMARY, description = CaseManagementConstants.LIST_MATTERS_DESCRIPTION)
     public ResponseEntity<ApiResponse<Page<MatterResponse>>> listMatters(
             @RequestParam(required = false) MatterType matterType,
             @RequestParam(required = false) MatterStatus status,
@@ -64,7 +65,7 @@ public class MatterController {
     }
 
     @GetMapping("/stale")
-    @Operation(summary = "Stale matters", description = "Matters whose current leaf hasn't had a real Peshi in N days (long-pending Tarik chains)")
+    @Operation(summary = CaseManagementConstants.GET_STALE_MATTERS_SUMMARY, description = CaseManagementConstants.GET_STALE_MATTERS_DESCRIPTION)
     public ResponseEntity<ApiResponse<Page<StaleMatterResponse>>> getStaleMatters(
             @RequestParam(defaultValue = "90") int days,
             @RequestParam(defaultValue = "0") int page,
@@ -76,7 +77,7 @@ public class MatterController {
     }
 
     @GetMapping("/{matterNumber}")
-    @Operation(summary = "Get matter details", description = "Matter with full CourtCase chain, roles and parties. Use matterNumber (e.g. APX-MAT-2026-00001).")
+    @Operation(summary = CaseManagementConstants.GET_MATTER_SUMMARY, description = CaseManagementConstants.GET_MATTER_DESCRIPTION)
     public ResponseEntity<ApiResponse<MatterResponse>> getMatter(@PathVariable String matterNumber) {
         permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
         return responseHandler.ok(matterService.getMatter(matterNumber),
@@ -84,7 +85,7 @@ public class MatterController {
     }
 
     @PutMapping("/{matterNumber}")
-    @Operation(summary = "Update matter details")
+    @Operation(summary = CaseManagementConstants.UPDATE_MATTER_SUMMARY)
     public ResponseEntity<ApiResponse<MatterResponse>> updateMatter(
             @PathVariable String matterNumber,
             @Valid @RequestBody ApiRequest<UpdateMatterRequest> request) {
@@ -94,7 +95,7 @@ public class MatterController {
     }
 
     @GetMapping("/{matterNumber}/timeline")
-    @Operation(summary = "Matter timeline", description = "Aggregated event history across all CourtCases, each tagged with its court case")
+    @Operation(summary = CaseManagementConstants.GET_TIMELINE_SUMMARY, description = CaseManagementConstants.GET_TIMELINE_DESCRIPTION)
     public ResponseEntity<ApiResponse<List<TimelineEventResponse>>> getTimeline(
             @PathVariable String matterNumber) {
         permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
@@ -103,7 +104,7 @@ public class MatterController {
     }
 
     @GetMapping("/timeline")
-    @Operation(summary = "Overall timeline", description = "Firm-wide activity feed across all matters, newest first — filters: matterType, status, from, to (YYYY-MM-DD)")
+    @Operation(summary = CaseManagementConstants.GET_FIRM_TIMELINE_SUMMARY, description = CaseManagementConstants.GET_FIRM_TIMELINE_DESCRIPTION)
     public ResponseEntity<ApiResponse<Page<TimelineEventResponse>>> getFirmTimeline(
             @RequestParam(required = false) MatterType matterType,
             @RequestParam(required = false) MatterStatus status,
@@ -118,7 +119,7 @@ public class MatterController {
     }
 
     @PostMapping("/{matterNumber}/court-cases")
-    @Operation(summary = "Add court case", description = "Attach an appeal / remand / writ / review CourtCase to the matter chain")
+    @Operation(summary = CaseManagementConstants.ADD_COURT_CASE_SUMMARY, description = CaseManagementConstants.ADD_COURT_CASE_DESCRIPTION)
     public ResponseEntity<ApiResponse<MatterResponse>> addCourtCase(
             @PathVariable String matterNumber,
             @Valid @RequestBody ApiRequest<AddCourtCaseRequest> request) {
@@ -128,7 +129,7 @@ public class MatterController {
     }
 
     @PostMapping("/{matterNumber}/parties")
-    @Operation(summary = "Add party to matter")
+    @Operation(summary = CaseManagementConstants.ADD_PARTY_SUMMARY)
     public ResponseEntity<ApiResponse<MatterResponse>> addParty(
             @PathVariable String matterNumber,
             @Valid @RequestBody ApiRequest<PartyEntryRequest> request) {
@@ -138,7 +139,7 @@ public class MatterController {
     }
 
     @PostMapping("/parties/match")
-    @Operation(summary = "Match a party against existing clients and matter parties")
+    @Operation(summary = CaseManagementConstants.MATCH_PARTY_SUMMARY)
     public ResponseEntity<ApiResponse<List<PartyMatchResult.Match>>> matchParty(
             @Valid @RequestBody ApiRequest<PartyMatchRequest> request) {
         permissionEvaluator.require("CASE_MANAGEMENT:VIEW");

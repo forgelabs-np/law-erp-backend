@@ -23,6 +23,9 @@ public final class UserManagementConstants {
     public static final String RESET_PASSWORD_SUMMARY = "Reset a user's password";
     public static final String RESET_PASSWORD_DESCRIPTION = "Firm admin resets password for any user in their firm. Immediately invalidates the user's existing JWT — they must re-login.";
 
+    public static final String DELETE_USER_SUMMARY = "Delete user";
+    public static final String DELETE_USER_DESCRIPTION = "Soft-deletes a user by deactivating their account";
+
     public static final String BULK_DEACTIVATE_SUMMARY = "Deactivate multiple users at once";
     public static final String BULK_DEACTIVATE_DESCRIPTION = "Deactivates each user and invalidates their JWT. Returns per-user success/failure details. Skips: yourself, already inactive users.";
 

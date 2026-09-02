@@ -1,5 +1,6 @@
 package com.lawfirm.erp.superadmin.controller;
 
+import com.lawfirm.erp.common.constant.FirmConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -31,7 +32,7 @@ public class FirmAdminController {
     private final ResponseHandler responseHandler;
 
     @PostMapping
-    @Operation(summary = "Create a new firm with Firm Admin")
+    @Operation(summary = FirmConstants.CREATE_FIRM_SUMMARY)
     public ResponseEntity<ApiResponse<FirmCreationResponse>> createFirm(
             @Valid @RequestBody ApiRequest<CreateFirmRequest> request) {
         return responseHandler.ok(
@@ -41,7 +42,7 @@ public class FirmAdminController {
     }
 
     @GetMapping("/admins")
-    @Operation(summary = "Get all firm admins across all firms")
+    @Operation(summary = FirmConstants.GET_ALL_FIRM_ADMINS_SUMMARY)
     public ResponseEntity<ApiResponse<List<FirmAdminResponse>>> getAllFirmAdmins() {
         return responseHandler.ok(
                 firmAdminService.getAllFirmAdmins(),
@@ -50,7 +51,7 @@ public class FirmAdminController {
     }
 
     @GetMapping("/{firmId}/admins")
-    @Operation(summary = "Get all firm admins for a specific firm")
+    @Operation(summary = FirmConstants.GET_FIRM_ADMINS_BY_FIRM_SUMMARY)
     public ResponseEntity<ApiResponse<List<FirmAdminResponse>>> getFirmAdminsByFirmId(
             @PathVariable UUID firmId) {
         return responseHandler.ok(
@@ -60,7 +61,7 @@ public class FirmAdminController {
     }
 
     @GetMapping("/admins/{adminId}")
-    @Operation(summary = "Get firm admin by ID")
+    @Operation(summary = FirmConstants.GET_FIRM_ADMIN_BY_ID_SUMMARY)
     public ResponseEntity<ApiResponse<FirmAdminResponse>> getFirmAdminById(
             @PathVariable UUID adminId) {
         return responseHandler.ok(
@@ -70,7 +71,7 @@ public class FirmAdminController {
     }
 
     @PatchMapping("/admins/{adminId}/toggle")
-    @Operation(summary = "Toggle firm admin status (activate/deactivate)")
+    @Operation(summary = FirmConstants.TOGGLE_FIRM_ADMIN_STATUS_SUMMARY)
     public ResponseEntity<ApiResponse<FirmAdminResponse>> toggleFirmAdminStatus(
             @PathVariable UUID adminId) {
         return responseHandler.ok(

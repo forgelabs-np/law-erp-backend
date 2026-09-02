@@ -1,5 +1,6 @@
 package com.lawfirm.erp.firm.controller;
 
+import com.lawfirm.erp.common.constant.FirmConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.dto.PagedResponse;
@@ -30,7 +31,7 @@ public class EmployeeController {
     private final ResponseHandler responseHandler;
 
     @PostMapping
-    @Operation(summary = "Create employee")
+    @Operation(summary = FirmConstants.CREATE_EMPLOYEE_SUMMARY)
     public ResponseEntity<ApiResponse<EmployeeResponse>> createEmployee(
             @Valid @RequestBody ApiRequest<CreateEmployeeRequest> request) {
         return responseHandler.ok(
@@ -40,7 +41,7 @@ public class EmployeeController {
     }
 
     @GetMapping
-    @Operation(summary = "Get all employees (paginated)")
+    @Operation(summary = FirmConstants.GET_ALL_EMPLOYEES_SUMMARY)
     public ResponseEntity<ApiResponse<PagedResponse<EmployeeResponse>>> getAllEmployees(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -51,7 +52,7 @@ public class EmployeeController {
     }
 
     @GetMapping("/{employeeId}")
-    @Operation(summary = "Get employee by ID")
+    @Operation(summary = FirmConstants.GET_EMPLOYEE_BY_ID_SUMMARY)
     public ResponseEntity<ApiResponse<EmployeeResponse>> getEmployeeById(@PathVariable UUID employeeId) {
         return responseHandler.ok(
                 employeeService.getEmployeeById(employeeId),
@@ -60,7 +61,7 @@ public class EmployeeController {
     }
 
     @PutMapping("/{employeeId}")
-    @Operation(summary = "Update employee")
+    @Operation(summary = FirmConstants.UPDATE_EMPLOYEE_SUMMARY)
     public ResponseEntity<ApiResponse<EmployeeResponse>> updateEmployee(
             @PathVariable UUID employeeId,
             @Valid @RequestBody ApiRequest<UpdateEmployeeRequest> request) {
@@ -71,7 +72,7 @@ public class EmployeeController {
     }
 
     @PatchMapping("/{employeeId}/role")
-    @Operation(summary = "Update employee role")
+    @Operation(summary = FirmConstants.UPDATE_EMPLOYEE_ROLE_SUMMARY)
     public ResponseEntity<ApiResponse<EmployeeResponse>> updateEmployeeRole(
             @PathVariable UUID employeeId,
             @Valid @RequestBody ApiRequest<UpdateEmployeeRoleRequest> request) {
@@ -82,7 +83,7 @@ public class EmployeeController {
     }
 
     @PatchMapping("/{employeeId}/toggle")
-    @Operation(summary = "Toggle employee status")
+    @Operation(summary = FirmConstants.TOGGLE_EMPLOYEE_STATUS_SUMMARY)
     public ResponseEntity<ApiResponse<EmployeeResponse>> toggleEmployee(@PathVariable UUID employeeId) {
         return responseHandler.ok(
                 employeeService.toggleEmployeeStatus(employeeId),

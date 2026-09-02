@@ -72,7 +72,7 @@ public class SuperAdminController {
 
     @PostMapping("/mfa/reset")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
-    @Operation(summary = "Reset user MFA", description = "Super Admin resets a user's MFA authenticator, forcing them to set it up again on next login")
+    @Operation(summary = SuperAdminConstants.RESET_MFA_SUMMARY, description = SuperAdminConstants.RESET_MFA_DESCRIPTION)
     public ResponseEntity<ApiResponse<Void>> resetMfa(
             @Valid @RequestBody ApiRequest<MfaResetRequest> request) {
         superAdminService.resetMfa(request.getData());

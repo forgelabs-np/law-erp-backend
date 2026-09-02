@@ -16,6 +16,8 @@ public final class RbacConstants {
     // PermissionController
     public static final String UPSERT_PERMISSION_SUMMARY = "Create or update permission";
     public static final String GET_ALL_PERMISSIONS_SUMMARY = "Get all permissions";
+    public static final String GET_GROUPED_PERMISSIONS_SUMMARY = "Get all permissions grouped by module";
+    public static final String GET_GROUPED_PERMISSIONS_DESCRIPTION = "Returns permissions nested under each module. Use this for the permission management UI — renders a module card with checkboxes for each action.";
     public static final String GET_ACTIVE_PERMISSIONS_SUMMARY = "Get active permissions";
     public static final String GET_PERMISSION_BY_ID_SUMMARY = "Get permission by ID";
     public static final String DELETE_PERMISSION_SUMMARY = "Delete permission";

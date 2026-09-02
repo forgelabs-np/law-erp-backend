@@ -1,5 +1,6 @@
 package com.lawfirm.erp.firm.controller;
 
+import com.lawfirm.erp.common.constant.FirmConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
@@ -32,7 +33,7 @@ public class FirmConfigController {
     private final ResponseHandler responseHandler;
 
     @GetMapping
-    @Operation(summary = "Get firm config values", description = "Returns brand colors, email footer, timezone, etc.")
+    @Operation(summary = FirmConstants.GET_FIRM_CONFIG_SUMMARY, description = FirmConstants.GET_FIRM_CONFIG_DESCRIPTION)
     public ResponseEntity<ApiResponse<Map<String, String>>> getConfig() {
         UUID firmId = getRequiredFirmId();
         return responseHandler.ok(
@@ -42,7 +43,7 @@ public class FirmConfigController {
     }
 
     @PutMapping
-    @Operation(summary = "Update firm config values", description = "Bulk update brand colors, email footer, timezone, etc.")
+    @Operation(summary = FirmConstants.UPDATE_FIRM_CONFIG_SUMMARY, description = FirmConstants.UPDATE_FIRM_CONFIG_DESCRIPTION)
     public ResponseEntity<ApiResponse<Void>> updateConfig(
             @RequestBody Map<String, String> config) {
         UUID firmId = getRequiredFirmId();

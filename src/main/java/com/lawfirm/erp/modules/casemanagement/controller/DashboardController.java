@@ -1,6 +1,7 @@
 package com.lawfirm.erp.modules.casemanagement.controller;
 
 import com.lawfirm.erp.auth.security.PermissionEvaluator;
+import com.lawfirm.erp.common.constant.CaseManagementConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.modules.casemanagement.dto.response.DashboardResponse;
@@ -24,9 +25,8 @@ public class DashboardController {
     private final ResponseHandler responseHandler;
 
     @GetMapping
-    @Operation(summary = "Get dashboard",
-            description = "Firm-wide stats for FIRM_ADMIN; assigned-matters-only for ADVOCATE/PARALEGAL. "
-                    + "Includes total/active/stale counts, today's events, and case positioning summaries.")
+    @Operation(summary = CaseManagementConstants.GET_DASHBOARD_SUMMARY,
+            description = CaseManagementConstants.GET_DASHBOARD_DESCRIPTION)
     public ResponseEntity<ApiResponse<DashboardResponse>> getDashboard() {
         permissionEvaluator.require("DASHBOARD_MANAGEMENT:VIEW");
         return responseHandler.ok(dashboardService.getDashboard(), "Dashboard fetched successfully");

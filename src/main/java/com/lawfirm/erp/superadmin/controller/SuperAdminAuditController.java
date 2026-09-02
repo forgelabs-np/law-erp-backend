@@ -1,5 +1,6 @@
 package com.lawfirm.erp.superadmin.controller;
 
+import com.lawfirm.erp.common.constant.SuperAdminConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
@@ -38,7 +39,7 @@ public class SuperAdminAuditController {
      * Optional filters: action, date range, userType.
      */
     @GetMapping
-    @Operation(summary = "Get all audit logs", description = "Super Admin views all audit logs across all firms with optional filters")
+    @Operation(summary = SuperAdminConstants.GET_ALL_AUDIT_LOGS_SUMMARY, description = SuperAdminConstants.GET_ALL_AUDIT_LOGS_DESCRIPTION)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getAllAuditLogs(
             @RequestParam(required = false) AuditAction action,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate fromDate,
@@ -78,7 +79,7 @@ public class SuperAdminAuditController {
      * Get audit logs for a specific firm — super admin doesn't need firm context.
      */
     @GetMapping("/firms/{firmId}")
-    @Operation(summary = "Get audit logs for a firm", description = "Super Admin views audit logs for a specific firm")
+    @Operation(summary = SuperAdminConstants.GET_FIRM_AUDIT_LOGS_SUMMARY, description = SuperAdminConstants.GET_FIRM_AUDIT_LOGS_DESCRIPTION)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getFirmAuditLogs(
             @PathVariable UUID firmId,
             @RequestParam(required = false) AuditAction action,
@@ -100,7 +101,7 @@ public class SuperAdminAuditController {
      * Get audit logs for a specific user across all firms.
      */
     @GetMapping("/users/{userId}")
-    @Operation(summary = "Get audit logs for a user", description = "Super Admin views audit logs for a specific user across all firms")
+    @Operation(summary = SuperAdminConstants.GET_USER_AUDIT_LOGS_SUMMARY, description = SuperAdminConstants.GET_USER_AUDIT_LOGS_DESCRIPTION)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getUserAuditLogs(
             @PathVariable UUID userId,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate fromDate,
@@ -121,7 +122,7 @@ public class SuperAdminAuditController {
      * Get entity history across all firms.
      */
     @GetMapping("/entities/{entityType}/{entityId}")
-    @Operation(summary = "Get entity history", description = "Super Admin views history for a specific entity across all firms")
+    @Operation(summary = SuperAdminConstants.GET_ENTITY_HISTORY_SUMMARY, description = SuperAdminConstants.GET_ENTITY_HISTORY_DESCRIPTION)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getEntityHistory(
             @PathVariable AuditEntity entityType,
             @PathVariable UUID entityId,
