@@ -3,11 +3,14 @@ package com.lawfirm.erp.superadmin.service;
 import com.lawfirm.erp.auth.mapper.AuthMapper;
 import com.lawfirm.erp.auth.security.JwtUtil;
 import com.lawfirm.erp.auth.security.TotpUtil;
+import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.UserType;
+import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.admin.response.AdminUserResponse;
+import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.dto.auth.request.RegisterSuperAdminRequest;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
@@ -28,6 +31,10 @@ import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -149,11 +156,35 @@ public class SuperAdminServiceImpl implements SuperAdminService {
     }
 
     @Override
-    public List<AdminUserResponse> getAllUsersWithRoles(UserType userType, String search, String firmCode) {
-        return userRepository.findAllWithRoleAndFirm(userType, normalize(search), normalizeFirmCode(firmCode))
-                .stream()
+    public PagedResponse<AdminUserResponse> getAllUsersWithRoles(UserType userType, String search, String firmCode, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        Page<User> userPage = userRepository.findAllWithRoleAndFirmPaged(
+                userType, normalize(search), normalizeFirmCode(firmCode), pageable);
+
+        List<AdminUserResponse> content = userPage.getContent().stream()
                 .map(this::toAdminUserResponse)
                 .collect(Collectors.toList());
+
+        return PagedResponse.of(userPage, content);
+    }
+
+    @Override
+    @Transactional
+    public void resetMfa(MfaResetRequest request) {
+        User user = userRepository.findById(request.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        user.setMfaSecret(null);
+        user.setMfaVerified(false);
+        // Keep mfaEnabled=true so user is forced to re-setup MFA on next login
+        userRepository.save(user);
+
+        String reason = request.getReason() != null ? request.getReason() : "No reason provided";
+        auditService.log(AuditAction.MFA_RESET, AuditEntity.AUTH, user.getId(),
+                "MFA reset by Super Admin for: " + user.getUsername() + " (reason: " + reason + ")");
+
+        log.info("MFA reset for user: {} by Super Admin (reason: {})", user.getUsername(), reason);
     }
 
     private LoginResponse handleMfaFlow(User user, String totpCode) {

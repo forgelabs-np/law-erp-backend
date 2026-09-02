@@ -1,5 +1,6 @@
 package com.lawfirm.erp.modules.usermanagement.service;
 
+import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkDeactivateRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkRoleChangeRequest;
@@ -15,9 +16,9 @@ import java.util.UUID;
 
 public interface UserManagementService {
 
-    List<UserSummaryResponse> listUsers(UserType userType, UUID roleId, Boolean isActive);
+    PagedResponse<UserSummaryResponse> listUsers(UserType userType, UUID roleId, Boolean isActive, int page, int size);
 
-    List<UserSummaryResponse> searchUsers(String query);
+    PagedResponse<UserSummaryResponse> searchUsers(String query, int page, int size);
 
     UserProfileResponse getUserProfile(UUID userId);
 
@@ -30,4 +31,6 @@ public interface UserManagementService {
     BulkOperationResult bulkDeactivate(BulkDeactivateRequest request);
 
     BulkOperationResult bulkRoleChange(BulkRoleChangeRequest request);
+
+    void deleteUser(UUID userId);
 }

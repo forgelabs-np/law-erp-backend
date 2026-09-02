@@ -101,6 +101,23 @@ public interface UserRepository extends JpaRepository<User, UUID> {
                                       @Param("search") String search,
                                       @Param("firmCode") String firmCode);
 
+    /**
+     * Paginated version — no JOIN FETCH (Spring Data manages pagination via count query).
+     * Role and firm are lazy-loaded; use EntityGraph or handle in service.
+     */
+    @Query("""
+            SELECT u FROM User u
+            WHERE (:userType IS NULL OR u.userType = :userType)
+              AND (:search IS NULL OR LOWER(u.username) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+                   OR LOWER(u.fullName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))
+              AND (:firmCode IS NULL OR u.firm.lawFirmCode = CAST(:firmCode AS string))
+            ORDER BY u.createdAt DESC
+            """)
+    Page<User> findAllWithRoleAndFirmPaged(@Param("userType") UserType userType,
+                                           @Param("search") String search,
+                                           @Param("firmCode") String firmCode,
+                                           Pageable pageable);
+
     @Query("SELECT u.role.id as roleId, COUNT(u) as cnt FROM User u WHERE u.firm.id = :firmId GROUP BY u.role.id")
     List<Object[]> countUsersByRoleIds(@Param("firmId") UUID firmId);
 

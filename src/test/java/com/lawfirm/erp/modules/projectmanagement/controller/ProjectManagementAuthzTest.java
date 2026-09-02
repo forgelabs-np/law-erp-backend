@@ -186,9 +186,9 @@ class ProjectManagementAuthzTest {
     // ── ProjectDashboardController ──────────────────────────────────────────
 
     @Test
-    @DisplayName("Project dashboard requires PROJECT_MANAGEMENT:VIEW")
+    @DisplayName("Project dashboard requires DASHBOARD_MANAGEMENT:VIEW")
     void dashboardRequiresView() {
         projectDashboardController.getDashboard();
-        verify(permissionEvaluator).require("PROJECT_MANAGEMENT:VIEW");
+        verify(permissionEvaluator).require("DASHBOARD_MANAGEMENT:VIEW");
     }
 }

@@ -1,6 +1,7 @@
 package com.lawfirm.erp.superadmin.service;
 
 import com.lawfirm.erp.modules.audit.service.AuditService;
+import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.AuthStatus;
@@ -26,6 +27,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
@@ -33,6 +38,7 @@ import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -303,6 +309,10 @@ class SuperAdminServiceTest {
     @DisplayName("User → Role view (getAllUsersWithRoles)")
     class UserRoleView {
 
+        private Pageable defaultPageable() {
+            return PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
+        }
+
         @Test
         @DisplayName("Returns every user with its role and firm mapped")
         void returnsUsersWithRoles() {
@@ -327,16 +337,19 @@ class SuperAdminServiceTest {
                     .build();
             firmAdmin.setId(UUID.randomUUID());
             firmAdmin.setActive(true);
+            firmAdmin.setCreatedAt(LocalDateTime.now());
 
-            when(userRepository.findAllWithRoleAndFirm(null, null, null))
-                    .thenReturn(List.of(superAdmin, firmAdmin));
+            superAdmin.setCreatedAt(LocalDateTime.now().minusHours(1));
 
-            List<AdminUserResponse> result = superAdminService.getAllUsersWithRoles(null, null, null);
+            when(userRepository.findAllWithRoleAndFirmPaged(null, null, null, defaultPageable()))
+                    .thenReturn(new PageImpl<>(List.of(firmAdmin, superAdmin), defaultPageable(), 2));
 
-            assertEquals(2, result.size());
+            PagedResponse<AdminUserResponse> result = superAdminService.getAllUsersWithRoles(null, null, null, 0, 20);
+
+            assertEquals(2, result.getContent().size());
 
             // Firm admin user → its firm-scoped role + firm
-            AdminUserResponse ram = result.stream()
+            AdminUserResponse ram = result.getContent().stream()
                     .filter(r -> "ram.sharma".equals(r.getUsername()))
                     .findFirst().orElseThrow();
             assertEquals("Ram Sharma", ram.getFullName());
@@ -348,13 +361,13 @@ class SuperAdminServiceTest {
             assertEquals("Apex Law", ram.getFirmName());
 
             // Super admin user → SUPER_ADMIN role + SYSTEM firm
-            AdminUserResponse sa = result.stream()
+            AdminUserResponse sa = result.getContent().stream()
                     .filter(r -> USERNAME.equals(r.getUsername()))
                     .findFirst().orElseThrow();
             assertEquals("SUPER_ADMIN", sa.getRoleCode());
             assertEquals("SYSTEM", sa.getFirmCode());
 
-            verify(userRepository).findAllWithRoleAndFirm(null, null, null);
+            verify(userRepository).findAllWithRoleAndFirmPaged(null, null, null, defaultPageable());
         }
 
         @Test
@@ -366,54 +379,55 @@ class SuperAdminServiceTest {
                     .userType(UserType.CLIENT)
                     .build();
             orphan.setId(UUID.randomUUID());
+            orphan.setCreatedAt(LocalDateTime.now());
 
-            when(userRepository.findAllWithRoleAndFirm(null, null, null))
-                    .thenReturn(List.of(orphan));
+            when(userRepository.findAllWithRoleAndFirmPaged(null, null, null, defaultPageable()))
+                    .thenReturn(new PageImpl<>(List.of(orphan), defaultPageable(), 1));
 
-            List<AdminUserResponse> result = superAdminService.getAllUsersWithRoles(null, null, null);
+            PagedResponse<AdminUserResponse> result = superAdminService.getAllUsersWithRoles(null, null, null, 0, 20);
 
-            assertEquals(1, result.size());
-            assertNull(result.get(0).getRoleId());
-            assertNull(result.get(0).getRoleName());
-            assertNull(result.get(0).getFirmId());
-            assertNull(result.get(0).getFirmCode());
+            assertEquals(1, result.getContent().size());
+            assertNull(result.getContent().get(0).getRoleId());
+            assertNull(result.getContent().get(0).getRoleName());
+            assertNull(result.getContent().get(0).getFirmId());
+            assertNull(result.getContent().get(0).getFirmCode());
         }
 
         @Test
         @DisplayName("Passes userType/search/firmCode filters to the repository (trimmed)")
         void passesFiltersToRepository() {
-            when(userRepository.findAllWithRoleAndFirm(UserType.FIRM_USER, "ram", "APX"))
-                    .thenReturn(List.of(superAdmin));
+            when(userRepository.findAllWithRoleAndFirmPaged(UserType.FIRM_USER, "ram", "APX", defaultPageable()))
+                    .thenReturn(new PageImpl<>(List.of(superAdmin), defaultPageable(), 1));
 
-            List<AdminUserResponse> result =
-                    superAdminService.getAllUsersWithRoles(UserType.FIRM_USER, "  ram  ", " APX ");
+            PagedResponse<AdminUserResponse> result =
+                    superAdminService.getAllUsersWithRoles(UserType.FIRM_USER, "  ram  ", " APX ", 0, 20);
 
-            assertEquals(1, result.size());
-            verify(userRepository).findAllWithRoleAndFirm(UserType.FIRM_USER, "ram", "APX");
+            assertEquals(1, result.getContent().size());
+            verify(userRepository).findAllWithRoleAndFirmPaged(UserType.FIRM_USER, "ram", "APX", defaultPageable());
         }
 
         @Test
         @DisplayName("Uppercases firmCode before passing it to the repository")
         void uppercasesFirmCode() {
-            when(userRepository.findAllWithRoleAndFirm(UserType.CLIENT, "ram", "APX"))
-                    .thenReturn(List.of(superAdmin));
+            when(userRepository.findAllWithRoleAndFirmPaged(UserType.CLIENT, "ram", "APX", defaultPageable()))
+                    .thenReturn(new PageImpl<>(List.of(superAdmin), defaultPageable(), 1));
 
-            List<AdminUserResponse> result =
-                    superAdminService.getAllUsersWithRoles(UserType.CLIENT, "ram", " apx ");
+            PagedResponse<AdminUserResponse> result =
+                    superAdminService.getAllUsersWithRoles(UserType.CLIENT, "ram", " apx ", 0, 20);
 
-            assertEquals(1, result.size());
-            verify(userRepository).findAllWithRoleAndFirm(UserType.CLIENT, "ram", "APX");
+            assertEquals(1, result.getContent().size());
+            verify(userRepository).findAllWithRoleAndFirmPaged(UserType.CLIENT, "ram", "APX", defaultPageable());
         }
 
         @Test
         @DisplayName("Blank search/firmCode are normalized to null filters")
         void blankFiltersBecomeNull() {
-            when(userRepository.findAllWithRoleAndFirm(null, null, null))
-                    .thenReturn(List.of(superAdmin));
+            when(userRepository.findAllWithRoleAndFirmPaged(null, null, null, defaultPageable()))
+                    .thenReturn(new PageImpl<>(List.of(superAdmin), defaultPageable(), 1));
 
-            superAdminService.getAllUsersWithRoles(null, "   ", "");
+            superAdminService.getAllUsersWithRoles(null, "   ", "", 0, 20);
 
-            verify(userRepository).findAllWithRoleAndFirm(null, null, null);
+            verify(userRepository).findAllWithRoleAndFirmPaged(null, null, null, defaultPageable());
         }
     }
 

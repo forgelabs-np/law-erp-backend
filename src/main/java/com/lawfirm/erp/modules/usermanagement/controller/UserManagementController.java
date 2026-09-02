@@ -4,6 +4,7 @@ import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.constant.UserManagementConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
+import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkDeactivateRequest;
@@ -38,24 +39,28 @@ public class UserManagementController {
 
     @GetMapping
     @Operation(summary = UserManagementConstants.LIST_USERS_SUMMARY, description = UserManagementConstants.LIST_USERS_DESCRIPTION)
-    public ResponseEntity<ApiResponse<List<UserSummaryResponse>>> listUsers(
+    public ResponseEntity<ApiResponse<PagedResponse<UserSummaryResponse>>> listUsers(
             @RequestParam(required = false) UserType userType,
             @RequestParam(required = false) UUID roleId,
-            @RequestParam(required = false) Boolean isActive) {
+            @RequestParam(required = false) Boolean isActive,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         permissionEvaluator.require("USER_MANAGEMENT:VIEW");
         return responseHandler.ok(
-                userManagementService.listUsers(userType, roleId, isActive),
+                userManagementService.listUsers(userType, roleId, isActive, page, size),
                 "Users fetched successfully"
         );
     }
 
     @GetMapping("/search")
     @Operation(summary = UserManagementConstants.SEARCH_USERS_SUMMARY, description = UserManagementConstants.SEARCH_USERS_DESCRIPTION)
-    public ResponseEntity<ApiResponse<List<UserSummaryResponse>>> searchUsers(
-            @RequestParam String q) {
+    public ResponseEntity<ApiResponse<PagedResponse<UserSummaryResponse>>> searchUsers(
+            @RequestParam String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         permissionEvaluator.require("USER_MANAGEMENT:VIEW");
         return responseHandler.ok(
-                userManagementService.searchUsers(q),
+                userManagementService.searchUsers(q, page, size),
                 "Search results fetched"
         );
     }
@@ -107,6 +112,14 @@ public class UserManagementController {
         permissionEvaluator.require("USER_MANAGEMENT:EDIT");
         userManagementService.resetPassword(userId, request.getData());
         return responseHandler.ok(null, "Password reset successfully. User must re-login.");
+    }
+
+    @DeleteMapping("/{userId}")
+    @Operation(summary = "Delete user", description = "Soft-deletes a user by deactivating their account")
+    public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable UUID userId) {
+        permissionEvaluator.require("USER_MANAGEMENT:DELETE");
+        userManagementService.deleteUser(userId);
+        return responseHandler.ok(null, "User deleted successfully");
     }
 
     @PostMapping("/bulk-deactivate")

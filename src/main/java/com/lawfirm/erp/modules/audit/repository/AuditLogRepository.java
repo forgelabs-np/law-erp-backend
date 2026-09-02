@@ -133,4 +133,41 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             @Param("firmId") UUID firmId,
             @Param("ipAddress") String ipAddress,
             Pageable pageable);
+
+    // ── Super Admin: cross-firm queries ────────────────────────────────────
+
+    /**
+     * All audit logs with optional date range filter (no firm filter).
+     */
+    @Query("SELECT a FROM AuditLog a " +
+            "WHERE (a.createdAt >= COALESCE(:from, a.createdAt)) " +
+            "AND (a.createdAt <= COALESCE(:to, a.createdAt)) " +
+            "ORDER BY a.createdAt DESC")
+    Page<AuditLog> findAllWithFilters(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            Pageable pageable);
+
+    /**
+     * Audit logs for a specific user across all firms.
+     */
+    @Query("SELECT a FROM AuditLog a WHERE a.userId = :userId " +
+            "AND (a.createdAt >= COALESCE(:from, a.createdAt)) " +
+            "AND (a.createdAt <= COALESCE(:to, a.createdAt)) " +
+            "ORDER BY a.createdAt DESC")
+    Page<AuditLog> findByUserIdWithFilters(
+            @Param("userId") UUID userId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            Pageable pageable);
+
+    /**
+     * Entity history across all firms.
+     */
+    @Query("SELECT a FROM AuditLog a WHERE a.entityType = :entityType AND a.entityId = :entityId " +
+            "ORDER BY a.createdAt DESC")
+    Page<AuditLog> findByEntityTypeAndEntityId(
+            @Param("entityType") AuditEntity entityType,
+            @Param("entityId") UUID entityId,
+            Pageable pageable);
 }

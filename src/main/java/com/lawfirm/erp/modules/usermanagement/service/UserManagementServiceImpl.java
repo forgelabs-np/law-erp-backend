@@ -3,6 +3,7 @@ package com.lawfirm.erp.modules.usermanagement.service;
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.constant.RoleCode;
+import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.UserType;
@@ -55,7 +56,7 @@ public class UserManagementServiceImpl implements UserManagementService {
     private final UserManagementMapper userManagementMapper;
 
     @Override
-    public List<UserSummaryResponse> listUsers(UserType userType, UUID roleId, Boolean isActive) {
+    public PagedResponse<UserSummaryResponse> listUsers(UserType userType, UUID roleId, Boolean isActive, int page, int size) {
         boolean superAdmin = currentUserResolver.isSuperAdmin();
         UUID firmId = superAdmin ? null : getRequiredFirmId();
 
@@ -79,13 +80,19 @@ public class UserManagementServiceImpl implements UserManagementService {
             users = users.stream().filter(u -> u.isActive() == isActive).toList();
         }
 
-        return users.stream().map(userManagementMapper::toSummary).collect(Collectors.toList());
+        // Sort by createdAt descending and map to DTOs
+        List<UserSummaryResponse> summaries = users.stream()
+                .sorted(Comparator.comparing(User::getCreatedAt).reversed())
+                .map(userManagementMapper::toSummary)
+                .collect(Collectors.toList());
+
+        return paginateList(summaries, page, size);
     }
 
     @Override
-    public List<UserSummaryResponse> searchUsers(String query) {
+    public PagedResponse<UserSummaryResponse> searchUsers(String query, int page, int size) {
         if (query == null || query.isBlank()) {
-            return listUsers(null, null, null);
+            return listUsers(null, null, null, page, size);
         }
 
         String q = query.toLowerCase().trim();
@@ -95,7 +102,7 @@ public class UserManagementServiceImpl implements UserManagementService {
                 ? userRepository.findAll()
                 : userRepository.findByFirmId(getRequiredFirmId());
 
-        return users.stream()
+        List<UserSummaryResponse> filtered = users.stream()
                 .filter(u ->
                         (u.getFullName() != null && u.getFullName().toLowerCase().contains(q)) ||
                         (u.getEmail() != null && u.getEmail().toLowerCase().contains(q)) ||
@@ -104,6 +111,8 @@ public class UserManagementServiceImpl implements UserManagementService {
                 )
                 .map(userManagementMapper::toSummary)
                 .collect(Collectors.toList());
+
+        return paginateList(filtered, page, size);
     }
 
     @Override
@@ -357,6 +366,48 @@ public class UserManagementServiceImpl implements UserManagementService {
                 .failed(failed.size())
                 .failedDetails(failed)
                 .message(message)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public void deleteUser(UUID userId) {
+        UUID firmId = getRequiredFirmId();
+        UUID currentUserId = currentUserResolver.getCurrentUserId();
+
+        if (userId.equals(currentUserId)) {
+            throw new BusinessRuleException("Cannot delete yourself");
+        }
+
+        User user = getValidatedUser(userId, firmId);
+
+        user.setActive(false);
+        userRepository.save(user);
+        userRepository.incrementPermissionVersion(userId);
+        permissionEvaluator.clearUserCache(userId);
+
+        auditService.log(AuditAction.USER_DEACTIVATED, AuditEntity.USER, userId,
+                "User deleted by firm admin: " + user.getUsername());
+
+        log.info("User deleted: {} by firm admin", user.getUsername());
+    }
+
+    private <T> PagedResponse<T> paginateList(List<T> items, int page, int size) {
+        int totalElements = items.size();
+        int totalPages = (int) Math.ceil((double) totalElements / size);
+        int start = page * size;
+        int end = Math.min(start + size, totalElements);
+        List<T> content = start < totalElements ? items.subList(start, end) : List.of();
+
+        return PagedResponse.<T>builder()
+                .content(content)
+                .page(page)
+                .size(size)
+                .totalElements(totalElements)
+                .totalPages(totalPages)
+                .first(page == 0)
+                .last(page >= totalPages - 1)
+                .empty(content.isEmpty())
                 .build();
     }
 
