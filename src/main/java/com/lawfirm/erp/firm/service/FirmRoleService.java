@@ -1,6 +1,7 @@
 package com.lawfirm.erp.firm.service;
 
 import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
+import com.lawfirm.erp.dto.admin.request.RoleRequest;
 import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
 import com.lawfirm.erp.dto.firm.response.FirmRolePermissionsResponse;
@@ -18,4 +19,10 @@ public interface FirmRoleService {
     RolePermissionResponse updateRolePermissions(UUID roleId, RolePermissionRequest request);
 
     List<RoleUserResponse> getRoleUsers(UUID roleId);
+
+    RoleResponse createRole(RoleRequest request);
+
+    void deleteRole(UUID roleId);
+
+    RoleResponse toggleRoleStatus(UUID roleId);
 }

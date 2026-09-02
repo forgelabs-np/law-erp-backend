@@ -61,4 +61,12 @@ public final class FirmConstants {
     public static final String GET_ROLE_USERS_DESCRIPTION = "Lists all users within the firm who hold this role.";
     public static final String UPDATE_ROLE_PERMISSIONS_SUMMARY = "Update permissions for a firm role";
     public static final String UPDATE_ROLE_PERMISSIONS_DESCRIPTION = "Replaces all permissions on a firm-scoped role. Ceiling enforced — cannot assign permissions beyond what the system role allows. All users holding this role will have their JWT invalidated immediately and must re-login to get the updated permissions.";
+
+    // Firm Admin role CRUD
+    public static final String CREATE_FIRM_ROLE_SUMMARY = "Create a custom role";
+    public static final String CREATE_FIRM_ROLE_DESCRIPTION = "Firm Admin creates a custom role within their firm. Role starts with no permissions — assign them via the permissions endpoint. Cannot create FIRM_ADMIN roles.";
+    public static final String DELETE_FIRM_ROLE_SUMMARY = "Delete a custom role";
+    public static final String DELETE_FIRM_ROLE_DESCRIPTION = "Deletes a firm-scoped custom role. Cannot delete FIRM_ADMIN or system roles. Role must have zero assigned users.";
+    public static final String TOGGLE_FIRM_ROLE_SUMMARY = "Toggle role active status";
+    public static final String TOGGLE_FIRM_ROLE_DESCRIPTION = "Enable or disable a custom firm role. Cannot toggle FIRM_ADMIN role.";
 }

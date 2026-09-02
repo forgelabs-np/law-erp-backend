@@ -7,9 +7,12 @@ import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.UserType;
+import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
 import com.lawfirm.erp.dto.admin.response.AdminUserResponse;
+import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
 import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.dto.auth.request.RegisterSuperAdminRequest;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
@@ -19,7 +22,12 @@ import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
+import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
+import com.lawfirm.erp.rbac.entity.RolePermission;
+import com.lawfirm.erp.rbac.repository.PermissionRepository;
+import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
+import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,7 +47,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -54,6 +64,9 @@ public class SuperAdminServiceImpl implements SuperAdminService {
     private final RoleRepository roleRepository;
     private final FirmRepository firmRepository;
     private final PasswordEncoder passwordEncoder;
+    private final RolePermissionRepository rolePermissionRepository;
+    private final PermissionRepository permissionRepository;
+    private final CurrentUserResolver currentUserResolver;
     private final AuditService auditService;
     private final AuthMapper authMapper;
 
@@ -185,6 +198,88 @@ public class SuperAdminServiceImpl implements SuperAdminService {
                 "MFA reset by Super Admin for: " + user.getUsername() + " (reason: " + reason + ")");
 
         log.info("MFA reset for user: {} by Super Admin (reason: {})", user.getUsername(), reason);
+    }
+
+    @Override
+    @Transactional
+    public RolePermissionResponse overrideRolePermissions(UUID firmId, UUID roleId, RolePermissionRequest request) {
+        UUID adminId = currentUserResolver.getCurrentUserId();
+
+        // Validate firm exists
+        Firm firm = firmRepository.findById(firmId)
+                .orElseThrow(() -> new ResourceNotFoundException("Firm not found: " + firmId));
+
+        // Validate role exists and belongs to this firm
+        Role role = roleRepository.findById(roleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + roleId));
+
+        if (role.getFirm() == null || !role.getFirm().getId().equals(firmId)) {
+            throw new ForbiddenException("Role does not belong to firm: " + firmId);
+        }
+
+        // Super Admin cannot modify system roles via this endpoint (use RoleController for that)
+        if (Boolean.TRUE.equals(role.getIsSystem())) {
+            throw new ForbiddenException("Cannot modify system roles via firm override. Use /api/v1/admin/roles instead.");
+        }
+
+        // Load permissions — no ceiling check, Super Admin can assign anything
+        List<Permission> permissions = permissionRepository.findAllById(request.getPermissionIds());
+        if (permissions.size() != request.getPermissionIds().size()) {
+            throw new ResourceNotFoundException("One or more permission IDs are invalid");
+        }
+
+        // Replace permissions
+        rolePermissionRepository.deleteByRoleId(role.getId());
+
+        List<RolePermission> newRolePermissions = permissions.stream()
+                .map(p -> {
+                    RolePermission rp = RolePermission.builder()
+                            .role(role)
+                            .permission(p)
+                            .build();
+                    rp.setCreatedBy(adminId);
+                    rp.setCreatedAt(LocalDateTime.now());
+                    return rp;
+                })
+                .collect(Collectors.toList());
+
+        rolePermissionRepository.saveAll(newRolePermissions);
+
+        // Invalidate all users holding this role
+        List<UUID> affectedUsers = userRepository.findUserIdsByRoleId(role.getId());
+        for (UUID userId : affectedUsers) {
+            userRepository.incrementPermissionVersion(userId);
+        }
+
+        auditService.log(
+                AuditAction.ROLE_PERMISSION_CHANGED,
+                AuditEntity.ROLE,
+                role.getId(),
+                "Super Admin overrode permissions for role: " + role.getRoleCode()
+                        + " in firm: " + firm.getLawFirmCode()
+                        + " (" + permissions.size() + " permissions). "
+                        + affectedUsers.size() + " user sessions invalidated."
+        );
+
+        log.info("Super Admin overrode {} permissions for role '{}' in firm '{}'. {} users invalidated.",
+                permissions.size(), role.getRoleCode(), firm.getLawFirmCode(), affectedUsers.size());
+
+        return RolePermissionResponse.builder()
+                .roleId(role.getId())
+                .roleName(role.getRoleName())
+                .roleCode(role.getRoleCode())
+                .permissions(permissions.stream()
+                        .map(p -> com.lawfirm.erp.dto.admin.response.PermissionResponse.builder()
+                                .id(p.getId())
+                                .action(p.getAction())
+                                .scope(p.getScope())
+                                .code(p.getCode())
+                                .description(p.getDescription())
+                                .isActive(p.isActive())
+                                .createdAt(p.getCreatedAt())
+                                .build())
+                        .collect(Collectors.toList()))
+                .build();
     }
 
     private LoginResponse handleMfaFlow(User user, String totpCode) {

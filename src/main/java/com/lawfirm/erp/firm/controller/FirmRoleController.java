@@ -4,7 +4,9 @@ import com.lawfirm.erp.common.constant.FirmConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
+import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
+import com.lawfirm.erp.dto.admin.request.RoleRequest;
 import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
 import com.lawfirm.erp.dto.firm.response.FirmRolePermissionsResponse;
@@ -31,6 +33,19 @@ public class FirmRoleController {
     private final FirmRoleService firmRoleService;
     private final ResponseHandler responseHandler;
 
+
+    @PostMapping
+    @Operation(
+            summary = FirmConstants.CREATE_FIRM_ROLE_SUMMARY,
+            description = FirmConstants.CREATE_FIRM_ROLE_DESCRIPTION
+    )
+    public ResponseEntity<ApiResponse<RoleResponse>> createRole(
+            @Valid @RequestBody ApiRequest<RoleRequest> request) {
+        return responseHandler.ok(
+                firmRoleService.createRole(request.getData()),
+                "Custom role created successfully"
+        );
+    }
 
     @GetMapping
     @Operation(
@@ -85,5 +100,27 @@ public class FirmRoleController {
                 firmRoleService.updateRolePermissions(roleId, request.getData()),
                 "Role permissions updated. Affected users must re-login."
         );
+    }
+
+    @PatchMapping("/{roleId}/toggle")
+    @Operation(
+            summary = FirmConstants.TOGGLE_FIRM_ROLE_SUMMARY,
+            description = FirmConstants.TOGGLE_FIRM_ROLE_DESCRIPTION
+    )
+    public ResponseEntity<ApiResponse<RoleResponse>> toggleRoleStatus(@PathVariable UUID roleId) {
+        return responseHandler.ok(
+                firmRoleService.toggleRoleStatus(roleId),
+                "Role status toggled successfully"
+        );
+    }
+
+    @DeleteMapping("/{roleId}")
+    @Operation(
+            summary = FirmConstants.DELETE_FIRM_ROLE_SUMMARY,
+            description = FirmConstants.DELETE_FIRM_ROLE_DESCRIPTION
+    )
+    public ResponseEntity<ApiResponse<Void>> deleteRole(@PathVariable UUID roleId) {
+        firmRoleService.deleteRole(roleId);
+        return responseHandler.ok(null, "Custom role deleted successfully");
     }
 }

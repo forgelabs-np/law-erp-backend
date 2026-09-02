@@ -8,6 +8,8 @@ import com.lawfirm.erp.common.enums.Message;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.dto.admin.response.AdminUserResponse;
+import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
+import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
 import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.dto.auth.request.RegisterSuperAdminRequest;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
@@ -23,6 +25,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/super-admin")
@@ -67,6 +70,20 @@ public class SuperAdminController {
         return responseHandler.ok(
                 superAdminService.getAllUsersWithRoles(userType, search, firmCode, page, size),
                 "Users with roles fetched successfully"
+        );
+    }
+
+    @PutMapping("/firms/{firmId}/roles/{roleId}/permissions")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(summary = SuperAdminConstants.OVERRIDE_ROLE_PERMS_SUMMARY, description = SuperAdminConstants.OVERRIDE_ROLE_PERMS_DESCRIPTION)
+    public ResponseEntity<ApiResponse<RolePermissionResponse>> overrideRolePermissions(
+            @PathVariable UUID firmId,
+            @PathVariable UUID roleId,
+            @Valid @RequestBody ApiRequest<RolePermissionRequest> request) {
+        request.getData().setRoleId(roleId);
+        return responseHandler.ok(
+                superAdminService.overrideRolePermissions(firmId, roleId, request.getData()),
+                "Role permissions overridden by Super Admin"
         );
     }
 

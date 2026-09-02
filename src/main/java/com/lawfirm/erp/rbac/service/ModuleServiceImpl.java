@@ -13,6 +13,7 @@ import com.lawfirm.erp.rbac.entity.Module;
 import com.lawfirm.erp.rbac.entity.ModulePermission;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.mapper.ModuleMapper;
+import com.lawfirm.erp.firm.repository.FirmModuleRepository;
 import com.lawfirm.erp.rbac.repository.ModulePermissionRepository;
 import com.lawfirm.erp.rbac.repository.ModuleRepository;
 import com.lawfirm.erp.rbac.repository.PermissionRepository;
@@ -36,6 +37,7 @@ public class ModuleServiceImpl implements ModuleService {
     private final ModuleMapper moduleMapper;
     private final CurrentUserResolver currentUserResolver;
     private final ModulePermissionRepository modulePermissionRepository;
+    private final FirmModuleRepository firmModuleRepository;
     private final AuditService auditService;
     private final com.lawfirm.erp.rbac.mapper.RbacResponseMapper rbacResponseMapper;
 
@@ -202,23 +204,20 @@ public class ModuleServiceImpl implements ModuleService {
 
         validateNotSystemModule(module, "delete");
 
-        if (module.getSubModules() != null && !module.getSubModules().isEmpty()) {
-            throw new BusinessRuleException(
-                    String.format("Cannot delete module: %s. It has %d sub-modules. Delete sub-modules first.",
-                            module.getName(), module.getSubModules().size())
-            );
+        // Collect all module IDs (parent + descendants) for batch cleanup
+        List<UUID> allModuleIds = new ArrayList<>();
+        collectModuleIds(module, allModuleIds);
+
+        // Clean up FK references for all modules in the tree
+        for (UUID id : allModuleIds) {
+            modulePermissionRepository.deleteByModuleId(id);
+            firmModuleRepository.deleteByModuleId(id);
         }
 
-        long permissionCount = modulePermissionRepository.countByModuleId(moduleId);
-        if (permissionCount > 0) {
-            throw new BusinessRuleException(
-                    String.format("Cannot delete module: %s. It has %d permissions assigned. Remove permissions first.",
-                            module.getName(), permissionCount)
-            );
-        }
-
+        // JPA CascadeType.ALL on subModules handles recursive child deletion
         moduleRepository.delete(module);
-        log.info("Module deleted: {} by admin: {}", module.getCode(), adminId);
+        log.info("Module deleted: {} (+ {} sub-modules) by admin: {}",
+                module.getCode(), allModuleIds.size() - 1, adminId);
 
         // ✅ AUDIT: Module deleted
         auditService.log(
@@ -226,7 +225,17 @@ public class ModuleServiceImpl implements ModuleService {
                 AuditEntity.MODULE,
                 module.getId(),
                 "Module deleted: " + module.getCode()
+                    + (allModuleIds.size() > 1 ? " (" + (allModuleIds.size() - 1) + " sub-modules)" : "")
         );
+    }
+
+    private void collectModuleIds(Module module, List<UUID> ids) {
+        ids.add(module.getId());
+        if (module.getSubModules() != null) {
+            for (Module child : module.getSubModules()) {
+                collectModuleIds(child, ids);
+            }
+        }
     }
 
     @Transactional

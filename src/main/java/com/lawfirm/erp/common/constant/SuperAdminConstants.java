@@ -33,4 +33,8 @@ public final class SuperAdminConstants {
     public static final String GET_USER_AUDIT_LOGS_DESCRIPTION = "Super Admin views audit logs for a specific user across all firms";
     public static final String GET_ENTITY_HISTORY_SUMMARY = "Get entity history";
     public static final String GET_ENTITY_HISTORY_DESCRIPTION = "Super Admin views history for a specific entity across all firms";
+
+    // Super Admin role override
+    public static final String OVERRIDE_ROLE_PERMS_SUMMARY = "Override role permissions for any firm";
+    public static final String OVERRIDE_ROLE_PERMS_DESCRIPTION = "Super Admin directly sets permissions on any firm-scoped role, bypassing all ceilings. No restrictions — Super Admin is platform-level.";
 }

@@ -2,6 +2,7 @@ package com.lawfirm.erp.firm.repository;
 
 import com.lawfirm.erp.firm.entity.FirmModule;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -32,5 +33,12 @@ public interface FirmModuleRepository extends JpaRepository<FirmModule, UUID> {
 
     @Query("SELECT fm FROM FirmModule fm JOIN FETCH fm.module WHERE fm.firm.id = :firmId")
     List<FirmModule> findByFirmId(@Param("firmId") UUID firmId);
+
+    @Modifying
+    @Query("DELETE FROM FirmModule fm WHERE fm.module.id = :moduleId")
+    void deleteByModuleId(@Param("moduleId") UUID moduleId);
+
+    @Query("SELECT COUNT(fm) FROM FirmModule fm WHERE fm.module.id = :moduleId")
+    long countByModuleId(@Param("moduleId") UUID moduleId);
 
 }

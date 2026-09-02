@@ -6,14 +6,19 @@ import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.PermissionScope;
 import com.lawfirm.erp.common.enums.UserType;
+import com.lawfirm.erp.common.exception.BusinessRuleException;
+import com.lawfirm.erp.common.exception.DuplicateResourceException;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
+import com.lawfirm.erp.dto.admin.request.RoleRequest;
 import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
 import com.lawfirm.erp.dto.firm.response.RoleUserResponse;
+import com.lawfirm.erp.firm.entity.Firm;
+import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.rbac.entity.Role;
@@ -40,6 +45,7 @@ public class FirmRoleServiceImpl implements FirmRoleService {
     private final RoleRepository roleRepository;
     private final RolePermissionRepository rolePermissionRepository;
     private final PermissionRepository permissionRepository;
+    private final FirmRepository firmRepository;
     private final UserRepository userRepository;
     private final PermissionEvaluator permissionEvaluator;
     private final CurrentUserResolver currentUserResolver;
@@ -277,6 +283,109 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         return role;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // POST /api/v1/firm/roles
+    // Firm Admin creates a custom role within their firm
+    // ═══════════════════════════════════════════════════════════════════════
+    @Transactional
+    public RoleResponse createRole(RoleRequest request) {
+        UUID firmId = getRequiredFirmId();
+        UUID adminId = currentUserResolver.getCurrentUserId();
+
+        // Validate uniqueness within firm
+        roleRepository.findByFirmIdAndRoleCode(firmId, request.getCode().toUpperCase()).ifPresent(r -> {
+            throw new DuplicateResourceException(
+                    String.format("Role code already exists in your firm: %s", request.getCode())
+            );
+        });
+
+        Role role = Role.builder()
+                .firm(firmRepository.getReferenceById(firmId))
+                .roleName(request.getName())
+                .roleCode(request.getCode().toUpperCase())
+                .description(request.getDescription())
+                .isSystem(false)
+                .applicableTo(UserType.FIRM_USER)
+                .build();
+        role.setActive(request.getIsActive() != null ? request.getIsActive() : true);
+        role.setCreatedBy(adminId);
+        role.setCreatedAt(LocalDateTime.now());
+        role = roleRepository.save(role);
+
+        auditService.log(
+                AuditAction.ROLE_CREATED,
+                AuditEntity.ROLE,
+                role.getId(),
+                "Custom role created: " + role.getRoleCode() + " for firm: " + firmId
+        );
+
+        log.info("Custom role created: {} for firm: {} by admin: {}", role.getRoleCode(), firmId, adminId);
+        return toMinimalRoleResponse(role);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // DELETE /api/v1/firm/roles/{roleId}
+    // Firm Admin deletes a custom role (not FIRM_ADMIN, not system)
+    // ═══════════════════════════════════════════════════════════════════════
+    @Transactional
+    public void deleteRole(UUID roleId) {
+        UUID firmId = getRequiredFirmId();
+        UUID adminId = currentUserResolver.getCurrentUserId();
+        Role role = getValidatedFirmRole(roleId, firmId);
+
+        if (isFirmAdminRole(role)) {
+            throw new BusinessRuleException("Cannot delete FIRM_ADMIN role. Only Super Admin can manage Firm Admins.");
+        }
+
+        int userCount = roleRepository.countUsersByRoleId(roleId);
+        if (userCount > 0) {
+            throw new BusinessRuleException(
+                    String.format("Cannot delete role: %s. It is assigned to %d user(s). Reassign them first.",
+                            role.getRoleName(), userCount)
+            );
+        }
+
+        roleRepository.delete(role);
+        log.info("Custom role deleted: {} by admin: {}", role.getRoleCode(), adminId);
+
+        auditService.log(
+                AuditAction.ROLE_DELETED,
+                AuditEntity.ROLE,
+                role.getId(),
+                "Custom role deleted: " + role.getRoleCode()
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // PATCH /api/v1/firm/roles/{roleId}/toggle
+    // Firm Admin toggles a custom role's active status
+    // ═══════════════════════════════════════════════════════════════════════
+    @Transactional
+    public RoleResponse toggleRoleStatus(UUID roleId) {
+        UUID firmId = getRequiredFirmId();
+        UUID adminId = currentUserResolver.getCurrentUserId();
+        Role role = getValidatedFirmRole(roleId, firmId);
+
+        if (isFirmAdminRole(role)) {
+            throw new BusinessRuleException("Cannot toggle FIRM_ADMIN role status.");
+        }
+
+        role.setActive(!role.isActive());
+        role.setUpdatedBy(adminId);
+        role.setUpdatedAt(LocalDateTime.now());
+        role = roleRepository.save(role);
+
+        auditService.log(
+                role.isActive() ? AuditAction.ROLE_ACTIVATED : AuditAction.ROLE_DEACTIVATED,
+                AuditEntity.ROLE,
+                role.getId(),
+                "Role " + role.getRoleCode() + " toggled to: " + (role.isActive() ? "active" : "inactive")
+        );
+
+        log.info("Role {} toggled to {} by admin: {}", role.getRoleCode(), role.isActive(), adminId);
+        return toMinimalRoleResponse(role);
+    }
+
     // ─── Mappers ──────────────────────────────────────────────────────────
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -301,6 +410,21 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                 .email(user.getEmail())
                 .mobileNo(user.getMobileNo())
                 .isActive(user.isActive())
+                .build();
+    }
+
+    private RoleResponse toMinimalRoleResponse(Role role) {
+        return RoleResponse.builder()
+                .id(role.getId())
+                .name(role.getRoleName())
+                .code(role.getRoleCode())
+                .description(role.getDescription())
+                .isSystem(role.getIsSystem())
+                .isActive(role.isActive())
+                .userCount(0)
+                .assignedUserNames(List.of())
+                .createdAt(role.getCreatedAt())
+                .updatedAt(role.getUpdatedAt())
                 .build();
     }
 
