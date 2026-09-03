@@ -2,6 +2,7 @@ package com.lawfirm.erp.firm.controller;
 
 import com.lawfirm.erp.common.constant.FirmConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
+import com.lawfirm.erp.common.dto.SystemConfigSettingView;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.exception.ForbiddenException;
@@ -16,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -34,10 +36,10 @@ public class FirmConfigController {
 
     @GetMapping
     @Operation(summary = FirmConstants.GET_FIRM_CONFIG_SUMMARY, description = FirmConstants.GET_FIRM_CONFIG_DESCRIPTION)
-    public ResponseEntity<ApiResponse<Map<String, String>>> getConfig() {
+    public ResponseEntity<ApiResponse<List<SystemConfigSettingView>>> getConfig() {
         UUID firmId = getRequiredFirmId();
         return responseHandler.ok(
-                systemConfigService.getAllFirm(firmId),
+                systemConfigService.getFirmSettings(firmId),
                 "Firm config fetched"
         );
     }

@@ -7,6 +7,7 @@ import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.AuthStatus;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.dto.admin.response.AdminUserResponse;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
@@ -45,6 +46,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -59,6 +61,7 @@ class SuperAdminServiceTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private AuditService auditService;
     @Mock private AuthMapper authMapper;
+    @Mock private SystemConfigService systemConfigService;
 
     @InjectMocks
     private SuperAdminServiceImpl superAdminService;
@@ -107,6 +110,8 @@ class SuperAdminServiceTest {
                 .build();
         superAdmin.setId(SUPER_ADMIN_ID);
         superAdmin.setActive(true);
+
+        lenient().when(systemConfigService.getGlobal(anyString())).thenReturn(Optional.empty());
     }
 
     @Nested

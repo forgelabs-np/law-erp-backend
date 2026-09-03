@@ -10,6 +10,7 @@ import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
 import com.lawfirm.erp.dto.admin.response.AdminUserResponse;
 import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
@@ -69,6 +70,7 @@ public class SuperAdminServiceImpl implements SuperAdminService {
     private final CurrentUserResolver currentUserResolver;
     private final AuditService auditService;
     private final AuthMapper authMapper;
+    private final SystemConfigService systemConfigService;
 
     @Value("${super-admin.registration-secret:}")
     private String superAdminSecret;
@@ -76,10 +78,11 @@ public class SuperAdminServiceImpl implements SuperAdminService {
     @Override
     @Transactional
     public RegisterResponse registerSuperAdmin(RegisterSuperAdminRequest request) {
-        if (superAdminSecret == null || superAdminSecret.isEmpty()) {
+        String effectiveSecret = resolveRegistrationSecret();
+        if (effectiveSecret == null || effectiveSecret.isEmpty()) {
             throw new RuntimeException("Super admin registration is disabled");
         }
-        if (!superAdminSecret.equals(request.getSecretKey())) {
+        if (!effectiveSecret.equals(request.getSecretKey())) {
             throw new RuntimeException("Invalid secret key for super admin registration");
         }
 
@@ -112,7 +115,11 @@ public class SuperAdminServiceImpl implements SuperAdminService {
         user.setFirm(systemFirm);
         user.setRole(superAdminRole);
         user.setUserType(UserType.SUPER_ADMIN);
-        user.setMfaEnabled(true);
+        // DB-driven MFA policy: force MFA on the new super admin only while
+        // enforcement is on and SUPER_ADMIN is in the required roles (default: on).
+        boolean mfaRequired = systemConfigService.isMfaEnabled()
+                && systemConfigService.mfaRequiredRoleCodes().contains("SUPER_ADMIN");
+        user.setMfaEnabled(mfaRequired);
         user.setActive(true);
         user = userRepository.save(user);
 
@@ -125,6 +132,18 @@ public class SuperAdminServiceImpl implements SuperAdminService {
                 .userId(user.getId())
                 .message("Super admin registration successful!")
                 .build();
+    }
+
+    /**
+     * Registration secret resolution: DB (REGISTRATION_SECRET) wins when set,
+     * otherwise fall back to the env/yml value. DB-first lets the platform run
+     * without rebuilds; the yml fallback covers the very first boot, before any
+     * super admin exists to write config.
+     */
+    private String resolveRegistrationSecret() {
+        return systemConfigService.getGlobal(SystemConfigService.KEY_REGISTRATION_SECRET)
+                .filter(secret -> !secret.isBlank())
+                .orElse(superAdminSecret);
     }
 
     @Override

@@ -1,0 +1,356 @@
+{
+  "info": {
+    "name": "System Config (DB-driven Settings)",
+    "description": "Super Admin + Firm Admin config endpoints for the DB-driven SystemConfig settings registry.\n\nSet two collection variables:\n  baseUrl  -> e.g. http://localhost:8080\n  firmId   -> any real firm UUID (only needed for the per-firm calls)\n\nFlow: Register (one-time, needs REGISTRATION_SECRET) -> Login (script stores the JWT in `token`) -> GET/PUT config.\n\nDemo of the no-rebuild promise: PUT  {\"MFA_ENABLED\": \"N\"}  and a brand-new firm admin is no longer forced into MFA; PUT it back to \"Y\" to re-enable. No restart needed.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "token", "value": "" },
+    { "key": "firmId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Register Super Admin (one-time, public)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('registration status', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"fullName\": \"Platform Admin\",\n    \"email\": \"admin@system.com\",\n    \"mobileNo\": \"9800000000\",\n    \"username\": \"admin\",\n    \"password\": \"Admin@123\",\n    \"secretKey\": \"cdae9adca9e7cb0ab2afb82e2a2a74b7\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "register"]
+            },
+            "description": "Creates the first super admin. `secretKey` must match REGISTRATION_SECRET (seeded empty -> falls back to the env `super-admin.registration-secret` from application-dev.yml). If a super admin already exists this fails by design."
+          }
+        },
+        {
+          "name": "Super Admin Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('login ok', function () { pm.response.to.have.status(200); });",
+                  "if (body.data && body.data.accessToken) {",
+                  "    pm.collectionVariables.set('token', body.data.accessToken);",
+                  "    console.log('token stored');",
+                  "} else if (body.data && body.data.status === 'MFA_REQUIRED') {",
+                  "    console.log('MFA required - re-send with a totpCode from your authenticator');",
+                  "} else if (body.data && body.data.status === 'MFA_SETUP_REQUIRED') {",
+                  "    console.log('Scan the QR (mfaQrCodeUri) then confirm via /api/v1/auth/mfa/setup/confirm');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"admin\",\n    \"password\": \"Admin@123\",\n    \"totpCode\": \"\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "login"]
+            },
+            "description": "Stores data.accessToken into the collection variable `token`. If MFA is on (default) the login returns MFA_SETUP_REQUIRED (first time) or MFA_REQUIRED (needs data.totpCode)."
+          }
+        },
+        {
+          "name": "Firm Admin Login (for firm-scoped config)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.data && body.data.accessToken) {",
+                  "    pm.collectionVariables.set('token', body.data.accessToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"apx.admin\",\n    \"password\": \"Firm@123\",\n    \"lawFirmCode\": \"APX\",\n    \"totpCode\": \"\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Internal-user (firm) login. Replace username/password/lawFirmCode with a real firm admin. Overwrites `token` with the firm admin JWT - use for the `5. Firm scope` folder."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Global config (Super Admin)",
+      "item": [
+        {
+          "name": "GET /config - all global settings with metadata",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "config"]
+            },
+            "description": "Returns every active GLOBAL setting as typed rows (configGroup, inputType, allowedValues, description, allowEdit). PASSWORD rows (SMTP_PASSWORD, REGISTRATION_SECRET) come back DECRYPTED - admins own these values. A future SETTINGS UI renders one row per item."
+          }
+        },
+        {
+          "name": "PUT /config - disable MFA enforcement (no rebuild!)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MFA_ENABLED\": \"N\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "config"]
+            },
+            "description": "MFA_ENABLED is RADIO(Y,N). N = nobody is FORCED to have MFA (users who already enabled it keep being challenged - per-user stays authoritative). Flip back to Y to re-enforce. Takes effect on the next request - no backend restart."
+          }
+        },
+        {
+          "name": "PUT /config - change required roles",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MFA_REQUIRED_ROLES\": \"SUPER_ADMIN\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "config"]
+            },
+            "description": "Comma-separated roles that must have MFA enabled. Setting it to SUPER_ADMIN only means new firm admins are no longer forced. Only enforced where the policy is read: firm creation, super-admin registration, and the boot sweep."
+          }
+        },
+        {
+          "name": "PUT /config - SMTP email settings (PASSWORD auto-encrypted)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"SMTP_HOST\": \"smtp.gmail.com\",\n  \"SMTP_PORT\": \"587\",\n  \"SMTP_USERNAME\": \"noreply@lawfirm.com\",\n  \"SMTP_PASSWORD\": \"app-password\",\n  \"SMTP_FROM_NAME\": \"My Law Firm\",\n  \"SMTP_FROM_ADDRESS\": \"noreply@lawfirm.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "config"]
+            },
+            "description": "SMTP_PASSWORD is PASSWORD type -> AES-256 encrypted at rest (encrypted=true in DB). GET /config returns it decrypted. SMTP_PORT is NUMBER type - sending a non-numeric value is rejected with a 400."
+          }
+        },
+        {
+          "name": "PUT /config - INVALID radio value (expect 400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MFA_ENABLED\": \"MAYBE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "config"]
+            },
+            "description": "Server-side validation against allowedValues (Y,N) - proves a bad value can never reach the DB."
+          }
+        },
+        {
+          "name": "DELETE /config/APP_NAME - reset key to default",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/config/APP_NAME",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "config", "APP_NAME"]
+            },
+            "description": "Deleting a key reverts it to the code default (NepalCRM). On next boot DataInitializer re-seeds it only if it is still absent. Locked keys (REGISTRATION_SECRET after it is set) reject DELETE with 400."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Per-firm config (Super Admin)",
+      "item": [
+        {
+          "name": "GET /firms/{firmId}/config",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms/{{firmId}}/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms", "{{firmId}}", "config"]
+            }
+          }
+        },
+        {
+          "name": "PUT /firms/{firmId}/config - set branding for a firm",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"BRAND_COLOR_PRIMARY\": \"#1A237E\",\n  \"TIMEZONE\": \"Asia/Kathmandu\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms/{{firmId}}/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms", "{{firmId}}", "config"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. MFA login flow (only if you turned MFA on)",
+      "item": [
+        {
+          "name": "Confirm MFA setup (first login, after scanning QR)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"mfaToken\": \"<mfaToken from login>\",\n    \"totpCode\": \"123456\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/mfa/setup/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "mfa", "setup", "confirm"]
+            }
+          }
+        },
+        {
+          "name": "Validate MFA code (subsequent logins)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"mfaToken\": \"<mfaToken from login>\",\n    \"totpCode\": \"123456\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/mfa/validate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "mfa", "validate"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Firm scope config (Firm Admin, own firm only)",
+      "item": [
+        {
+          "name": "GET /api/v1/firm/config",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "config"]
+            },
+            "description": "Requires a FIRM admin token (see 'Firm Admin Login'). Returns only the calling firm's FIRM-scoped settings."
+          }
+        },
+        {
+          "name": "PUT /api/v1/firm/config - rebrand own firm",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"BRAND_COLOR_PRIMARY\": \"#0D47A1\",\n  \"BRAND_COLOR_SECONDARY\": \"#E3F2FD\",\n  \"EMAIL_FOOTER_TEXT\": \"Confidential - for the intended recipient only\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "config"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

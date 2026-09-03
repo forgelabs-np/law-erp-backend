@@ -1,7 +1,7 @@
 # Project State
 
 ## Current Focus
-RBAC system fully wired: Super Admin → Firm Admin → Employee permission flow with ceiling enforcement and Super Admin override.
+SystemConfig is now a DB-driven settings registry (grouped/typed, seeded defaults, MFA policy + registration secret + SMTP read from DB at runtime — no rebuild). UserType FIRM expansion + audit filtering done earlier.
 
 ## Branch
 `devG`
@@ -12,12 +12,12 @@ RBAC system fully wired: Super Admin → Firm Admin → Employee permission flow
 - Modules: Auth, RBAC, Case Management, Invoicing, Super Admin, Customer, Firm, Tenant
 
 ## Recent Work (this session)
-- **Firm Admin Role CRUD** — `POST/DELETE/PATCH /api/v1/firm/roles` for custom role management with firm scoping
-- **Super Admin Override** — `PUT /api/v1/super-admin/firms/{firmId}/roles/{roleId}/permissions` bypasses all ceilings
-- **Module Hard Delete Fix** — cascade deletes `firm_modules` + `module_permissions` + children before deleting module row
-- **Swagger @Operation Constants Refactoring** — extracted ~60 hardcoded strings from 19 controllers into centralized constants
-- All 230 tests pass, 0 failures
+- **UserType Expansion** — added `FIRM` (firm admin) between SUPER_ADMIN and FIRM_USER; firm admins now use FIRM type
+- **Audit Log Filtering** — `GET /super-admin/audit` supports `userType` + `userId` params at DB level; `FIRM` maps to char 'A'
+- **DB Migration** — `V2026_09_03` updates CHECK constraint, backfills existing firm admins, updates system FIRM_ADMIN role
+- **DB-Driven System Config** — settings metadata columns + migration `V2026_09_03_1`; MFA policy/registration secret/SMTP configurable from DB (no rebuild); boot-seeded defaults (insert-if-missing); typed admin GET views w/ decrypted values; 243 tests green
 
 ## Deep History Index
 <!-- pointers to docs/ for full feature writeups -->
 - `memory/2026-09-02.md` — MFA reset, user delete, SA audit logs, pagination, @Operation constants, module delete fix, RBAC role CRUD + override
+- `memory/2026-09-03.md` — UserType FIRM expansion, audit log filtering by userType/userId

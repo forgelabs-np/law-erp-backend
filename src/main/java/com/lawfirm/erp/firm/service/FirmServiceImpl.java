@@ -1,6 +1,7 @@
 package com.lawfirm.erp.firm.service;
 
 import com.lawfirm.erp.common.constant.RoleCode;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.modules.email.service.EmailService;
 import com.lawfirm.erp.common.enums.AuditAction;
@@ -39,6 +40,7 @@ public class FirmServiceImpl implements FirmService {
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
     private final EmailService emailService;
+    private final SystemConfigService systemConfigService;
 
     @Transactional
     public FirmCreationResponse createFirm(CreateFirmRequest request) {
@@ -78,6 +80,11 @@ public class FirmServiceImpl implements FirmService {
                 .orElseThrow(() -> new BusinessRuleException(
                         "Firm-scoped " + RoleCode.FIRM_ADMIN + " role not found after cloning — check DataInitializer seeded " + RoleCode.FIRM_ADMIN + " system role"));
 
+        // DB-driven MFA policy: force MFA on the new firm admin only while enforcement
+        // is on and FIRM_ADMIN is in the required roles (default: on).
+        boolean adminMfaRequired = systemConfigService.isMfaEnabled()
+                && systemConfigService.mfaRequiredRoleCodes().contains(RoleCode.FIRM_ADMIN);
+
         User admin = User.builder()
                 .username(request.getAdminUsername())
                 .email(request.getAdminEmail())
@@ -92,7 +99,7 @@ public class FirmServiceImpl implements FirmService {
                 .isBlocked(false)
                 .loginAttempts(0)
                 .mustChangePassword(true)
-                .mfaEnabled(true)
+                .mfaEnabled(adminMfaRequired)
                 .build();
         admin.setActive(true);
         admin = userRepository.save(admin);

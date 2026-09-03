@@ -405,10 +405,6 @@ public class EmployeeServiceImpl implements EmployeeService {
         return role;
     }
 
-    private boolean mfaRequiredFor(Role role) {
-        return "FIRM_ADMIN".equals(role.getRoleCode());
-    }
-
     private String generateUniqueUsername(String firmCode, String baseName) {
         String base = UsernameGenerator.build(firmCode, baseName);
         String candidate = base;

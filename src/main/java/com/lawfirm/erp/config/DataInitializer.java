@@ -7,6 +7,7 @@ import com.lawfirm.erp.common.enums.PermissionAction;
 import com.lawfirm.erp.common.enums.PermissionScope;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.entity.FirmModule;
@@ -73,6 +74,7 @@ public class DataInitializer implements CommandLineRunner {
     private final UserRepository userRepository;
     private final FirmModuleRepository firmModuleRepository;
     private final RenewalTypeRepository renewalTypeRepository;
+    private final SystemConfigService systemConfigService;
 
     private static final String FULL      = "FULL";
     private static final String READ_ONLY = "READ_ONLY";
@@ -86,7 +88,11 @@ public class DataInitializer implements CommandLineRunner {
 
         createTenantTypes();
         Firm systemFirm = createSystemFirmForSuperAdmin();
-        migrateExistingSuperAdminMfa();
+        // Seed DB-driven settings defaults before anything reads policy from them.
+        systemConfigService.seedGlobalDefaults();
+        if (mfaEnforcementOn()) {
+            migrateExistingSuperAdminMfa();
+        }
         createSystemRoles();
         createModulesAndPermissions();
         assignPermissionsToRoles();
@@ -137,6 +143,11 @@ public class DataInitializer implements CommandLineRunner {
     // ========================================================================
     // Migrate existing SUPER_ADMIN users — force MFA
     // ========================================================================
+    private boolean mfaEnforcementOn() {
+        return systemConfigService.isMfaEnabled()
+                && systemConfigService.mfaRequiredRoleCodes().contains(RoleCode.SUPER_ADMIN);
+    }
+
     private void migrateExistingSuperAdminMfa() {
         List<User> superAdmins = userRepository.findByUserType(UserType.SUPER_ADMIN);
         for (User sa : superAdmins) {
