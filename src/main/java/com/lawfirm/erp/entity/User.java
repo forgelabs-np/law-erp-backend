@@ -132,6 +132,10 @@ public class User extends ActiveAuditableEntity implements UserDetails {
         return userType == UserType.SUPER_ADMIN;
     }
 
+    public boolean isFirmAdmin() {
+        return userType == UserType.FIRM;
+    }
+
     public boolean requiresMfa() {
         return Boolean.TRUE.equals(mfaEnabled);
     }

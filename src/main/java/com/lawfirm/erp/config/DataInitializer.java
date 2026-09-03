@@ -154,7 +154,7 @@ public class DataInitializer implements CommandLineRunner {
     private void createSystemRoles() {
         Object[][] roles = {
                 {RoleCode.SUPER_ADMIN, "Full system access - controls everything", true, null},
-                {RoleCode.FIRM_ADMIN,  "Manages law firm operations", true, UserType.FIRM_USER},
+                {RoleCode.FIRM_ADMIN,  "Manages law firm operations", true, UserType.FIRM},
                 {RoleCode.ADVOCATE,    "Practicing lawyer", true, UserType.FIRM_USER},
                 {RoleCode.PARALEGAL,   "Support staff", true, UserType.FIRM_USER},
                 {RoleCode.CLIENT,      "Client of the firm", true, UserType.CLIENT}

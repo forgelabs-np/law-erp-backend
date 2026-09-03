@@ -79,14 +79,16 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
             active = userRepository.countActiveByFirmId(firmId);
         } else {
             total = userRepository.count();
-            active = userRepository.countByUserType(UserType.FIRM_USER)
+            active = userRepository.countByUserType(UserType.FIRM)
+                    + userRepository.countByUserType(UserType.FIRM_USER)
                     + userRepository.countByUserType(UserType.SUPER_ADMIN);
         }
         long inactive = total - active;
 
         long advocates = firmId != null
                 ? userRepository.countByFirmIdAndRoleCode(firmId, "ADVOCATE")
-                : userRepository.countByUserType(UserType.FIRM_USER); // rough upper bound
+                : userRepository.countByUserType(UserType.FIRM_USER)
+                        + userRepository.countByUserType(UserType.FIRM); // rough upper bound
         long paralegals = firmId != null
                 ? userRepository.countByFirmIdAndRoleCode(firmId, "PARALEGAL")
                 : 0;

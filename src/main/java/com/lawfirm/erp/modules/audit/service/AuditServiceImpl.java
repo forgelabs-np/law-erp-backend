@@ -89,6 +89,7 @@ public class AuditServiceImpl implements AuditService {
 
     private String toUserTypeChar(AuthenticatedUser user) {
         if (user.isSuperAdmin()) return "S";
+        if (user.isFirmAdmin()) return "A";
         if (user.isClient()) return "C";
         return "F";
     }

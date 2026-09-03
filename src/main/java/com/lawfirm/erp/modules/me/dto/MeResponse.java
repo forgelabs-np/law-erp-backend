@@ -20,7 +20,7 @@ public class MeResponse {
     private String email;
     private String mobileNo;
     private String profilePhotoUrl;
-    private String userType;          // SUPER_ADMIN | FIRM_USER | CLIENT
+    private String userType;          // SUPER_ADMIN | FIRM | FIRM_USER | CLIENT
 
     // ── Firm context ──────────────────────────────────────────────────────
     private FirmInfo firm;            // null for SUPER_ADMIN

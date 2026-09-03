@@ -22,7 +22,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/super-admin/audit")
@@ -36,7 +35,9 @@ public class SuperAdminAuditController {
 
     /**
      * Get all audit logs across all firms — no firm context required.
-     * Optional filters: action, date range, userType.
+     * Optional filters: action, date range, userType, userId.
+     *
+     * UserType values: S (SUPER_ADMIN), A (FIRM), F (FIRM_USER), C (CLIENT)
      */
     @GetMapping
     @Operation(summary = SuperAdminConstants.GET_ALL_AUDIT_LOGS_SUMMARY, description = SuperAdminConstants.GET_ALL_AUDIT_LOGS_DESCRIPTION)
@@ -45,34 +46,37 @@ public class SuperAdminAuditController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate fromDate,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate toDate,
             @RequestParam(required = false) String userType,
+            @RequestParam(required = false) UUID userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
         LocalDateTime from = fromDate != null ? fromDate.atStartOfDay() : null;
         LocalDateTime to = toDate != null ? toDate.atTime(LocalTime.MAX) : null;
 
-        Page<AuditLog> result;
+        // Normalize userType: accept full enum names (FIRM, FIRM_USER, etc.) and map to char
+        String userTypeChar = resolveUserTypeChar(userType);
 
-        if (action != null) {
-            result = auditLogRepository.findByActionGlobal(action, from, to,
-                    PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
-        } else {
-            result = auditLogRepository.findAllWithFilters(from, to,
-                    PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
-        }
-
-        // Filter by userType if provided
-        if (userType != null && !userType.isBlank()) {
-            result = new org.springframework.data.domain.PageImpl<>(
-                    result.getContent().stream()
-                            .filter(log -> userType.equalsIgnoreCase(log.getUserType()))
-                            .collect(Collectors.toList()),
-                    result.getPageable(),
-                    result.getTotalElements()
-            );
-        }
+        Page<AuditLog> result = auditLogRepository.findAllWithFilters(
+                action, userTypeChar, userId, from, to,
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
 
         return responseHandler.ok(result, "Audit logs fetched successfully");
+    }
+
+    /**
+     * Maps UserType enum names to the single-char stored in audit_logs.user_type.
+     * Accepts: S, A, F, C (char) or SUPER_ADMIN, FIRM, FIRM_USER, CLIENT (enum name).
+     */
+    private String resolveUserTypeChar(String userType) {
+        if (userType == null || userType.isBlank()) return null;
+        String upper = userType.trim().toUpperCase();
+        return switch (upper) {
+            case "S", "SUPER_ADMIN" -> "S";
+            case "A", "FIRM" -> "A";
+            case "F", "FIRM_USER" -> "F";
+            case "C", "CLIENT" -> "C";
+            default -> null;
+        };
     }
 
     /**

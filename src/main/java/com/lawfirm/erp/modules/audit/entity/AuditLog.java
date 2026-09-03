@@ -52,7 +52,7 @@ public class AuditLog {
     private UUID userId;
 
     @Column(name = "user_type", nullable = false, length = 15)
-    private String userType;                // 'S' 'F' 'C'  — single char, not full enum string
+    private String userType;                // 'S'=SUPER_ADMIN 'A'=FIRM 'F'=FIRM_USER 'C'=CLIENT
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30, columnDefinition = "CHAR(30)")

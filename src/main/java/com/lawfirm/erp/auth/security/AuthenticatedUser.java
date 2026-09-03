@@ -26,6 +26,10 @@ public class AuthenticatedUser {
         return "SUPER_ADMIN".equals(userType);
     }
 
+    public boolean isFirmAdmin() {
+        return "FIRM".equals(userType);
+    }
+
     public boolean isFirmUser() {
         return "FIRM_USER".equals(userType);
     }

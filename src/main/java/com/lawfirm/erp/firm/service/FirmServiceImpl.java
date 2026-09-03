@@ -86,7 +86,7 @@ public class FirmServiceImpl implements FirmService {
                 .fullName(request.getAdminFullName())
                 .firm(firm)
                 .role(firmScopedAdminRole)
-                .userType(UserType.FIRM_USER)
+                .userType(UserType.FIRM)
                 .isEmailVerified(true)
                 .isMobileVerified(true)
                 .isBlocked(false)

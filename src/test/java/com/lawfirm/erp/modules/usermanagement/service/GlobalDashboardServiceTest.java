@@ -161,6 +161,7 @@ class GlobalDashboardServiceTest {
 
         // UserStats — uses count queries
         when(userRepository.count()).thenReturn(3L);
+        when(userRepository.countByUserType(UserType.FIRM)).thenReturn(0L);
         when(userRepository.countByUserType(UserType.FIRM_USER)).thenReturn(2L);
         when(userRepository.countByUserType(UserType.SUPER_ADMIN)).thenReturn(1L);
         when(userRepository.countByUserType(UserType.CLIENT)).thenReturn(0L);

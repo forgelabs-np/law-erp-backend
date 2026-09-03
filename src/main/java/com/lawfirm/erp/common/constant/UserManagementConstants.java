@@ -6,7 +6,7 @@ public final class UserManagementConstants {
 
     // UserManagementController
     public static final String LIST_USERS_SUMMARY = "List all users in the firm";
-    public static final String LIST_USERS_DESCRIPTION = "Returns both employees (FIRM_USER) and clients (CLIENT). Filter by userType, roleId, or isActive status.";
+    public static final String LIST_USERS_DESCRIPTION = "Returns firm admins (FIRM), employees (FIRM_USER), and clients (CLIENT). Filter by userType, roleId, or isActive status.";
 
     public static final String SEARCH_USERS_SUMMARY = "Search users by name, email, username or mobile";
     public static final String SEARCH_USERS_DESCRIPTION = "Case-insensitive partial match across all users in the firm.";

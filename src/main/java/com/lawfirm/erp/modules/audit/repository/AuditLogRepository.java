@@ -90,15 +90,6 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             Pageable pageable);
 
 
-    @Query("SELECT a FROM AuditLog a WHERE a.action = :action " +
-            "AND (a.createdAt >= COALESCE(:from, a.createdAt)) " +
-            "AND (a.createdAt <= COALESCE(:to, a.createdAt)) " +
-            "ORDER BY a.createdAt DESC")
-    Page<AuditLog> findByActionGlobal(
-            @Param("action") AuditAction action,
-            @Param("from") LocalDateTime from,
-            @Param("to") LocalDateTime to,
-            Pageable pageable);
     // ── Additional useful queries ──────────────────────────────────────────
 
     /**
@@ -137,13 +128,19 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     // ── Super Admin: cross-firm queries ────────────────────────────────────
 
     /**
-     * All audit logs with optional date range filter (no firm filter).
+     * All audit logs with optional date range, action, userType, and userId filters.
      */
     @Query("SELECT a FROM AuditLog a " +
-            "WHERE (a.createdAt >= COALESCE(:from, a.createdAt)) " +
+            "WHERE (:action IS NULL OR a.action = :action) " +
+            "AND (:userType IS NULL OR a.userType = :userType) " +
+            "AND (:userId IS NULL OR a.userId = :userId) " +
+            "AND (a.createdAt >= COALESCE(:from, a.createdAt)) " +
             "AND (a.createdAt <= COALESCE(:to, a.createdAt)) " +
             "ORDER BY a.createdAt DESC")
     Page<AuditLog> findAllWithFilters(
+            @Param("action") AuditAction action,
+            @Param("userType") String userType,
+            @Param("userId") UUID userId,
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to,
             Pageable pageable);

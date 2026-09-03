@@ -9,7 +9,7 @@ import java.util.UUID;
 
 /**
  * Lightweight user row — used in list and search endpoints.
- * Covers both FIRM_USER (employees) and CLIENT in one response.
+ * Covers FIRM (firm admin), FIRM_USER (employees), and CLIENT in one response.
  */
 @Data
 @Builder
@@ -19,7 +19,7 @@ public class UserSummaryResponse {
     private String fullName;
     private String email;
     private String mobileNo;
-    private UserType userType;        // FIRM_USER | CLIENT
+    private UserType userType;        // FIRM | FIRM_USER | CLIENT
     private boolean isActive;
     private UUID roleId;
     private String roleName;

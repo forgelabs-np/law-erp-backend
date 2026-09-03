@@ -110,8 +110,8 @@ public class FirmAdminServiceImpl implements FirmAdminService {
      * Does NOT call roleRepository — checks the role already loaded on the user.
      */
     private void validateIsFirmAdmin(User user) {
-        if (user.getUserType() != UserType.FIRM_USER) {
-            throw new BusinessRuleException("User is not a firm user");
+        if (user.getUserType() != UserType.FIRM) {
+            throw new BusinessRuleException("User is not a firm admin");
         }
         if (user.getRole() == null || !"FIRM_ADMIN".equals(user.getRole().getRoleCode())) {
             throw new BusinessRuleException("User does not have FIRM_ADMIN role");
