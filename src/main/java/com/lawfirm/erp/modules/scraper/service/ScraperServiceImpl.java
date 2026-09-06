@@ -7,6 +7,7 @@ import com.lawfirm.erp.modules.scraper.dto.CaseDetailResponse;
 import com.lawfirm.erp.modules.scraper.dto.HearingRecord;
 import com.lawfirm.erp.modules.scraper.dto.HearingStatusResponse;
 import com.lawfirm.erp.modules.scraper.dto.ScrapeRunResult;
+import com.lawfirm.erp.modules.scraper.entity.ClientCase;
 import com.lawfirm.erp.modules.scraper.entity.Court;
 import com.lawfirm.erp.modules.scraper.entity.DailyHearing;
 import com.lawfirm.erp.modules.scraper.entity.WeeklyHearing;
@@ -27,7 +28,10 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -67,8 +71,25 @@ public class ScraperServiceImpl implements ScraperService {
     }
 
     @Override
+    public List<Court> getAllCourts() {
+        return courtRepository.findByIsActiveTrueOrderByCourtIdAsc();
+    }
+
+    @Override
+    public List<Court> getCourtsByType(String courtType) {
+        return courtRepository.findByCourtTypeOrderByCourtNameEnglishAsc(courtType);
+    }
+
+    @Override
     public List<Integer> getActiveCourts() {
-        return clientCaseRepository.findDistinctActiveCourtIds();
+        // Courts we actually track (ACTIVE client cases) intersected with courts the registry
+        // still marks active — deactivating a row in scraper_courts must stop scraping it even
+        // when client cases reference it (the kill-switch documented on Court.isActive).
+        Set<Integer> tracked = new HashSet<>(clientCaseRepository.findDistinctActiveCourtIds());
+        return courtRepository.findActiveCourtIds().stream()
+                .filter(tracked::contains)
+                .sorted()
+                .toList();
     }
 
     @Override
@@ -133,6 +154,11 @@ public class ScraperServiceImpl implements ScraperService {
     }
 
     @Override
+    public Optional<ClientCase> findClientCaseByCaseNo(String caseNoInternal) {
+        return clientCaseRepository.findByCaseNoInternal(caseNoInternal);
+    }
+
+    @Override
     public HearingStatusResponse getHearingStatus(String caseNoInternal, String dateBs) {
         LocalDate today = LocalDate.now();
         List<HearingStatusResponse.Hearing> upcoming = new ArrayList<>();
@@ -163,19 +189,23 @@ public class ScraperServiceImpl implements ScraperService {
 
         String caseNoBs = null;
         Integer courtId = null;
-        String courtName = null;
+        String courtNameNepali = null;
+        String courtNameEnglish = null;
         var cc = clientCaseRepository.findByCaseNoInternal(caseNoInternal);
         if (cc.isPresent()) {
             caseNoBs = cc.get().getCaseNoBs();
             courtId = cc.get().getCourtId();
-            courtName = scraperMapper.resolveCourtName(courtRepository.findByCourtId(courtId).orElse(null));
+            Court court = courtRepository.findByCourtId(courtId).orElse(null);
+            courtNameNepali = scraperMapper.resolveCourtNameNepali(court);
+            courtNameEnglish = scraperMapper.resolveCourtNameEnglish(court);
         }
 
         return HearingStatusResponse.builder()
                 .caseNoInternal(caseNoInternal)
                 .caseNoBs(caseNoBs)
                 .courtId(courtId)
-                .courtName(courtName)
+                .courtNameNepali(courtNameNepali)
+                .courtNameEnglish(courtNameEnglish)
                 .upcoming(upcoming)
                 .history(history)
                 .build();
@@ -248,4 +278,5 @@ public class ScraperServiceImpl implements ScraperService {
     private void alert(String message) {
         log.error("[scraper-alert] {}", message);
     }
+
 }

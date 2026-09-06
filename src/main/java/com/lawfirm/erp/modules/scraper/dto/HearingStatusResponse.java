@@ -14,7 +14,8 @@ public class HearingStatusResponse {
     private String caseNoInternal;
     private String caseNoBs;
     private Integer courtId;
-    private String courtName;
+    private String courtNameNepali;
+    private String courtNameEnglish;
     private List<Hearing> upcoming;
     private List<Hearing> history;
 

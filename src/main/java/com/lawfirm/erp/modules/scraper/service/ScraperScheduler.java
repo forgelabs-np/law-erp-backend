@@ -19,7 +19,7 @@ public class ScraperScheduler {
     private final HearingExportService exportService;
     private final ScraperProperties properties;
 
-    @Scheduled(cron = "${scraper.daily-cron:0 5 10 * * MON-FRI}")
+    @Scheduled(cron = "${scraper.daily-cron:0 5 10 * * MON-FRI}")  // 10:05 AM Nepal time, Mon-Fri
     public void runDaily() {
         if (!properties.isEnabled()) return;
         String todayBs = NepaliDateUtil.adToBs(LocalDate.now());

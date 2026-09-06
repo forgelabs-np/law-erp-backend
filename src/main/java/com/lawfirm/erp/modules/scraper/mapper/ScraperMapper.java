@@ -34,7 +34,11 @@ public class ScraperMapper {
         return history;
     }
 
-    public String resolveCourtName(Court court) {
-        return court != null ? court.getCourtName() : null;
+    public String resolveCourtNameNepali(Court court) {
+        return court != null ? court.getCourtNameNepali() : null;
+    }
+
+    public String resolveCourtNameEnglish(Court court) {
+        return court != null ? court.getCourtNameEnglish() : null;
     }
 }

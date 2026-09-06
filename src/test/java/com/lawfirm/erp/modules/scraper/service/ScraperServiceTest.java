@@ -79,6 +79,7 @@ class ScraperServiceTest {
     @DisplayName("Derives courts from client cases and runs all of them, then matches")
     void fullDailyRun() {
         when(clientCaseRepository.findDistinctActiveCourtIds()).thenReturn(List.of(39, 63));
+        when(courtRepository.findActiveCourtIds()).thenReturn(List.of(39, 63));
         when(courtSiteClient.scrapeDaily(anyInt(), any())).thenReturn("<html>...</html>");
         when(dailyParser.parse(any(), any())).thenReturn(List.of(record(39)));
         when(ingestionService.upsertDaily(any())).thenReturn(1);
@@ -95,6 +96,7 @@ class ScraperServiceTest {
     @DisplayName("0-row result is reported as success with zero rows (list not published)")
     void zeroRows() {
         when(clientCaseRepository.findDistinctActiveCourtIds()).thenReturn(List.of(39));
+        when(courtRepository.findActiveCourtIds()).thenReturn(List.of(39));
         when(courtSiteClient.scrapeDaily(anyInt(), any())).thenReturn("<html>no rows</html>");
         when(dailyParser.parse(any(), any())).thenReturn(List.of());
 
@@ -110,6 +112,7 @@ class ScraperServiceTest {
     @DisplayName("A failing court scrape is reported as failure and does not stop matching")
     void failureDoesNotStopRun() {
         when(clientCaseRepository.findDistinctActiveCourtIds()).thenReturn(List.of(39, 63));
+        when(courtRepository.findActiveCourtIds()).thenReturn(List.of(39, 63));
         when(courtSiteClient.scrapeDaily(eq(39), any())).thenThrow(new RuntimeException("timeout"));
         when(courtSiteClient.scrapeDaily(eq(63), any())).thenReturn("<html></html>");
         when(dailyParser.parse(any(), any())).thenReturn(List.of(record(63)));
@@ -135,6 +138,38 @@ class ScraperServiceTest {
     }
 
     @Test
+    @DisplayName("Court deactivated in the registry is excluded even with active client cases")
+    void registryKillSwitchExcludesCourt() {
+        when(clientCaseRepository.findDistinctActiveCourtIds()).thenReturn(List.of(39, 63));
+        when(courtRepository.findActiveCourtIds()).thenReturn(List.of(39)); // 63 killed in registry
+        when(courtSiteClient.scrapeDaily(anyInt(), any())).thenReturn("<html>...</html>");
+        when(dailyParser.parse(any(), any())).thenReturn(List.of(record(39)));
+        when(ingestionService.upsertDaily(any())).thenReturn(1);
+
+        List<ScrapeRunResult> results = service.runDailyScrape("2083-05-01");
+
+        assertEquals(1, results.size());
+        assertEquals(39, results.get(0).getCourtId());
+        verify(courtSiteClient, times(1)).scrapeDaily(anyInt(), any());
+    }
+
+    @Test
+    @DisplayName("Court with no client cases is never scraped despite being active in the registry")
+    void courtWithoutClientCasesNotScraped() {
+        when(clientCaseRepository.findDistinctActiveCourtIds()).thenReturn(List.of(39));
+        when(courtRepository.findActiveCourtIds()).thenReturn(List.of(39, 63, 57));
+        when(courtSiteClient.scrapeDaily(anyInt(), any())).thenReturn("<html>...</html>");
+        when(dailyParser.parse(any(), any())).thenReturn(List.of(record(39)));
+        when(ingestionService.upsertDaily(any())).thenReturn(1);
+
+        List<ScrapeRunResult> results = service.runDailyScrape("2083-05-01");
+
+        assertEquals(1, results.size());
+        assertEquals(39, results.get(0).getCourtId());
+        verify(courtSiteClient, times(1)).scrapeDaily(anyInt(), any());
+    }
+
+    @Test
     @DisplayName("Hearing-status read path splits upcoming vs history using only our DB")
     void hearingStatus() {
         DailyHearing upcoming = new DailyHearing();
@@ -157,14 +192,16 @@ class ScraperServiceTest {
         when(clientCaseRepository.findByCaseNoInternal("39-081-32030")).thenReturn(Optional.of(cc));
         Court court = new Court();
         court.setCourtId(39);
-        court.setCourtName("काठमाडौं जिल्ला अदालत");
+        court.setCourtNameNepali("काठमाडौं जिल्ला अदालत");
+        court.setCourtNameEnglish("Kathmandu District Court");
         when(courtRepository.findByCourtId(39)).thenReturn(Optional.of(court));
 
         HearingStatusResponse status = service.getHearingStatus("39-081-32030");
 
         assertEquals(1, status.getUpcoming().size());
         assertEquals(1, status.getHistory().size());
-        assertEquals("काठमाडौं जिल्ला अदालत", status.getCourtName());
+        assertEquals("काठमाडौं जिल्ला अदालत", status.getCourtNameNepali());
+        assertEquals("Kathmandu District Court", status.getCourtNameEnglish());
         assertEquals("081-C4-3827", status.getCaseNoBs());
         verifyNoInteractions(courtSiteClient);
     }

@@ -151,6 +151,20 @@ public class HearingMatchingService {
         }
     }
 
+    /**
+     * All matches for a client case, newest first.
+     */
+    public List<HearingMatch> findByClientCaseId(Long clientCaseId) {
+        return matchRepository.findByClientCaseIdOrderByHearingDateAdDesc(clientCaseId);
+    }
+
+    /**
+     * Every match awaiting notification dispatch.
+     */
+    public List<HearingMatch> findUnnotified() {
+        return matchRepository.findByNotifiedFalse();
+    }
+
     // At-least-once: mark notified only after a successful dispatch, so failures are retried.
     private void dispatchPending() {
         for (HearingMatch m : matchRepository.findByNotifiedFalse()) {
