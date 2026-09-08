@@ -96,6 +96,7 @@ public class DataInitializer implements CommandLineRunner {
         createSystemRoles();
         createModulesAndPermissions();
         assignPermissionsToRoles();
+        backfillCustomRoleParentIds();
         seedDefaultRenewalTypes();
         seedModulesForSystemFirm(systemFirm);
 
@@ -298,6 +299,36 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     // ========================================================================
+    // Legacy custom-role backfill (Phase 0)
+    // ========================================================================
+    /**
+     * Custom roles created before parent_role_id was set at creation get an
+     * anchor ONLY when their extendsRole honestly points at a system template.
+     * Never guessed — a wrong anchor would impose a blocking ceiling on SA edits,
+     * which is worse than no anchor (no anchor falls back to the live FIRM_ADMIN
+     * ceiling branch, which is always correct).
+     */
+    private void backfillCustomRoleParentIds() {
+        List<Role> unanchored = roleRepository.findByParentRoleIdIsNullAndIsSystemFalse();
+        int backfilled = 0;
+        for (Role role : unanchored) {
+            Role base = role.getExtendsRole();
+            if (base != null
+                    && Boolean.TRUE.equals(base.getIsSystem())
+                    && base.getFirm() == null
+                    && !RoleCode.SUPER_ADMIN.equals(base.getRoleCode())) {
+                role.setParentRoleId(base.getId());
+                roleRepository.save(role);
+                backfilled++;
+                log.info("  ~ Backfilled parent_role_id for custom role '{}' -> template '{}'",
+                        role.getRoleCode(), base.getRoleCode());
+            }
+        }
+        log.info("  Custom-role parent backfill complete: {} anchored, {} left unanchored",
+                backfilled, unanchored.size() - backfilled);
+    }
+
+    // ========================================================================
     // Role -> Permission assignment matrix
     // ========================================================================
     private void assignPermissionsToRoles() {
@@ -336,6 +367,15 @@ public class DataInitializer implements CommandLineRunner {
                 Role role = roleRepository.findSystemRoleByCode(roleCode).orElse(null);
                 if (role == null) {
                     log.warn("Role not found, skipping: {}", roleCode);
+                    continue;
+                }
+
+                // Seeder freeze (delegation-chain spec §3): a template SA has
+                // edited is authoritative — re-injecting matrix defaults here
+                // would resurrect removed permissions on every reboot and
+                // silently re-break the ceiling invariant.
+                if (role.getLastSaEditAt() != null) {
+                    log.info("    [{}] skipped — template SA-edited at {}", accessLevel, roleCode);
                     continue;
                 }
 

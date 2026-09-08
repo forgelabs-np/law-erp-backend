@@ -1,5 +1,6 @@
 package com.lawfirm.erp.rbac.service;
 
+import com.lawfirm.erp.common.constant.RoleCode;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
@@ -213,10 +214,35 @@ public class RoleManagementServiceImpl implements RoleManagementService {
         role.setRoleCode(request.getCode());
         role.setDescription(request.getDescription());
         role.setIsSystem(false);
+        role.setParentRoleId(resolveParentRoleId(request.getParentRoleId()));
         role.setActive(request.getIsActive() != null ? request.getIsActive() : true);
         role.setCreatedBy(adminId);
         role.setCreatedAt(LocalDateTime.now());
         return role;
+    }
+
+    /**
+     * Resolves the base system template for a new custom role.
+     * Null = no anchor (legal; ceiling then comes from the live FIRM_ADMIN branch).
+     * Provided = must be an active system template and never SUPER_ADMIN.
+     */
+    private UUID resolveParentRoleId(UUID requestedParentRoleId) {
+        if (requestedParentRoleId == null) {
+            return null;
+        }
+        Role parent = roleRepository.findById(requestedParentRoleId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Parent role not found: " + requestedParentRoleId));
+        if (!Boolean.TRUE.equals(parent.getIsSystem()) || parent.getFirm() != null) {
+            throw new BusinessRuleException("Parent role must be a system template");
+        }
+        if (RoleCode.SUPER_ADMIN.equals(parent.getRoleCode())) {
+            throw new BusinessRuleException("SUPER_ADMIN cannot be used as a base template");
+        }
+        if (!parent.isActive()) {
+            throw new BusinessRuleException("Parent role template is not active");
+        }
+        return parent.getId();
     }
 
     @Override
@@ -229,6 +255,13 @@ public class RoleManagementServiceImpl implements RoleManagementService {
     public List<RoleResponse> getActiveRoles() {
         List<Role> roles = roleRepository.findAllActive();
         return batchConvertToCompleteResponse(roles);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RoleResponse> getSystemTemplates() {
+        List<Role> templates = roleRepository.findByFirmIsNullAndIsSystemTrue();
+        return batchConvertToCompleteResponse(templates);
     }
 
     /**

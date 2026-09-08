@@ -13,4 +13,10 @@ public class RolePermissionResponse {
     private String roleName;
     private String roleCode;
     private List<PermissionResponse> permissions;
+
+    /**
+     * Narrowing-cascade effect (spec §7 — never silent): human-readable list of
+     * what this edit also stripped from employee roles. Null when no cascade ran.
+     */
+    private List<String> cascadeEffect;
 }

@@ -34,6 +34,7 @@ import java.util.UUID;
 public class SuperAdminController {
 
     private final SuperAdminService superAdminService;
+    private final com.lawfirm.erp.firm.service.FirmRoleService firmRoleService;
     private final ResponseHandler responseHandler;
 
     @PostMapping("/register")
@@ -70,6 +71,29 @@ public class SuperAdminController {
         return responseHandler.ok(
                 superAdminService.getAllUsersWithRoles(userType, search, firmCode, page, size),
                 "Users with roles fetched successfully"
+        );
+    }
+
+    @GetMapping("/firms/{firmId}/roles")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(summary = SuperAdminConstants.GET_FIRM_ROLES_SUMMARY, description = SuperAdminConstants.GET_FIRM_ROLES_DESCRIPTION)
+    public ResponseEntity<ApiResponse<List<com.lawfirm.erp.dto.admin.response.RoleResponse>>> getFirmRoles(
+            @PathVariable UUID firmId) {
+        return responseHandler.ok(
+                superAdminService.getFirmRoles(firmId),
+                "Firm roles fetched successfully"
+        );
+    }
+
+    @PostMapping("/firms/{firmId}/roles")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(summary = SuperAdminConstants.CREATE_FIRM_ROLE_SUMMARY, description = SuperAdminConstants.CREATE_FIRM_ROLE_DESCRIPTION)
+    public ResponseEntity<ApiResponse<com.lawfirm.erp.dto.admin.response.RoleResponse>> createFirmRole(
+            @PathVariable UUID firmId,
+            @Valid @RequestBody ApiRequest<com.lawfirm.erp.dto.admin.request.RoleRequest> request) {
+        return responseHandler.ok(
+                firmRoleService.createRoleForFirm(firmId, request.getData()),
+                "Firm role created successfully"
         );
     }
 

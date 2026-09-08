@@ -14,8 +14,13 @@ import com.lawfirm.erp.dto.auth.response.LoginResponse;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
+import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
+import com.lawfirm.erp.rbac.entity.RolePermission;
+import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
+import com.lawfirm.erp.dto.admin.response.RoleResponse;
+import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.auth.mapper.AuthMapper;
 import com.lawfirm.erp.auth.security.JwtUtil;
 import com.lawfirm.erp.auth.security.TotpUtil;
@@ -62,6 +67,8 @@ class SuperAdminServiceTest {
     @Mock private AuditService auditService;
     @Mock private AuthMapper authMapper;
     @Mock private SystemConfigService systemConfigService;
+    @Mock private RolePermissionRepository rolePermissionRepository;
+    @Mock private com.lawfirm.erp.rbac.mapper.RbacResponseMapper rbacResponseMapper;
 
     @InjectMocks
     private SuperAdminServiceImpl superAdminService;
@@ -433,6 +440,73 @@ class SuperAdminServiceTest {
             superAdminService.getAllUsersWithRoles(null, "   ", "", 0, 20);
 
             verify(userRepository).findAllWithRoleAndFirmPaged(null, null, null, defaultPageable());
+        }
+    }
+
+    @Nested
+    @DisplayName("getFirmRoles — SA discoverability of a firm's roles (Phase 1)")
+    class GetFirmRoles {
+
+        @Test
+        @DisplayName("Unknown firm -> ResourceNotFoundException")
+        void unknownFirm_notFound() {
+            when(firmRepository.existsById(SYSTEM_FIRM_ID)).thenReturn(false);
+
+            assertThrows(ResourceNotFoundException.class,
+                    () -> superAdminService.getFirmRoles(SYSTEM_FIRM_ID));
+        }
+
+        @Test
+        @DisplayName("Firm roles returned with permissions and user counts")
+        void returnsRolesWithPermissionsAndCounts() {
+            when(firmRepository.existsById(SYSTEM_FIRM_ID)).thenReturn(true);
+
+            Firm firm = new Firm();
+            firm.setId(SYSTEM_FIRM_ID);
+
+            Role role = new Role();
+            role.setId(SYSTEM_ROLE_ID);
+            role.setRoleName("Paralegal");
+            role.setRoleCode("PARALEGAL");
+            role.setIsSystem(false);
+            role.setFirm(firm);
+            when(roleRepository.findByFirmIdAndIsSystemFalse(SYSTEM_FIRM_ID)).thenReturn(List.of(role));
+
+            when(userRepository.countUsersByRoleIds(SYSTEM_FIRM_ID))
+                    .thenReturn(List.<Object[]>of(new Object[]{SYSTEM_ROLE_ID, 3L}));
+
+            Permission perm = Permission.builder()
+                    .code("CASE_MANAGEMENT:VIEW")
+                    .build();
+            RolePermission rp = RolePermission.builder()
+                    .role(role)
+                    .permission(perm)
+                    .build();
+            when(rolePermissionRepository.findByRoleIdIn(List.of(SYSTEM_ROLE_ID)))
+                    .thenReturn(List.of(rp));
+            when(rbacResponseMapper.toPermissionResponse(perm)).thenReturn(
+                    com.lawfirm.erp.dto.admin.response.PermissionResponse.builder()
+                            .code("CASE_MANAGEMENT:VIEW")
+                            .build());
+
+            List<RoleResponse> result = superAdminService.getFirmRoles(SYSTEM_FIRM_ID);
+
+            assertEquals(1, result.size());
+            assertEquals("PARALEGAL", result.get(0).getCode());
+            assertEquals(3, result.get(0).getUserCount());
+            assertEquals(1, result.get(0).getPermissions().size());
+            assertEquals("CASE_MANAGEMENT:VIEW", result.get(0).getPermissions().get(0).getCode());
+        }
+
+        @Test
+        @DisplayName("Firm with no roles -> empty list, not error")
+        void noRoles_emptyList() {
+            when(firmRepository.existsById(SYSTEM_FIRM_ID)).thenReturn(true);
+            when(roleRepository.findByFirmIdAndIsSystemFalse(SYSTEM_FIRM_ID)).thenReturn(List.of());
+
+            List<RoleResponse> result = superAdminService.getFirmRoles(SYSTEM_FIRM_ID);
+
+            assertTrue(result.isEmpty());
         }
     }
 

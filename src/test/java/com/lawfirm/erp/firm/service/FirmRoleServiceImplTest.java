@@ -2,10 +2,14 @@ package com.lawfirm.erp.firm.service;
 
 import com.lawfirm.erp.common.enums.PermissionAction;
 import com.lawfirm.erp.common.enums.PermissionScope;
+import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ForbiddenException;
+import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
+import com.lawfirm.erp.dto.admin.request.RoleRequest;
 import com.lawfirm.erp.firm.entity.Firm;
+import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
@@ -19,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -37,6 +42,7 @@ import static org.mockito.Mockito.*;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class FirmRoleServiceImplTest {
 
+    @Mock private FirmRepository firmRepository;
     @Mock private RoleRepository roleRepository;
     @Mock private RolePermissionRepository rolePermissionRepository;
     @Mock private PermissionRepository permissionRepository;
@@ -214,11 +220,116 @@ class FirmRoleServiceImplTest {
 
             RolePermissionRequest request = new RolePermissionRequest();
             request.setRoleId(ROLE_ID);
-            request.setPermissionIds(List.of(PERM_GLOBAL));
-
-            assertThrows(ForbiddenException.class,
-                    () -> firmRoleService.updateRolePermissions(ROLE_ID, request));
+            request.setPermissionIds(List.of(PERM_GLOBAL));        assertThrows(ForbiddenException.class,
+                () -> firmRoleService.updateRolePermissions(ROLE_ID, request));
             verify(rolePermissionRepository, never()).deleteByRoleId(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("Custom role creation: parent_role_id resolution (Phase 0)")
+    class CreateRoleParentResolution {
+
+        private Firm firm;
+
+        @BeforeEach
+        void setUpFirm() {
+            firm = new Firm();
+            firm.setId(FIRM_ID);
+            // Phase 5 added a firm-existence guard at the top of createRoleForFirm
+            when(firmRepository.existsById(FIRM_ID)).thenReturn(true);
+            when(firmRepository.getReferenceById(FIRM_ID)).thenReturn(firm);
+            when(roleRepository.save(any(Role.class))).thenAnswer(inv -> inv.getArgument(0));
+        }
+
+        private RoleRequest roleRequest(UUID parentRoleId) {
+            RoleRequest request = new RoleRequest();
+            request.setName("Senior Paralegal");
+            request.setCode("SENIOR_PARALEGAL");
+            request.setParentRoleId(parentRoleId);
+            return request;
+        }
+
+        @Test
+        @DisplayName("null parent -> role saved without anchor")
+        void nullParent_savedWithoutAnchor() {
+            firmRoleService.createRole(roleRequest(null));
+
+            ArgumentCaptor<Role> captor = ArgumentCaptor.forClass(Role.class);
+            verify(roleRepository).save(captor.capture());
+            assertNull(captor.getValue().getParentRoleId());
+        }
+
+        @Test
+        @DisplayName("valid active system template -> saved with that parent id")
+        void validTemplate_anchored() {
+            Role template = new Role();
+            template.setId(PARENT_ROLE_ID);
+            template.setRoleCode("PARALEGAL");
+            template.setIsSystem(true);
+            template.setActive(true);
+            when(roleRepository.findById(PARENT_ROLE_ID)).thenReturn(Optional.of(template));
+
+            firmRoleService.createRole(roleRequest(PARENT_ROLE_ID));
+
+            ArgumentCaptor<Role> captor = ArgumentCaptor.forClass(Role.class);
+            verify(roleRepository).save(captor.capture());
+            assertEquals(PARENT_ROLE_ID, captor.getValue().getParentRoleId());
+        }
+
+        @Test
+        @DisplayName("SUPER_ADMIN template rejected as base")
+        void superAdminTemplate_rejected() {
+            Role template = new Role();
+            template.setId(PARENT_ROLE_ID);
+            template.setRoleCode("SUPER_ADMIN");
+            template.setIsSystem(true);
+            template.setActive(true);
+            when(roleRepository.findById(PARENT_ROLE_ID)).thenReturn(Optional.of(template));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> firmRoleService.createRole(roleRequest(PARENT_ROLE_ID)));
+            verify(roleRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("non-system parent rejected")
+        void nonSystemParent_rejected() {
+            Role notATemplate = new Role();
+            notATemplate.setId(PARENT_ROLE_ID);
+            notATemplate.setRoleCode("SOMETHING");
+            notATemplate.setIsSystem(false);
+            notATemplate.setActive(true);
+            when(roleRepository.findById(PARENT_ROLE_ID)).thenReturn(Optional.of(notATemplate));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> firmRoleService.createRole(roleRequest(PARENT_ROLE_ID)));
+            verify(roleRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("inactive template rejected")
+        void inactiveTemplate_rejected() {
+            Role template = new Role();
+            template.setId(PARENT_ROLE_ID);
+            template.setRoleCode("PARALEGAL");
+            template.setIsSystem(true);
+            template.setActive(false);
+            when(roleRepository.findById(PARENT_ROLE_ID)).thenReturn(Optional.of(template));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> firmRoleService.createRole(roleRequest(PARENT_ROLE_ID)));
+            verify(roleRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("nonexistent parent -> ResourceNotFoundException")
+        void missingParent_notFound() {
+            when(roleRepository.findById(PARENT_ROLE_ID)).thenReturn(Optional.empty());
+
+            assertThrows(ResourceNotFoundException.class,
+                    () -> firmRoleService.createRole(roleRequest(PARENT_ROLE_ID)));
+            verify(roleRepository, never()).save(any());
         }
     }
 }

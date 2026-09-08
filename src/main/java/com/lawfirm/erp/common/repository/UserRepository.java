@@ -62,6 +62,12 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query("UPDATE User u SET u.permissionVersion = u.permissionVersion + 1 WHERE u.id = :userId")
     void incrementPermissionVersion(@Param("userId") UUID userId);
 
+    /** Batched invalidation — one UPDATE per role instead of one per user (spec §6). */
+    @Modifying
+    @Transactional
+    @Query("UPDATE User u SET u.permissionVersion = u.permissionVersion + 1 WHERE u.role.id = :roleId")
+    void incrementPermissionVersionByRole(@Param("roleId") UUID roleId);
+
     @Query("SELECT u.id FROM User u WHERE u.role.id = :roleId")
     List<UUID> findUserIdsByRoleId(@Param("roleId") UUID roleId);
 

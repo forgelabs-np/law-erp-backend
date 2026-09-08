@@ -5,8 +5,12 @@ import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
+import com.lawfirm.erp.dto.admin.request.TemplatePermissionRequest;
 import com.lawfirm.erp.dto.admin.request.RoleRequest;
 import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
+import com.lawfirm.erp.dto.admin.response.SyncJobStatusResponse;
+import com.lawfirm.erp.dto.admin.response.TemplatePermissionResponse;
+import com.lawfirm.erp.dto.admin.response.TemplateSyncPreviewResponse;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
 import com.lawfirm.erp.rbac.service.RoleManagementService;
 import com.lawfirm.erp.rbac.service.RolePermissionService;
@@ -30,6 +34,7 @@ public class RoleController {
 
     private final RoleManagementService roleManagementService;
     private final RolePermissionService rolePermissionService;
+    private final com.lawfirm.erp.rbac.service.TemplatePermissionService templatePermissionService;
     private final ResponseHandler responseHandler;
 
     @PostMapping
@@ -57,6 +62,15 @@ public class RoleController {
         return responseHandler.ok(
                 roleManagementService.getActiveRoles(),
                 "Active roles fetched successfully"
+        );
+    }
+
+    @GetMapping("/templates")
+    @Operation(summary = RbacConstants.GET_TEMPLATES_SUMMARY, description = RbacConstants.GET_TEMPLATES_DESCRIPTION)
+    public ResponseEntity<ApiResponse<List<RoleResponse>>> getSystemTemplates() {
+        return responseHandler.ok(
+                roleManagementService.getSystemTemplates(),
+                "System role templates fetched successfully"
         );
     }
 
@@ -91,6 +105,53 @@ public class RoleController {
             @Valid @RequestBody ApiRequest<RolePermissionRequest> request) {
         rolePermissionService.assignPermissionsToRole(request.getData());
         return responseHandler.ok(null, "Permissions assigned to role successfully");
+    }
+
+    // ── Template permission management (delegation chain, spec §5) ──────────
+
+    @GetMapping("/templates/{templateId}/permissions")
+    @Operation(summary = RbacConstants.GET_TEMPLATE_PERMISSIONS_SUMMARY)
+    public ResponseEntity<ApiResponse<TemplatePermissionResponse>> getTemplatePermissions(
+            @PathVariable UUID templateId) {
+        return responseHandler.ok(
+                templatePermissionService.getTemplatePermissions(templateId),
+                "Template permissions fetched successfully"
+        );
+    }
+
+    @GetMapping("/templates/{templateId}/permissions/preview")
+    @Operation(summary = RbacConstants.PREVIEW_TEMPLATE_CHANGE_SUMMARY,
+               description = RbacConstants.PREVIEW_TEMPLATE_CHANGE_DESCRIPTION)
+    public ResponseEntity<ApiResponse<TemplateSyncPreviewResponse>> previewTemplateChange(
+            @PathVariable UUID templateId,
+            @Valid @RequestBody ApiRequest<TemplatePermissionRequest> request) {
+        return responseHandler.ok(
+                templatePermissionService.previewTemplateChange(templateId, request.getData()),
+                "Template change preview generated"
+        );
+    }
+
+    @PutMapping("/templates/{templateId}/permissions")
+    @Operation(summary = RbacConstants.UPDATE_TEMPLATE_PERMISSIONS_SUMMARY,
+               description = RbacConstants.UPDATE_TEMPLATE_PERMISSIONS_DESCRIPTION)
+    public ResponseEntity<ApiResponse<TemplatePermissionResponse>> updateTemplatePermissions(
+            @PathVariable UUID templateId,
+            @Valid @RequestBody ApiRequest<TemplatePermissionRequest> request) {
+        return responseHandler.ok(
+                templatePermissionService.updateTemplatePermissions(templateId, request.getData()),
+                "Template permissions updated — sync fan-out enqueued"
+        );
+    }
+
+    @GetMapping("/sync-jobs/{jobId}")
+    @Operation(summary = RbacConstants.GET_SYNC_JOB_STATUS_SUMMARY,
+               description = RbacConstants.GET_SYNC_JOB_STATUS_DESCRIPTION)
+    public ResponseEntity<ApiResponse<SyncJobStatusResponse>> getSyncJobStatus(
+            @PathVariable UUID jobId) {
+        return responseHandler.ok(
+                templatePermissionService.getSyncJobStatus(jobId),
+                "Sync job status fetched successfully"
+        );
     }
 
     @GetMapping("/{roleId}/permissions")

@@ -37,4 +37,11 @@ public final class SuperAdminConstants {
     // Super Admin role override
     public static final String OVERRIDE_ROLE_PERMS_SUMMARY = "Override role permissions for any firm";
     public static final String OVERRIDE_ROLE_PERMS_DESCRIPTION = "Super Admin directly sets permissions on any firm-scoped role, bypassing all ceilings. No restrictions — Super Admin is platform-level.";
+
+    // Super Admin firm-role visibility (delegation chain)
+    public static final String GET_FIRM_ROLES_SUMMARY = "List a firm's roles with permissions";
+    public static final String GET_FIRM_ROLES_DESCRIPTION = "Super Admin view of any firm's scoped roles: each role's current permissions and how many users hold it. Read-only — use the override endpoint to change permissions, or the template endpoints for platform-wide changes.";
+
+    public static final String CREATE_FIRM_ROLE_SUMMARY = "Create a firm-scoped role on a firm's behalf";
+    public static final String CREATE_FIRM_ROLE_DESCRIPTION = "Super Admin creates a custom role inside a specific firm using the same service as the Firm Admin path. A base system template (parentRoleId) is required so the role participates in ceiling checks. Permissions are assigned afterward via the override endpoint.";
 }

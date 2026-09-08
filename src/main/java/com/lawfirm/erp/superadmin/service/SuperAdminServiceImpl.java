@@ -13,7 +13,9 @@ import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
 import com.lawfirm.erp.dto.admin.response.AdminUserResponse;
+import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
+import com.lawfirm.erp.dto.admin.response.RoleResponse;
 import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.dto.auth.request.RegisterSuperAdminRequest;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
@@ -48,8 +50,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.lawfirm.erp.rbac.mapper.RbacResponseMapper;
+
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -71,6 +77,7 @@ public class SuperAdminServiceImpl implements SuperAdminService {
     private final AuditService auditService;
     private final AuthMapper authMapper;
     private final SystemConfigService systemConfigService;
+    private final RbacResponseMapper rbacResponseMapper;
 
     @Value("${super-admin.registration-secret:}")
     private String superAdminSecret;
@@ -217,6 +224,48 @@ public class SuperAdminServiceImpl implements SuperAdminService {
                 "MFA reset by Super Admin for: " + user.getUsername() + " (reason: " + reason + ")");
 
         log.info("MFA reset for user: {} by Super Admin (reason: {})", user.getUsername(), reason);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RoleResponse> getFirmRoles(UUID firmId) {
+        if (!firmRepository.existsById(firmId)) {
+            throw new ResourceNotFoundException("Firm not found: " + firmId);
+        }
+
+        List<Role> firmRoles = roleRepository.findByFirmIdAndIsSystemFalse(firmId);
+
+        // Batch user counts (single query)
+        Map<UUID, Integer> userCountMap = new HashMap<>();
+        for (Object[] row : userRepository.countUsersByRoleIds(firmId)) {
+            userCountMap.put((UUID) row[0], ((Number) row[1]).intValue());
+        }
+
+        // Batch permissions for all roles (single query)
+        List<UUID> roleIds = firmRoles.stream().map(Role::getId).collect(Collectors.toList());
+        Map<UUID, List<PermissionResponse>> permsByRole = roleIds.isEmpty()
+                ? Map.of()
+                : rolePermissionRepository.findByRoleIdIn(roleIds).stream()
+                        .collect(Collectors.groupingBy(
+                                rp -> rp.getRole().getId(),
+                                Collectors.mapping(
+                                        rp -> rbacResponseMapper.toPermissionResponse(rp.getPermission()),
+                                        Collectors.toList())));
+
+        return firmRoles.stream()
+                .map(role -> RoleResponse.builder()
+                        .id(role.getId())
+                        .name(role.getRoleName())
+                        .code(role.getRoleCode())
+                        .description(role.getDescription())
+                        .isSystem(role.getIsSystem() != null && role.getIsSystem())
+                        .isActive(role.isActive())
+                        .permissions(permsByRole.getOrDefault(role.getId(), List.of()))
+                        .userCount(userCountMap.getOrDefault(role.getId(), 0))
+                        .createdAt(role.getCreatedAt())
+                        .updatedAt(role.getUpdatedAt())
+                        .build())
+                .collect(Collectors.toList());
     }
 
     @Override
