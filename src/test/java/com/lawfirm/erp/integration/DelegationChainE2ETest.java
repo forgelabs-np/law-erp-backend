@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -217,7 +218,7 @@ class DelegationChainE2ETest extends BaseIntegrationTest {
         newIds.remove(userView);
 
         // Preview first — zero writes, shows the delta + per-firm impact
-        MvcResult preview = mockMvc.perform(get(
+        MvcResult preview = mockMvc.perform(post(
                         "/api/v1/admin/roles/templates/" + faTemplate.getId()
                         + "/permissions/preview")
                         .header("Authorization", "Bearer " + saToken)

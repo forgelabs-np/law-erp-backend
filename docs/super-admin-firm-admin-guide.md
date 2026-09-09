@@ -46,7 +46,7 @@ via the `FIRM_ADMIN` system template.
 |---|---|---|
 | GET | `/api/v1/admin/roles/templates` | List all system role templates with current permissions |
 | GET | `/api/v1/admin/roles/templates/{id}/permissions` | One template's permissions + `lastSaEditAt` |
-| GET | `/api/v1/admin/roles/templates/{id}/permissions/preview` | **Dry-run** a template edit (zero writes) |
+| POST | `/api/v1/admin/roles/templates/{id}/permissions/preview` | **Dry-run** a template edit (zero writes) |
 | PUT | `/api/v1/admin/roles/templates/{id}/permissions` | Edit a template → returns `syncJobId` |
 | GET | `/api/v1/admin/roles/sync-jobs/{jobId}` | Poll sync job status |
 | GET | `/api/v1/super-admin/firms/{firmId}/roles` | SA view of a firm's roles + permissions + user counts |
@@ -142,7 +142,7 @@ GET /api/v1/admin/roles/templates
 
 **5.2 Preview (ALWAYS call before PUT — zero writes):**
 ```http
-GET /api/v1/admin/roles/templates/{templateId}/permissions/preview
+POST /api/v1/admin/roles/templates/{templateId}/permissions/preview
 { "data": { "permissionIds": ["<full new set for this template>"] } }
 ```
 → delta (`addedPermissionCodes`/`removedPermissionCodes`), per-firm `firmImpacts`

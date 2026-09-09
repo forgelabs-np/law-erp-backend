@@ -107,8 +107,6 @@ public class RoleController {
         return responseHandler.ok(null, "Permissions assigned to role successfully");
     }
 
-    // ── Template permission management (delegation chain, spec §5) ──────────
-
     @GetMapping("/templates/{templateId}/permissions")
     @Operation(summary = RbacConstants.GET_TEMPLATE_PERMISSIONS_SUMMARY)
     public ResponseEntity<ApiResponse<TemplatePermissionResponse>> getTemplatePermissions(
@@ -119,7 +117,7 @@ public class RoleController {
         );
     }
 
-    @GetMapping("/templates/{templateId}/permissions/preview")
+    @PostMapping("/templates/{templateId}/permissions/preview")
     @Operation(summary = RbacConstants.PREVIEW_TEMPLATE_CHANGE_SUMMARY,
                description = RbacConstants.PREVIEW_TEMPLATE_CHANGE_DESCRIPTION)
     public ResponseEntity<ApiResponse<TemplateSyncPreviewResponse>> previewTemplateChange(

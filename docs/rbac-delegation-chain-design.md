@@ -106,7 +106,7 @@ design; revisit only if it causes a real incident.
 |---|---|
 | `GET /api/v1/admin/roles/templates` | List system templates + current permissions |
 | `GET /api/v1/super-admin/firms/{firmId}/roles` | A firm's roles + permissions (closes SA discoverability gap) |
-| `GET /api/v1/admin/roles/templates/{id}/permissions/preview` | Dry-run: computed delta + per-firm impact counts (applied / skipped-by-ceiling / removed / cascade-stripped). Zero writes. |
+| `POST /api/v1/admin/roles/templates/{id}/permissions/preview` | Dry-run: computed delta + per-firm impact counts (applied / skipped-by-ceiling / removed / cascade-stripped). Zero writes. |
 | `PUT /api/v1/admin/roles/templates/{id}/permissions` | Validates chain (§4), computes delta, persists template, sets `last_sa_edit_at`, enqueues sync job. Returns `jobId`. |
 | `GET /api/v1/admin/sync-jobs/{jobId}` | Job status: firms complete/total, per-firm errors |
 | `POST /api/v1/super-admin/firms/{firmId}/roles` | SA creates a firm-scoped custom role (same service as Firm Admin path, ceiling skipped for SA, `parent_role_id` required) |
@@ -186,7 +186,7 @@ This case requires **no new code** from this design — the mechanism already ex
 - **Phase 2** (template editing, no cross-firm side effects yet):
   - `PUT .../templates/{id}/permissions` — delta computation, chain validation (both
     directions per §4), `last_sa_edit_at`, seeder freeze check.
-  - `GET .../templates/{id}/permissions/preview`
+  - `POST .../templates/{id}/permissions/preview`
 - **Phase 3** (the fan-out):
   - `sync_jobs` table + async job (or integrate with existing job infra from Phase 0).
   - `GET /api/v1/admin/sync-jobs/{jobId}`.

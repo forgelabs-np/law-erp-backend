@@ -1,6 +1,8 @@
 # Project State
 
 ## Current Focus
+**Notification module in design** (bell icon, event pipeline, polling v1) — design presented, awaiting approval.
+
 **RBAC delegation chain SHIPPED** (all 5 phases, 260 tests green) — `docs/rbac-delegation-chain-design.md` is the spec. SA can now edit system role templates (except SUPER_ADMIN); edits propagate as diffs to firm clones via async sync job (`sync_jobs`, status endpoint); FIRM_ADMIN narrowing cascades to employee roles AND templates; firm-admin self-narrowing cascades synchronously with effect in response; SA gets firm-role reads + on-behalf custom-role creation. Seeder freeze (`last_sa_edit_at`) prevents reboot resurrection. John/Ron = custom role, no per-user grants (decided).
 
 ## Branch
@@ -18,6 +20,7 @@
 - **Pattern alignment** — seeding out of `ScraperServiceImpl` into a dedicated collaborator per the controller/service/Impl/collaborator pattern
 
 ## Deep History Index
+- `memory/2026-09-09.md` — notification module design (v1 scope locked), preview endpoint GET→POST fix
 <!-- pointers to docs/ for full feature writeups -->
 - `memory/2026-09-02.md` — MFA reset, user delete, SA audit logs, pagination, @Operation constants, module delete fix, RBAC role CRUD + override
 - `memory/2026-09-03.md` — UserType FIRM expansion, audit log filtering by userType/userId
