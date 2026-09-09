@@ -30,4 +30,12 @@ public interface EmailService {
     void sendInvoiceEmail(UUID firmId, UUID recipientUserId, String toEmail,
                           String firmName, String invoiceNumber,
                           java.math.BigDecimal total, byte[] pdfBytes);
+
+    /**
+     * Notification-module email (bell-icon follow-up channel). Renders the
+     * generic notification template; @return true when handed to SMTP.
+     */
+    boolean sendNotificationEmail(UUID firmId, UUID recipientUserId, String toEmail,
+                                  String subject,
+                                  com.lawfirm.erp.modules.notification.entity.Notification notification);
 }

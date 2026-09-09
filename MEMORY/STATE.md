@@ -1,7 +1,7 @@
 # Project State
 
 ## Current Focus
-**Notification module in design** (bell icon, event pipeline, polling v1) — design presented, awaiting approval.
+**Notification module COMPLETE** (337 tests green) — event pipeline, bell API, email channel + retry sweep (1m/5m/30m→DEAD), ALERT producers (hearing T-1, appeal T-3 + lapsed), firm-admin broadcast, per-user preferences (ALERT opt-out locked). `docs/notification-module.md`. Remaining: SSE push / SMS-PUSH channels only on demand.
 
 **RBAC delegation chain SHIPPED** (all 5 phases, 260 tests green) — `docs/rbac-delegation-chain-design.md` is the spec. SA can now edit system role templates (except SUPER_ADMIN); edits propagate as diffs to firm clones via async sync job (`sync_jobs`, status endpoint); FIRM_ADMIN narrowing cascades to employee roles AND templates; firm-admin self-narrowing cascades synchronously with effect in response; SA gets firm-role reads + on-behalf custom-role creation. Seeder freeze (`last_sa_edit_at`) prevents reboot resurrection. John/Ron = custom role, no per-user grants (decided).
 

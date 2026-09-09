@@ -18,8 +18,11 @@ import com.lawfirm.erp.modules.casemanagement.repository.MatterRepository;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.modules.email.dto.HearingReminderDetails;
 import com.lawfirm.erp.modules.email.service.EmailService;
+import com.lawfirm.erp.modules.notification.enums.NotificationType;
+import com.lawfirm.erp.modules.notification.event.NotificationEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +44,7 @@ public class HearingReminderServiceImpl implements HearingReminderService {
     private final FirmRepository firmRepository;
     private final HearingReminderLogRepository reminderLogRepository;
     private final EmailService emailService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -95,6 +99,22 @@ public class HearingReminderServiceImpl implements HearingReminderService {
                 if (matter == null) { log.warn("Hearing reminder: matter {} missing for event {}", cc.getMatterId(), event.getId()); continue; }
                 Firm firm = firmById.get(event.getFirmId());
 
+                // In-app ALERT (T-1 hearing) — published per recipient below,
+                // day-bucketed dedupKey keeps scheduler re-runs idempotent.
+                java.util.function.Consumer<UUID> publishInApp = recipientId ->
+                        eventPublisher.publishEvent(new NotificationEvent(
+                                event.getFirmId(), recipientId, null, false,
+                                NotificationType.HEARING_REMINDER,
+                                "COURT_EVENT", event.getId(),
+                                "HEARING_REMINDER:COURT_EVENT:" + event.getId()
+                                        + ":" + recipientId + ":" + date,
+                                java.util.Map.of(
+                                        "matterNumber", matter.getMatterNumber(),
+                                        "courtName", cc.getCourtName(),
+                                        "hearingTime", event.getScheduledTime() != null
+                                                ? event.getScheduledTime().toString() : "TBC")
+                        ));
+
                 HearingReminderDetails details = new HearingReminderDetails(
                         firm != null ? firm.getName() : "Your law firm",
                         matter.getMatterNumber(), matter.getTitle(),
@@ -110,6 +130,7 @@ public class HearingReminderServiceImpl implements HearingReminderService {
                         if (logId != null) {
                             emailService.sendHearingReminder(event.getFirmId(), advocate.getId(), advocate.getEmail(),
                                     nameOf(advocate, null), details, HearingReminderLog.RecipientType.ADVOCATE, logId);
+                            publishInApp.accept(advocate.getId());
                             dispatched++;
                         }
                     } else {
@@ -129,6 +150,7 @@ public class HearingReminderServiceImpl implements HearingReminderService {
                     if (logId != null) {
                         emailService.sendHearingReminder(event.getFirmId(), client.getId(), client.getEmail(),
                                 nameOf(client, party), details, HearingReminderLog.RecipientType.CLIENT, logId);
+                        publishInApp.accept(client.getId());
                         dispatched++;
                     }
                 }

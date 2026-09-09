@@ -1,0 +1,476 @@
+<!DOCTYPE html><html><head><title></title><meta charset="utf-8"><style>* {
+	box-sizing: border-box;
+}
+
+html {
+	font-size: 100%;
+}
+
+body {
+	font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell',
+		'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+	line-height: 1.6;
+	font-size: 0.6875em; /* 11 pt */
+	color: #111;
+	margin: 0;
+}
+
+body > :first-child {
+	padding-top: 0;
+	margin-top: 0;
+}
+
+body > :last-child {
+	margin-bottom: 0;
+	padding-bottom: 0;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	margin: 0;
+	padding: 0.5em 0 0.25em;
+}
+
+h5,
+h6 {
+	padding: 0;
+}
+
+h5 {
+	font-size: 1em;
+}
+
+h6 {
+	font-size: 0.875em;
+	text-transform: uppercase;
+}
+
+p {
+	margin: 0.25em 0 1em;
+}
+
+blockquote {
+	margin: 0.5em 0 1em;
+	padding-left: 0.5em;
+	padding-right: 1em;
+	border-left: 4px solid gainsboro;
+	font-style: italic;
+}
+
+ul,
+ol {
+	margin: 0;
+	margin-left: 1em;
+	padding: 0 1.5em 0.5em;
+}
+
+pre {
+	white-space: pre-wrap;
+}
+
+h1 code,
+h2 code,
+h3 code,
+h4 code,
+h5 code,
+h6 code,
+p code,
+li code,
+pre code {
+	background-color: #f8f8f8;
+	padding: 0.1em 0.375em;
+	border: 1px solid #f8f8f8;
+	border-radius: 0.25em;
+	font-family: monospace;
+	font-size: 1.2em;
+}
+
+pre code {
+	display: block;
+	padding: 0.5em;
+}
+
+.page-break {
+	page-break-after: always;
+}
+
+img {
+	max-width: 100%;
+	margin: 1em 0;
+}
+
+table {
+	border-spacing: 0;
+	border-collapse: collapse;
+	display: block;
+	margin: 0 0 1em;
+	width: 100%;
+	overflow: auto;
+}
+
+table th,
+table td {
+	padding: 0.5em 1em;
+	border: 1px solid gainsboro;
+}
+
+table th {
+	font-weight: 600;
+}
+
+table tr {
+	background-color: white;
+	border-top: 1px solid gainsboro;
+}
+
+table tr:nth-child(2n) {
+	background-color: whitesmoke;
+}
+/*# sourceURL=C:\Users\Dev\AppData\Local\nvm\v20.20.2\node_modules\md-to-pdf\markdown.css*/</style><style>pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 1em
+}
+code.hljs {
+  padding: 3px 5px
+}
+/*!
+  Theme: GitHub
+  Description: Light theme as seen on github.com
+  Author: github.com
+  Maintainer: @Hirse
+  Updated: 2021-05-15
+
+  Outdated base version: https://github.com/primer/github-syntax-light
+  Current colors taken from GitHub's CSS
+*/
+.hljs {
+  color: #24292e;
+  background: #ffffff
+}
+.hljs-doctag,
+.hljs-keyword,
+.hljs-meta .hljs-keyword,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-variable.language_ {
+  /* prettylights-syntax-keyword */
+  color: #d73a49
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.class_.inherited__,
+.hljs-title.function_ {
+  /* prettylights-syntax-entity */
+  color: #6f42c1
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-literal,
+.hljs-meta,
+.hljs-number,
+.hljs-operator,
+.hljs-variable,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id {
+  /* prettylights-syntax-constant */
+  color: #005cc5
+}
+.hljs-regexp,
+.hljs-string,
+.hljs-meta .hljs-string {
+  /* prettylights-syntax-string */
+  color: #032f62
+}
+.hljs-built_in,
+.hljs-symbol {
+  /* prettylights-syntax-variable */
+  color: #e36209
+}
+.hljs-comment,
+.hljs-code,
+.hljs-formula {
+  /* prettylights-syntax-comment */
+  color: #6a737d
+}
+.hljs-name,
+.hljs-quote,
+.hljs-selector-tag,
+.hljs-selector-pseudo {
+  /* prettylights-syntax-entity-tag */
+  color: #22863a
+}
+.hljs-subst {
+  /* prettylights-syntax-storage-modifier-import */
+  color: #24292e
+}
+.hljs-section {
+  /* prettylights-syntax-markup-heading */
+  color: #005cc5;
+  font-weight: bold
+}
+.hljs-bullet {
+  /* prettylights-syntax-markup-list */
+  color: #735c0f
+}
+.hljs-emphasis {
+  /* prettylights-syntax-markup-italic */
+  color: #24292e;
+  font-style: italic
+}
+.hljs-strong {
+  /* prettylights-syntax-markup-bold */
+  color: #24292e;
+  font-weight: bold
+}
+.hljs-addition {
+  /* prettylights-syntax-markup-inserted */
+  color: #22863a;
+  background-color: #f0fff4
+}
+.hljs-deletion {
+  /* prettylights-syntax-markup-deleted */
+  color: #b31d28;
+  background-color: #ffeef0
+}
+.hljs-char.escape_,
+.hljs-link,
+.hljs-params,
+.hljs-property,
+.hljs-punctuation,
+.hljs-tag {
+  /* purposely ignored */
+  
+}/*# sourceURL=C:\Users\Dev\AppData\Local\nvm\v20.20.2\node_modules\md-to-pdf\node_modules\highlight.js\styles\github.css*/</style></head>
+	<body class="">
+		<h1 id="notification-module">Notification Module</h1>
+<p>In-app notifications for the portal — the bell icon: a per-user feed, an unread badge, and read-state management, driven by an in-process event pipeline that domain modules publish into.</p>
+<h2 id="1-overview--architecture">1. Overview &amp; Architecture</h2>
+<pre><code>Domain modules (casemanagement, invoice, …)
+    │  publish NotificationEvent via ApplicationEventPublisher
+    ▼
+NotificationEventListener          @Async("taskExecutor") — separate bean so the
+    │                              proxy applies; exceptions swallowed, never
+    │                              break the producer's business flow
+    ▼
+NotificationOrchestrator           resolves recipients (direct user / role
+    │                              fan-out / all firm users — always firm-scoped),
+    │                              dedup check, renders copy, persists rows
+    ▼
+notifications table                one row per recipient
+    ▼
+REST API                           list / unread-count / mark-read / mark-all-read
+</code></pre>
+<p><strong>Deliberate v1 scope</strong> (Phase 2 triggers in brackets):</p>
+<ul>
+<li><strong>Polling only</strong> — frontend polls <code>unread-count</code> every 45–60s. No WebSocket/SSE. [Phase 2: SSE push if users demand real-time]</li>
+<li><strong>In-app channel only</strong> — no email/SMS dispatch, no <code>notification_delivery</code> table. [Phase 2: email channel — the delivery table + retry sweep earn their place when a channel can fail]</li>
+<li><strong>Code-level rendering</strong> — <code>NotificationRenderer</code>, no DB templates. [Phase 2: DB templates when Nepali/English i18n lands]</li>
+<li><strong>No user preferences.</strong> [Phase 2: <code>notification_preference</code> + toggle UI]</li>
+<li>Taxonomy <strong>SYSTEM | ALERT | BROADCAST</strong> is final; <code>TRANSACTIONAL</code> (password reset, MFA) intentionally excluded — those are request-response flows owned by <code>EmailService</code>.</li>
+</ul>
+<p>Swapping the in-process bus for a broker later means replacing <code>NotificationEventListener</code> — producers never change.</p>
+<h2 id="2-data-model">2. Data Model</h2>
+<h3 id="notifications"><code>notifications</code></h3>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>UUID</td>
+<td>PK (AuditableEntity)</td>
+</tr>
+<tr>
+<td><code>uuid</code></td>
+<td>UUID</td>
+<td>unique secondary id</td>
+</tr>
+<tr>
+<td><code>firm_id</code></td>
+<td>UUID NOT NULL</td>
+<td>tenant scope — enforced in every query path</td>
+</tr>
+<tr>
+<td><code>recipient_user_id</code></td>
+<td>UUID NOT NULL</td>
+<td>one row per recipient (fan-out at write time)</td>
+</tr>
+<tr>
+<td><code>type</code></td>
+<td>VARCHAR(40) NOT NULL</td>
+<td>enum <code>NotificationType</code></td>
+</tr>
+<tr>
+<td><code>category</code></td>
+<td>VARCHAR(20) NOT NULL</td>
+<td>enum <code>NotificationCategory</code> (pinned from type)</td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td>VARCHAR(200) NOT NULL</td>
+<td>rendered copy</td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td>TEXT NOT NULL</td>
+<td>rendered copy</td>
+</tr>
+<tr>
+<td><code>reference_type</code></td>
+<td>VARCHAR(40)</td>
+<td>polymorphic link: <code>MATTER</code>, <code>INVOICE</code>, …</td>
+</tr>
+<tr>
+<td><code>reference_id</code></td>
+<td>UUID</td>
+<td>id of the referenced entity</td>
+</tr>
+<tr>
+<td><code>read_at</code></td>
+<td>TIMESTAMP</td>
+<td>NULL = unread</td>
+</tr>
+<tr>
+<td><code>dedup_key</code></td>
+<td>VARCHAR(200)</td>
+<td>optional idempotency key</td>
+</tr>
+<tr>
+<td><code>created_at</code> / <code>created_by</code> / <code>updated_at</code> / <code>updated_by</code></td>
+<td>—</td>
+<td>from AuditableEntity</td>
+</tr>
+</tbody></table>
+<p>Indexes: <code>(recipient_user_id, read_at)</code> — the hot path; <code>(firm_id)</code>; unique <code>(dedup_key, recipient_user_id)</code> — per-recipient idempotency (multiple NULL keys coexist).</p>
+<h3 id="enums">Enums</h3>
+<ul>
+<li><code>NotificationCategory</code>: <code>SYSTEM</code>, <code>ALERT</code>, <code>BROADCAST</code></li>
+<li><code>NotificationType</code>: <code>CASE_ASSIGNED</code>, <code>INVOICE_STATUS</code> (live) · <code>HEARING_REMINDER</code>, <code>APPEAL_DEADLINE</code>, <code>ANNOUNCEMENT</code> (Phase-2 placeholders, no producers, renderer rejects them loudly)</li>
+</ul>
+<h2 id="3-api-reference">3. API Reference</h2>
+<p>Base: <code>/api/v1/notifications</code> — all endpoints act on the JWT-authenticated user; no user id is ever accepted from the client.</p>
+<h3 id="get-apiv1notificationsunreadonlyfalsepage0size20"><code>GET /api/v1/notifications?unreadOnly=false&amp;page=0&amp;size=20</code></h3>
+<p>Paged feed, newest first. <code>size</code> clamped to 1–100.</p>
+<pre><code class="hljs json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">"status"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"SUCCESS"</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">"message"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"Notifications fetched successfully"</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">"data"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+      <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">"id"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"…"</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"CASE_ASSIGNED"</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">"category"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"SYSTEM"</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">"title"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"Assigned to matter"</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">"body"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"You were assigned to matter APX-MAT-2026-00042 as PRIMARY_ADVOCATE."</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">"referenceType"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"MATTER"</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">"referenceId"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"…"</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">"read"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">"readAt"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">"createdAt"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"2026-09-09T12:00:00"</span>
+      <span class="hljs-punctuation">}</span>
+    <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">"page"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"size"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">20</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"totalElements"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"totalPages"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">"first"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"last"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"empty"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span>
+</code></pre>
+<h3 id="get-apiv1notificationsunread-count"><code>GET /api/v1/notifications/unread-count</code></h3>
+<p>Lightweight badge endpoint for 45–60s polling.</p>
+<pre><code class="hljs json"><span class="hljs-punctuation">{</span> <span class="hljs-attr">"status"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"SUCCESS"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"message"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"Unread count fetched successfully"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"data"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"count"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+</code></pre>
+<h3 id="post-apiv1notificationsnotificationidread"><code>POST /api/v1/notifications/{notificationId}/read</code></h3>
+<p>Stamps <code>read_at</code>; idempotent (re-marking is a no-op). <code>404</code> if the notification doesn't exist, <code>403</code> if it belongs to another user.</p>
+<h3 id="post-apiv1notificationsread-all"><code>POST /api/v1/notifications/read-all</code></h3>
+<p>Marks every unread row for the current user. Returns <code>{ "updated": &lt;n&gt; }</code>.</p>
+<h2 id="4-producing-notifications-for-backend-devs">4. Producing Notifications (for backend devs)</h2>
+<p>Domain modules publish; they never touch persistence or channels.</p>
+<pre><code class="hljs java"><span class="hljs-comment">// Direct recipient</span>
+eventPublisher.publishEvent(NotificationEvent.toUser(
+        firmId, assigneeUserId, NotificationType.CASE_ASSIGNED,
+        <span class="hljs-string">"MATTER"</span>, matter.getId(),
+        Map.of(<span class="hljs-string">"matterNumber"</span>, matterNumber, <span class="hljs-string">"assignmentRole"</span>, role.name())));
+
+<span class="hljs-comment">// Role fan-out within the firm (resolved via userRepository.findUserIdsByFirmIdAndRoleCode)</span>
+eventPublisher.publishEvent(NotificationEvent.toRole(
+        firmId, RoleCode.FIRM_ADMIN, NotificationType.INVOICE_STATUS,
+        <span class="hljs-string">"INVOICE"</span>, invoice.getId(),
+        Map.of(<span class="hljs-string">"invoiceNumber"</span>, invoiceNumber, <span class="hljs-string">"status"</span>, newStatus.name())));
+</code></pre>
+<p>Rules:</p>
+<ul>
+<li>Exactly one targeting mode per event (<code>recipientUserId</code> | <code>recipientRoleCode</code> | <code>allFirmUsers=true</code>) — otherwise the orchestrator throws.</li>
+<li>Set <code>dedupKey</code> when the same logical event can fire twice (schedulers, retries). Convention: <code>TYPE:REFERENCE:id:userId[:bucket]</code>.</li>
+<li>Adding a new type: extend <code>NotificationType</code> (pin its category), add a renderer branch, add copy constants to <code>NotificationConstants</code>, write the producer test. The renderer's exhaustive switch makes a missing branch a compile/test failure, not a runtime surprise.</li>
+</ul>
+<p>Live producers:</p>
+<table>
+<thead>
+<tr>
+<th>Producer</th>
+<th>Event</th>
+<th>Recipients</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>CaseAssignmentServiceImpl.assign</code></td>
+<td><code>CASE_ASSIGNED</code></td>
+<td>the assigned user</td>
+</tr>
+<tr>
+<td><code>InvoiceServiceImpl.updateStatus</code></td>
+<td><code>INVOICE_STATUS</code></td>
+<td>all <code>FIRM_ADMIN</code> users of the invoice's firm</td>
+</tr>
+</tbody></table>
+<h2 id="5-security--multi-tenancy">5. Security &amp; Multi-Tenancy</h2>
+<ul>
+<li>Every endpoint resolves the user from the JWT (<code>CurrentUserResolver</code>); unauthenticated → <code>401</code>.</li>
+<li>Mark-read checks ownership: a notification whose <code>recipient_user_id</code> differs from the caller → <code>403</code>. Combined with <code>firm_id</code> on every row, cross-user and cross-firm access are both impossible.</li>
+<li>Role fan-out queries are firm-scoped by construction (<code>firmId</code> + <code>roleCode</code>) — no notification can leak across firms.</li>
+<li>No new security-config entries needed: <code>/api/v1/notifications/**</code> falls under <code>anyRequest().authenticated()</code>.</li>
+</ul>
+<h2 id="6-frontend-integration-guide">6. Frontend Integration Guide</h2>
+<ol>
+<li><strong>Badge</strong> — poll <code>GET /unread-count</code> every 45–60s while logged in; show <code>data.count</code> on the bell. Refresh immediately after any mark-read call.</li>
+<li><strong>Panel</strong> — on bell click, <code>GET /notifications?page=0&amp;size=20</code>; paginate with <code>page</code>/<code>totalPages</code>. Optionally <code>unreadOnly=true</code> for an "unread" tab.</li>
+<li><strong>Click-through</strong> — map <code>referenceType</code> → route client-side (e.g. <code>MATTER</code> → <code>/matters/{referenceId}</code>, <code>INVOICE</code> → <code>/invoices/{referenceId}</code>). On click: <code>POST /{id}/read</code>, then navigate. Unread rows render with a dot/bold; <code>read</code>/<code>readAt</code> drive styling.</li>
+<li><strong>Mark all</strong> — button calls <code>POST /read-all</code>, then re-fetches the list and zeroes the badge.</li>
+<li>Category → icon/color mapping: <code>SYSTEM</code> (info), <code>ALERT</code> (warning), <code>BROADCAST</code> (announcement).</li>
+</ol>
+<h2 id="7-testing">7. Testing</h2>
+<p>Unit tests (Mockito, service layer — house style):</p>
+<pre><code>NotificationRendererTest            copy per type, unknown-type rejection
+NotificationEventTest               factories, immutability, category pinning
+NotificationEventListenerTest       delegation + exception swallowing
+NotificationOrchestratorTest        targeting, fan-out, dedup, no-targeting rejection
+NotificationServiceImplTest         scoping, authz on mark-read, mark-all
+CaseAssignmentNotificationTest      producer 1 publish + no-publish on rejection
+InvoiceStatusNotificationTest       producer 2 publish + no-publish on illegal transition
+</code></pre>
+<p>Run:</p>
+<pre><code class="hljs bash">./mvnw <span class="hljs-built_in">test</span> -Dtest=<span class="hljs-string">"Notification*Test,CaseAssignmentNotificationTest,InvoiceStatusNotificationTest"</span>
+./mvnw <span class="hljs-built_in">test</span>   <span class="hljs-comment"># full suite — 296 tests green at ship time</span>
+</code></pre>
+<p>Manual smoke: assign a user to a matter → their bell count increments within a poll cycle; mark all read → badge clears; second account sees only its own feed.</p>
+<h2 id="8-follow-ups-phase-2-backlog">8. Follow-ups (Phase 2 backlog)</h2>
+<ul>
+<li>Hearing/appeal deadline alerts: schedulers publish <code>HEARING_REMINDER</code>/<code>APPEAL_DEADLINE</code> with <code>dedupKey</code> (day-bucketed) — renderer branches + constants are the only additions needed.</li>
+<li>Broadcast: <code>ANNOUNCEMENT</code> producer (FIRM_ADMIN compose endpoint, <code>allFirmUsers</code> targeting already supported).</li>
+<li>Email channel + <code>notification_delivery</code> + retry sweep (reuses the claim-before-send pattern from <code>HearingReminderLog</code>).</li>
+<li>User preferences + SSE push if real-time demand materializes.</li>
+</ul>
+
+	
+
+</body></html>

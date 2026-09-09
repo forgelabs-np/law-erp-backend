@@ -17,7 +17,10 @@ import com.lawfirm.erp.modules.casemanagement.entity.Matter;
 import com.lawfirm.erp.modules.casemanagement.enums.AssignmentRole;
 import com.lawfirm.erp.modules.casemanagement.repository.CaseAssignmentRepository;
 import com.lawfirm.erp.modules.casemanagement.repository.MatterRepository;
+import com.lawfirm.erp.modules.notification.enums.NotificationType;
+import com.lawfirm.erp.modules.notification.event.NotificationEvent;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +36,7 @@ public class CaseAssignmentServiceImpl implements CaseAssignmentService {
     private final MatterRepository matterRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public CaseAssignmentResponse assign(String matterNumber, AssignCaseRequest request) {
@@ -65,6 +69,13 @@ public class CaseAssignmentServiceImpl implements CaseAssignmentService {
 
         auditService.log(AuditAction.MATTER_UPDATED, AuditEntity.MATTER, matter.getId(),
                 "Assigned " + user.getFullName() + " (" + request.getAssignmentRole() + ") to matter " + matterNumber);
+
+        eventPublisher.publishEvent(NotificationEvent.toUser(
+                firmId, request.getUserId(), NotificationType.CASE_ASSIGNED,
+                "MATTER", matter.getId(),
+                java.util.Map.of(
+                        "matterNumber", matterNumber,
+                        "assignmentRole", request.getAssignmentRole().name())));
 
         return toResponse(assignment, matter, user);
     }

@@ -24,6 +24,8 @@ import com.lawfirm.erp.modules.invoice.enums.InvoiceStatus;
 import com.lawfirm.erp.modules.invoice.mapper.InvoiceMapper;
 import com.lawfirm.erp.modules.invoice.repository.InvoiceItemRepository;
 import com.lawfirm.erp.modules.invoice.repository.InvoiceRepository;
+import com.lawfirm.erp.modules.notification.enums.NotificationType;
+import com.lawfirm.erp.modules.notification.event.NotificationEvent;
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +55,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     private final CurrentUserResolver currentUserResolver;
     private final AuditService auditService;
     private final EmailService emailService;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final InvoiceMapper invoiceMapper;
     private final InvoicePdfService invoicePdfService;
 
@@ -216,6 +219,14 @@ public class InvoiceServiceImpl implements InvoiceService {
         Firm firm = firmRepository.findById(invoice.getFirmId()).orElse(null);
         auditService.log(AuditAction.INVOICE_UPDATED, AuditEntity.INVOICE,
                 invoice.getId(), "Invoice " + invoice.getInvoiceNumber() + " status → " + newStatus);
+
+        eventPublisher.publishEvent(NotificationEvent.toRole(
+                invoice.getFirmId(), com.lawfirm.erp.common.constant.RoleCode.FIRM_ADMIN,
+                NotificationType.INVOICE_STATUS,
+                "INVOICE", invoice.getId(),
+                java.util.Map.of(
+                        "invoiceNumber", invoice.getInvoiceNumber(),
+                        "status", newStatus.name())));
 
         log.info("Invoice {} status changed to {}", invoice.getInvoiceNumber(), newStatus);
         return invoiceMapper.toResponse(invoice, firm);

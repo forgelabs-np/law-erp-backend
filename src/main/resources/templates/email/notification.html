@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { background: #1A237E; color: white; padding: 30px; text-align: center; }
+        .header h1 { margin: 0; font-size: 22px; }
+        .badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; background: rgba(255,255,255,0.2); margin-bottom: 10px; }
+        .body { padding: 30px; color: #333; line-height: 1.6; }
+        .body h2 { color: #1A237E; margin-top: 0; }
+        .cta { display: inline-block; margin-top: 20px; padding: 12px 24px; background: #1A237E; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; }
+        .footer { padding: 20px 30px; background: #f8f9fa; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #eee; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="badge" th:text="${category}">SYSTEM</div>
+            <h1 th:text="${appName}">NepalCRM</h1>
+        </div>
+        <div class="body">
+            <h2 th:text="${title}">Notification</h2>
+            <p th:text="${body}">Notification body.</p>
+            <a class="cta" th:href="${loginUrl}">Open the portal</a>
+        </div>
+        <div class="footer">
+            <p th:text="${emailFooter}">This is an automated email. Please do not reply directly to this message.</p>
+        </div>
+    </div>
+</body>
+</html>

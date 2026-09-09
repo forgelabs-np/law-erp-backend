@@ -230,6 +230,29 @@ public class EmailServiceImpl implements EmailService {
         }
     }
 
+    @Override
+    public boolean sendNotificationEmail(UUID firmId, UUID recipientUserId, String toEmail,
+                                         String subject,
+                                         com.lawfirm.erp.modules.notification.entity.Notification notification) {
+        Map<String, String> cfg = systemConfigService.getEffectiveConfig(firmId);
+        String primaryColor = cfg.getOrDefault(SystemConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
+        String footer = cfg.getOrDefault(SystemConfigService.KEY_EMAIL_FOOTER_TEXT, "");
+        String loginUrl = cfg.getOrDefault("LOGIN_URL", "https://app.nepalcrm.com/login");
+
+        Context ctx = new Context();
+        ctx.setVariable("title", notification.getTitle());
+        ctx.setVariable("body", notification.getBody());
+        ctx.setVariable("category", notification.getCategory() != null
+                ? notification.getCategory().name() : "SYSTEM");
+        ctx.setVariable("loginUrl", loginUrl);
+        ctx.setVariable("primaryColor", primaryColor);
+        ctx.setVariable("emailFooter", footer);
+        ctx.setVariable("appName", cfg.getOrDefault(SystemConfigService.KEY_APP_NAME, "NepalCRM"));
+
+        return sendHtmlEmail(firmId, recipientUserId, toEmail, subject,
+                "email/notification", ctx, toEmail, AuditEntity.USER);
+    }
+
     /** @return true when the email was handed to the SMTP server. */
     private boolean sendHtmlEmail(UUID firmId, UUID triggeredByUserId, String toEmail, String subject,
                                   String template, Context ctx, String recipientIdentifier,

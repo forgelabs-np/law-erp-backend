@@ -14,6 +14,9 @@ import com.lawfirm.erp.modules.casemanagement.enums.MatterType;
 import com.lawfirm.erp.modules.casemanagement.repository.AppealDeadlineRuleRepository;
 import com.lawfirm.erp.modules.casemanagement.repository.CourtCaseRepository;
 import com.lawfirm.erp.modules.casemanagement.repository.MatterRepository;
+import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.modules.notification.enums.NotificationType;
+import com.lawfirm.erp.modules.notification.event.NotificationEvent;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +51,8 @@ public class AppealDeadlineEngine {
     private final CourtCaseRepository courtCaseRepository;
     private final MatterRepository matterRepository;
     private final AuditService auditService;
+    private final UserRepository userRepository;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @PostConstruct
     public void seedRules() {
@@ -102,6 +107,66 @@ public class AppealDeadlineEngine {
     }
 
     /**
+     * Daily watcher (03:05): DECIDED cases with an appeal deadline inside the
+     * next 3 days (T-3 through T-1) get an in-app APPEAL_DEADLINE alert to
+     * the case's advocate. Day-bucketed dedupKey keeps re-runs idempotent.
+     */
+    @Scheduled(cron = "0 5 3 * * *")
+    public void checkUpcomingDeadlines() {
+        LocalDate today = LocalDate.now();
+        List<CourtCase> upcoming = courtCaseRepository
+                .findByStatusAndAppealDeadlineBefore(CourtCaseStatus.DECIDED, today.plusDays(3))
+                .stream()
+                .filter(cc -> cc.getStage() == CourtCaseStage.JUDGMENT_DELIVERED)
+                .filter(cc -> !cc.isAppealLapsed())
+                .filter(cc -> cc.getAppealDeadline() != null)
+                .filter(cc -> !cc.getAppealDeadline().isBefore(today)) // deadline is today..T+3
+                .collect(Collectors.toList());
+        if (upcoming.isEmpty()) return;
+
+        log.info("AppealDeadlineEngine: {} case(s) with appeal deadline within 3 days", upcoming.size());
+        for (CourtCase cc : upcoming) {
+            publishDeadlineAlert(cc, cc.getAppealDeadline());
+        }
+    }
+
+    private void publishDeadlineAlert(CourtCase cc, LocalDate deadline) {
+        Matter matter = matterRepository.findById(cc.getMatterId()).orElse(null);
+        if (matter == null) {
+            log.warn("AppealDeadlineEngine: matter {} missing for court case {}", cc.getMatterId(), cc.getId());
+            return;
+        }
+        long daysRemaining = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), deadline);
+        // Day-bucketed by deadline: re-runs within the same window dedup downstream.
+        String dedupKey = "APPEAL_DEADLINE:COURT_CASE:" + cc.getId() + ":" + deadline;
+
+        if (cc.getAdvocateId() != null) {
+            eventPublisher.publishEvent(new NotificationEvent(
+                    cc.getFirmId(), cc.getAdvocateId(), null, false,
+                    NotificationType.APPEAL_DEADLINE,
+                    "COURT_CASE", cc.getId(), dedupKey,
+                    java.util.Map.of(
+                            "matterNumber", matter.getMatterNumber(),
+                            "courtCaseRef", cc.getOurCourtCaseRef(),
+                            "deadline", deadline.toString(),
+                            "daysRemaining", String.valueOf(daysRemaining))
+            ));
+        } else {
+            // No per-case advocate recorded — the firm admins own the deadline.
+            eventPublisher.publishEvent(new NotificationEvent(
+                    cc.getFirmId(), null, "FIRM_ADMIN", false,
+                    NotificationType.APPEAL_DEADLINE,
+                    "COURT_CASE", cc.getId(), dedupKey,
+                    java.util.Map.of(
+                            "matterNumber", matter.getMatterNumber(),
+                            "courtCaseRef", cc.getOurCourtCaseRef(),
+                            "deadline", deadline.toString(),
+                            "daysRemaining", String.valueOf(daysRemaining))
+            ));
+        }
+    }
+
+    /**
      * Daily watcher (03:00): DECIDED cases whose appeal window lapsed with no child
      * court case get appealLapsed=true (judgment final); the matter is nudged to DORMANT.
      */
@@ -128,6 +193,14 @@ public class AppealDeadlineEngine {
             courtCaseRepository.save(cc);
             auditService.log(AuditAction.COURT_CASE_CLOSED, AuditEntity.COURT_CASE, cc.getId(),
                     "Appeal window lapsed with no appeal filed: " + cc.getOurCourtCaseRef());
+
+            matterRepository.findById(cc.getMatterId()).ifPresent(m ->
+                    eventPublisher.publishEvent(NotificationEvent.toRole(
+                            cc.getFirmId(), "FIRM_ADMIN", NotificationType.APPEAL_LAPSED,
+                            "COURT_CASE", cc.getId(),
+                            java.util.Map.of(
+                                    "matterNumber", m.getMatterNumber(),
+                                    "courtCaseRef", cc.getOurCourtCaseRef()))));
         }
 
         for (Matter matter : matters) {

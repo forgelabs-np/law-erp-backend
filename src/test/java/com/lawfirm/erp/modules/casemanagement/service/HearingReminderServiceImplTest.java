@@ -28,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -51,13 +52,14 @@ class HearingReminderServiceImplTest {
     @Mock private FirmRepository firmRepository;
     @Mock private HearingReminderLogRepository reminderLogRepository;
     @Mock private EmailService emailService;
+    @Mock protected ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
-    private HearingReminderServiceImpl hearingReminderService;
+    protected HearingReminderServiceImpl hearingReminderService;
 
-    private static final LocalDate TOMORROW = LocalDate.now().plusDays(1);
-    private static final UUID FIRM_ID = UUID.randomUUID();
-    private static final UUID ADVOCATE_ID = UUID.randomUUID();
+    protected static final LocalDate TOMORROW = LocalDate.now().plusDays(1);
+    protected static final UUID FIRM_ID = UUID.randomUUID();
+    protected static final UUID ADVOCATE_ID = UUID.randomUUID();
     private static final UUID CLIENT_ID = UUID.randomUUID();
 
     private CourtEvent event;
