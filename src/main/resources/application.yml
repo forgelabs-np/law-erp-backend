@@ -5,7 +5,7 @@ spring:
 
   # Set which profile is active
   profiles:
-    active: dev
+    active: prod
   
   springdoc:
     api-docs:
