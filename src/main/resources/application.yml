@@ -1,37 +1,12 @@
+# src/main/resources/application.yml
 spring:
   application:
     name: NepalCRM
 
-  datasource:
-    url: jdbc:postgresql://db.fpqmxvcdglizgdymrelw.supabase.co:5432/postgres
-    username: postgres
-    password: '@Ashishthapa46'
-    driver-class-name: org.postgresql.Driver
-    hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
-      connection-timeout: 20000
-      idle-timeout: 300000
-      max-lifetime: 1200000
-      pool-name: NepalCRM-HikariPool
-
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    show-sql: false
-
-  mail:
-    host: ${MAIL_HOST:smtp.gmail.com}
-    port: ${MAIL_PORT:587}
-    username: ${MAIL_USER:noreply@nepalcrm.com}
-    password: ${MAIL_PASS:}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-
+  # Set which profile is active
+  profiles:
+    active: dev
+  
   springdoc:
     api-docs:
       path: /api-docs
@@ -42,3 +17,36 @@ spring:
       display-request-duration: true
       filter: true
     show-actuator: false
+
+server:
+  port: 6969
+#
+#logging:
+#  level:
+#    org.springdoc: DEBUG
+#    org.springframework.web: DEBUG
+
+jwt:
+  access-expiry: 86400000
+  refresh-expiry: 604800000
+  token-expiry: 86400000
+
+# MyBatis Configuration
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.lawfirm.erp.dto.admin.response
+  type-handlers-package: com.lawfirm.erp.config
+  configuration:
+    map-underscore-to-camel-case: true
+    default-fetch-size: 100
+    default-statement-timeout: 30
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+# Config encryption key for AES-256 (32 bytes, Base64-encoded)
+# Generate with: openssl rand -base64 32
+config:
+  encryption:
+    key: ${CONFIG_ENCRYPTION_KEY:0cFimdLRoLOM/g/Z6hl9nzL+5SPQp3mDixwPgk66k4U=}
+
+security:
+  max-login-attempts: 5
