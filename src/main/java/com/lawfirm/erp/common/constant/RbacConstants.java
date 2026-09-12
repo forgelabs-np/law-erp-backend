@@ -32,19 +32,4 @@ public final class RbacConstants {
     public static final String TOGGLE_ROLE_SUMMARY = "Toggle role status";
     public static final String ASSIGN_PERMISSIONS_TO_ROLE_SUMMARY = "Assign permissions to a role";
     public static final String GET_ROLE_PERMISSIONS_SUMMARY = "Get permissions for a role";
-
-    // RoleController — template management (delegation chain)
-    public static final String GET_TEMPLATES_SUMMARY = "List system role templates with permissions";
-    public static final String GET_TEMPLATES_DESCRIPTION = "Returns all system role templates (FIRM_ADMIN, ADVOCATE, PARALEGAL, CLIENT, SUPER_ADMIN) with their current permission sets. These templates are the ceiling that firm-scoped role clones inherit at onboarding. Editable by Super Admin via the template permissions endpoints.";
-
-    public static final String GET_TEMPLATE_PERMISSIONS_SUMMARY = "Get one template's permissions";
-
-    public static final String PREVIEW_TEMPLATE_CHANGE_SUMMARY = "Dry-run a template permission change";
-    public static final String PREVIEW_TEMPLATE_CHANGE_DESCRIPTION = "Computes exactly what a template edit would do across all firms — delta, per-firm impact, ceiling skips, and the narrowing cascade — without writing anything. Call this before PUT; the cascade is never silent.";
-
-    public static final String UPDATE_TEMPLATE_PERMISSIONS_SUMMARY = "Edit a system role template's permissions (Super Admin)";
-    public static final String UPDATE_TEMPLATE_PERMISSIONS_DESCRIPTION = "Validates the delegation chain, persists the template delta, freezes the template against boot re-seeding, and enqueues an async sync job that propagates the change to every firm clone. SUPER_ADMIN template is immutable. Chain violations are rejected with the offending permission codes named.";
-
-    public static final String GET_SYNC_JOB_STATUS_SUMMARY = "Get template sync job status";
-    public static final String GET_SYNC_JOB_STATUS_DESCRIPTION = "Poll a template sync job: firms completed/total, per-firm failures, and timestamps. Every audit row written by the job carries the job id, so per-firm changes trace back to the SA edit that caused them.";
 }

@@ -176,12 +176,11 @@ public class FirmServiceImpl implements FirmService {
             firmRole.setRoleCode(systemRole.getRoleCode());
             firmRole.setDescription(systemRole.getDescription());
             firmRole.setIsSystem(false);
-            firmRole.setParentRoleId(systemRole.getId());
             firmRole.setApplicableTo(systemRole.getApplicableTo());
             firmRole.setActive(true);
             firmRole = roleRepository.save(firmRole);
 
-            log.info("Cloned role '{}' for firm '{}' (no permissions — SUPER_ADMIN assigns via system role)",
+            log.info("Cloned role '{}' for firm '{}' (no permissions — SA assigns via override)",
                     systemRole.getRoleCode(), firm.getLawFirmCode());
         }
     }

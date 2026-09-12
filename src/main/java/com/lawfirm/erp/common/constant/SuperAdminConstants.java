@@ -40,8 +40,8 @@ public final class SuperAdminConstants {
 
     // Super Admin firm-role visibility (delegation chain)
     public static final String GET_FIRM_ROLES_SUMMARY = "List a firm's roles with permissions";
-    public static final String GET_FIRM_ROLES_DESCRIPTION = "Super Admin view of any firm's scoped roles: each role's current permissions and how many users hold it. Read-only — use the override endpoint to change permissions, or the template endpoints for platform-wide changes.";
+    public static final String GET_FIRM_ROLES_DESCRIPTION = "Super Admin view of any firm's scoped roles: each role's current permissions and how many users hold it. Read-only — use the override endpoint to change permissions.";
 
     public static final String CREATE_FIRM_ROLE_SUMMARY = "Create a firm-scoped role on a firm's behalf";
-    public static final String CREATE_FIRM_ROLE_DESCRIPTION = "Super Admin creates a custom role inside a specific firm using the same service as the Firm Admin path. A base system template (parentRoleId) is required so the role participates in ceiling checks. Permissions are assigned afterward via the override endpoint.";
+    public static final String CREATE_FIRM_ROLE_DESCRIPTION = "Super Admin creates a custom role inside a specific firm. Permissions are assigned afterward via the override endpoint.";
 }

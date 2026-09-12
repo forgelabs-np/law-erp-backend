@@ -36,12 +36,6 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
     @Query("SELECT r FROM Role r WHERE r.firm.id = :firmId AND r.isSystem = false")
     List<Role> findByFirmIdAndIsSystemFalse(@Param("firmId") UUID firmId);
 
-    /** Custom roles created before parent_role_id was set at creation — Phase 0 backfill target. */
-    List<Role> findByParentRoleIdIsNullAndIsSystemFalse();
-
-    /** All firm-scoped clones derived from a system template — template sync fan-out target. */
-    List<Role> findByParentRoleId(UUID parentRoleId);
-
     @Query("SELECT r FROM Role r WHERE r.roleCode = :roleCode AND r.firm IS NULL")
     Optional<Role> findByRoleCodeAndFirmIsNull(@Param("roleCode") String roleCode);
 

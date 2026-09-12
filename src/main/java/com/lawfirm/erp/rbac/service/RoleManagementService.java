@@ -18,8 +18,5 @@ public interface RoleManagementService {
 
     List<RoleResponse> getActiveRoles();
 
-    /** System role templates (firm IS NULL, isSystem=true) with current permissions. */
-    List<RoleResponse> getSystemTemplates();
-
     RoleResponse getRoleById(UUID roleId);
 }

@@ -5,7 +5,6 @@ import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.PermissionScope;
-import com.lawfirm.erp.common.constant.RoleCode;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.DuplicateResourceException;
@@ -36,10 +35,18 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Firm Admin role management — the simplified model:
+ *
+ *   SA → sets FIRM_ADMIN permissions on the system template (via override)
+ *   Firm Admin → distributes subset of their permissions to employee roles
+ *
+ * Ceiling:
+ *   - FIRM_ADMIN role: system FIRM_ADMIN template permissions (SA controls)
+ *   - Other firm roles: firm FIRM_ADMIN's enabled permissions
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -56,7 +63,7 @@ public class FirmRoleServiceImpl implements FirmRoleService {
 
     // ═══════════════════════════════════════════════════════════════════════
     // GET /api/v1/firm/roles
-    // List all firm-scoped roles + system roles applicable to FIRM_USER
+    // List all firm-scoped roles
     // ═══════════════════════════════════════════════════════════════════════
     public List<RoleResponse> getFirmRoles() {
         UUID firmId = getRequiredFirmId();
@@ -64,16 +71,13 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         List<Role> firmRoles = roleRepository.findByFirmIdAndIsSystemFalse(firmId);
 
         if (!firmRoles.isEmpty()) {
-            // Firm has cloned roles — batch-load user counts and names in 2 queries
             List<UUID> roleIds = firmRoles.stream().map(Role::getId).collect(Collectors.toList());
 
-            // Count users per role: returns [roleId, count] pairs
             Map<UUID, Integer> userCountMap = new HashMap<>();
             for (Object[] row : userRepository.countUsersByRoleIds(firmId)) {
                 userCountMap.put((UUID) row[0], ((Number) row[1]).intValue());
             }
 
-            // Map roleId -> list of user full names
             Map<UUID, List<String>> userNamesMap = new HashMap<>();
             for (Object[] row : userRepository.findUserNamesByRoleIds(firmId, roleIds)) {
                 UUID roleId = (UUID) row[0];
@@ -86,41 +90,21 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                     .collect(Collectors.toList());
         }
 
-        // Fallback for firms created before the role-cloning feature:
-        // show system roles that are applicable to FIRM_USER
-        // System fallback roles have no firm association — userCount is always 0
-        return roleRepository.findByFirmIsNullAndIsSystemTrue()
-                .stream()
-                .filter(r -> r.getApplicableTo() == UserType.FIRM_USER)
-                .map(r -> RoleResponse.builder()
-                        .id(r.getId())
-                        .name(r.getRoleName())
-                        .code(r.getRoleCode())
-                        .description(r.getDescription())
-                        .isSystem(r.getIsSystem())
-                        .isActive(r.isActive())
-                        .userCount(0)
-                        .assignedUserNames(List.of())
-                        .createdAt(r.getCreatedAt())
-                        .updatedAt(r.getUpdatedAt())
-                        .build())
-                .collect(Collectors.toList());
+        return List.of();
     }
 
     // ═══════════════════════════════════════════════════════════════════════
     // GET /api/v1/firm/roles/{roleId}/permissions
-    // Two-tier ceiling:
-    //   - FIRM_ADMIN role: ceiling = parent system role (SUPER_ADMIN controls)
-    //   - Other firm roles: ceiling = firm FIRM_ADMIN's enabled perms
+    // Ceiling:
+    //   - FIRM_ADMIN role: system FIRM_ADMIN template permissions
+    //   - Other firm roles: firm FIRM_ADMIN's enabled permissions
     // ═══════════════════════════════════════════════════════════════════════
     public FirmRolePermissionsResponse getRolePermissions(UUID roleId) {
         UUID firmId = getRequiredFirmId();
         Role role = getValidatedFirmRole(roleId, firmId);
 
         List<Permission> current = rolePermissionRepository.findPermissionsByRoleId(role.getId());
-
         List<Permission> ceiling = computeCeiling(role, firmId);
-
         Set<UUID> currentIds = current.stream().map(Permission::getId).collect(Collectors.toSet());
 
         return FirmRolePermissionsResponse.builder()
@@ -144,8 +128,7 @@ public class FirmRoleServiceImpl implements FirmRoleService {
     // ═══════════════════════════════════════════════════════════════════════
     // PUT /api/v1/firm/roles/{roleId}/permissions
     // Firm admin updates permissions on a firm-scoped role
-    // Ceiling enforced — cannot exceed what the parent system role has
-    // Invalidates JWT for all users holding this role immediately
+    // Ceiling enforced — cannot exceed what FIRM_ADMIN has
     // ═══════════════════════════════════════════════════════════════════════
     @Transactional
     public RolePermissionResponse updateRolePermissions(UUID roleId, RolePermissionRequest request) {
@@ -154,13 +137,12 @@ public class FirmRoleServiceImpl implements FirmRoleService {
 
         Role role = getValidatedFirmRole(roleId, firmId);
 
-        // ── Batch-load permissions first (single query, avoids N+1) ──────
         List<Permission> permissions = permissionRepository.findAllById(request.getPermissionIds());
         if (permissions.size() != request.getPermissionIds().size()) {
             throw new ResourceNotFoundException("One or more permission IDs are invalid");
         }
 
-        // ── Ceiling check ─────────────────────────────────────────────────
+        // Ceiling check
         List<Permission> ceiling = computeCeiling(role, firmId);
         Set<UUID> ceilingPermIds = ceiling.stream().map(Permission::getId).collect(Collectors.toSet());
 
@@ -173,12 +155,7 @@ public class FirmRoleServiceImpl implements FirmRoleService {
             }
         }
 
-        // ── Replace permissions ───────────────────────────────────────────
-        // Capture the previous set first — the narrowing cascade (Phase 4)
-        // needs to know exactly which permissions the admin is giving up.
-        Set<UUID> oldPermIds = rolePermissionRepository.findPermissionsByRoleId(role.getId())
-                .stream().map(Permission::getId).collect(Collectors.toSet());
-
+        // Replace permissions
         rolePermissionRepository.deleteByRoleId(role.getId());
 
         List<RolePermission> newRolePermissions = permissions.stream()
@@ -195,26 +172,11 @@ public class FirmRoleServiceImpl implements FirmRoleService {
 
         rolePermissionRepository.saveAll(newRolePermissions);
 
-        // ── Invalidate all users holding this role ────────────────────────
-        // Their JWT carries old permissions — force re-login
+        // Invalidate all users holding this role
         List<UUID> affectedUsers = userRepository.findUserIdsByRoleId(role.getId());
         for (UUID userId : affectedUsers) {
             userRepository.incrementPermissionVersion(userId);
             permissionEvaluator.clearUserCache(userId);
-        }
-
-        // ── Narrowing cascade (spec §4, single-firm synchronous) ──────────
-        // A firm admin narrowing their own clone must not leave employee roles
-        // holding permissions the admin just gave up — the invariant
-        // "no employee holds more than their admin" is always-true.
-        List<String> cascadeEffect = List.of();
-        if (isFirmAdminRole(role)) {
-            Set<UUID> newPermIds = permissions.stream().map(Permission::getId).collect(Collectors.toSet());
-            Set<UUID> removedIds = new HashSet<>(oldPermIds);
-            removedIds.removeAll(newPermIds);
-            if (!removedIds.isEmpty()) {
-                cascadeEffect = cascadeStripEmployeeRoles(firmId, removedIds);
-            }
         }
 
         auditService.log(
@@ -224,79 +186,33 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                 "Firm admin updated permissions for role: " + role.getRoleCode()
                         + " (" + permissions.size() + " permissions). "
                         + affectedUsers.size() + " user sessions invalidated."
-                        + (cascadeEffect.isEmpty() ? "" : " Cascade: " + String.join("; ", cascadeEffect))
         );
 
-        log.info("Updated {} permissions for firm role '{}'. {} users invalidated. Cascade entries: {}",
-                permissions.size(), role.getRoleCode(), affectedUsers.size(), cascadeEffect.size());
+        log.info("Updated {} permissions for firm role '{}'. {} users invalidated.",
+                permissions.size(), role.getRoleCode(), affectedUsers.size());
 
-        // Return updated state — cascade effect included, never silent (spec §7)
         return RolePermissionResponse.builder()
                 .roleId(role.getId())
                 .roleName(role.getRoleName())
                 .roleCode(role.getRoleCode())
                 .permissions(permissions.stream().map(this::toPermResponse).collect(Collectors.toList()))
-                .cascadeEffect(cascadeEffect.isEmpty() ? null : cascadeEffect)
                 .build();
-    }
-
-    /**
-     * Phase 4 cascade: strips now-over-ceiling permissions from every employee
-     * role of the firm after the FIRM_ADMIN clone was narrowed, invalidates the
-     * affected holders, and returns a human-readable summary of what was stripped.
-     */
-    private List<String> cascadeStripEmployeeRoles(UUID firmId, Set<UUID> removedIds) {
-        List<String> effects = new ArrayList<>();
-
-        List<Role> employeeRoles = roleRepository.findByFirmIdAndIsSystemFalse(firmId).stream()
-                .filter(r -> !isFirmAdminRole(r))
-                .toList();
-
-        for (Role employeeRole : employeeRoles) {
-            Set<UUID> employeePermIds = rolePermissionRepository
-                    .findPermissionsByRoleId(employeeRole.getId())
-                    .stream().map(Permission::getId).collect(Collectors.toSet());
-
-            List<UUID> strippedIds = removedIds.stream()
-                    .filter(employeePermIds::contains)
-                    .toList();
-            if (strippedIds.isEmpty()) {
-                continue;
-            }
-
-            rolePermissionRepository.deleteByRoleIdAndPermissionIdIn(employeeRole.getId(), strippedIds);
-
-            // Batched invalidation for the stripped role's holders
-            userRepository.incrementPermissionVersionByRole(employeeRole.getId());
-            userRepository.findUserIdsByRoleId(employeeRole.getId())
-                    .forEach(permissionEvaluator::clearUserCache);
-
-            String codes = permissionRepository.findAllById(strippedIds).stream()
-                    .map(Permission::getCode)
-                    .sorted()
-                    .collect(Collectors.joining(", "));
-            effects.add("role " + employeeRole.getRoleCode() + ": removed [" + codes + "]");
-        }
-        return effects;
     }
 
     // ─── Ceiling logic ─────────────────────────────────────────────────────
 
     /**
-     * Two-tier ceiling:
-     *   - FIRM_ADMIN role: parent system role's permissions (SUPER_ADMIN controls)
-     *   - Other firm roles: firm FIRM_ADMIN's enabled permissions (FIRM_ADMIN controls)
+     * Two-tier ceiling (simplified):
+     *   - FIRM_ADMIN role: system FIRM_ADMIN template permissions (SA controls via override)
+     *   - Other firm roles: firm FIRM_ADMIN's enabled permissions
      */
     private List<Permission> computeCeiling(Role role, UUID firmId) {
         if (isFirmAdminRole(role)) {
-            // FIRM_ADMIN ceiling comes from the system role (SUPER_ADMIN sets this)
-            if (role.getParentRoleId() != null) {
-                return rolePermissionRepository.findPermissionsByRoleId(role.getParentRoleId())
-                        .stream()
-                        .filter(p -> p.getScope() != PermissionScope.GLOBAL)
-                        .toList();
-            }
-            return List.of();
+            // FIRM_ADMIN has no ceiling — SA sets their permissions via override.
+            // Firm Admin can distribute any non-GLOBAL permission.
+            return permissionRepository.findAll().stream()
+                    .filter(p -> p.getScope() != PermissionScope.GLOBAL && Boolean.TRUE.equals(p.isActive()))
+                    .toList();
         }
 
         // For all other firm roles: ceiling = firm FIRM_ADMIN's enabled permissions
@@ -326,12 +242,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         return firmId;
     }
 
-    /**
-     * Validates:
-     * 1. Role exists
-     * 2. Role belongs to this firm (not another firm, not a system role)
-     * 3. Role is not a system template (isSystem = false)
-     */
     private Role getValidatedFirmRole(UUID roleId, UUID firmId) {
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found"));
@@ -356,12 +266,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         return createRoleForFirm(getRequiredFirmId(), request);
     }
 
-    /**
-     * Phase 5: shared creation core used by both the Firm Admin path (firm id
-     * from the security context) and the SA on-behalf path (explicit firm id).
-     * Ceiling is not involved at creation — permissions are assigned afterward
-     * through the ceiling-checked edit endpoints or SA override.
-     */
     @Transactional
     public RoleResponse createRoleForFirm(UUID firmId, RoleRequest request) {
         UUID adminId = currentUserResolver.getCurrentUserId();
@@ -370,7 +274,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
             throw new ResourceNotFoundException("Firm not found: " + firmId);
         }
 
-        // Validate uniqueness within firm
         roleRepository.findByFirmIdAndRoleCode(firmId, request.getCode().toUpperCase()).ifPresent(r -> {
             throw new DuplicateResourceException(
                     String.format("Role code already exists in your firm: %s", request.getCode())
@@ -384,7 +287,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                 .description(request.getDescription())
                 .isSystem(false)
                 .applicableTo(UserType.FIRM_USER)
-                .parentRoleId(resolveParentRoleId(request.getParentRoleId()))
                 .build();
         role.setActive(request.getIsActive() != null ? request.getIsActive() : true);
         role.setCreatedBy(adminId);
@@ -404,7 +306,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
 
     // ═══════════════════════════════════════════════════════════════════════
     // DELETE /api/v1/firm/roles/{roleId}
-    // Firm Admin deletes a custom role (not FIRM_ADMIN, not system)
     // ═══════════════════════════════════════════════════════════════════════
     @Transactional
     public void deleteRole(UUID roleId) {
@@ -437,7 +338,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
 
     // ═══════════════════════════════════════════════════════════════════════
     // PATCH /api/v1/firm/roles/{roleId}/toggle
-    // Firm Admin toggles a custom role's active status
     // ═══════════════════════════════════════════════════════════════════════
     @Transactional
     public RoleResponse toggleRoleStatus(UUID roleId) {
@@ -465,37 +365,8 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         return toMinimalRoleResponse(role);
     }
 
-    // ─── Parent template resolution ─────────────────────────────────────
-
-    /**
-     * Resolves the base system template for a new custom role.
-     * Null = no anchor (legal; ceiling then comes from the live FIRM_ADMIN branch).
-     * Provided = must be an active system template and never SUPER_ADMIN.
-     */
-    private UUID resolveParentRoleId(UUID requestedParentRoleId) {
-        if (requestedParentRoleId == null) {
-            return null;
-        }
-        Role parent = roleRepository.findById(requestedParentRoleId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Parent role not found: " + requestedParentRoleId));
-        if (!Boolean.TRUE.equals(parent.getIsSystem()) || parent.getFirm() != null) {
-            throw new BusinessRuleException("Parent role must be a system template");
-        }
-        if (RoleCode.SUPER_ADMIN.equals(parent.getRoleCode())) {
-            throw new BusinessRuleException("SUPER_ADMIN cannot be used as a base template");
-        }
-        if (!parent.isActive()) {
-            throw new BusinessRuleException("Parent role template is not active");
-        }
-        return parent.getId();
-    }
-
-    // ─── Mappers ──────────────────────────────────────────────────────────
-
     // ═══════════════════════════════════════════════════════════════════════
     // GET /api/v1/firm/roles/{roleId}/users
-    // List all users assigned to this role within the firm
     // ═══════════════════════════════════════════════════════════════════════
     public List<RoleUserResponse> getRoleUsers(UUID roleId) {
         UUID firmId = getRequiredFirmId();
@@ -506,6 +377,8 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                 .map(this::toUserResponse)
                 .collect(Collectors.toList());
     }
+
+    // ─── Mappers ──────────────────────────────────────────────────────────
 
     private RoleUserResponse toUserResponse(User user) {
         return RoleUserResponse.builder()
@@ -560,5 +433,4 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                 .createdAt(p.getCreatedAt())
                 .build();
     }
-
 }

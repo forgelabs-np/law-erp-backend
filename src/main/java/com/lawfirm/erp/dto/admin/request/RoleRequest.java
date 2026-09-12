@@ -19,12 +19,5 @@ public class RoleRequest {
 
     private Boolean isActive;
 
-    /**
-     * Optional base system template for custom roles (lineage + future ceiling
-     * semantics). Must reference an active system role (firm IS NULL, isSystem=true),
-     * and never SUPER_ADMIN. When omitted, the role simply has no template anchor.
-     */
-    private UUID parentRoleId;
-
     private List<UUID> permissionIds;
 }

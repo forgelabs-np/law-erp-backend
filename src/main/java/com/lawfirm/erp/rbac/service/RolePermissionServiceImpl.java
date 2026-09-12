@@ -23,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -65,24 +64,12 @@ public class RolePermissionServiceImpl implements RolePermissionService {
             throw new ResourceNotFoundException("One or more permission IDs are invalid");
         }
 
-        // ── Ceiling check ─────────────────────────────────────────────────
-        // A custom role may only hold permissions that its parent system role
-        // has. GLOBAL-scope permissions are reserved for SUPER_ADMIN.
-        if (role.getParentRoleId() != null) {
-            Role parentRole = roleRepository.findById(role.getParentRoleId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Parent system role not found"));
-
-            Set<UUID> parentPermIds = rolePermissionRepository.findPermissionsByRoleId(parentRole.getId())
-                    .stream().map(Permission::getId).collect(Collectors.toSet());
-
-            for (Permission perm : permissions) {
-                if (!parentPermIds.contains(perm.getId()) || perm.getScope() == PermissionScope.GLOBAL) {
-                    throw new ForbiddenException(
-                            "Permission '" + perm.getCode() + "' (scope: " + perm.getScope()
-                            + ") is not allowed for role type '" + parentRole.getRoleCode()
-                            + "'. Exceeds system ceiling."
-                    );
-                }
+        // GLOBAL-scope permissions are reserved for SUPER_ADMIN
+        for (Permission perm : permissions) {
+            if (perm.getScope() == PermissionScope.GLOBAL) {
+                throw new ForbiddenException(
+                        "Permission '" + perm.getCode() + "' (scope: GLOBAL) is reserved for Super Admin."
+                );
             }
         }
 

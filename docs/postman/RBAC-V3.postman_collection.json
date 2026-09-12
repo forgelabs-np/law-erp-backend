@@ -1,0 +1,478 @@
+{
+  "info": {
+    "name": "RBAC V3 — Simplified Roles & Permissions",
+    "description": "Complete RBAC testing collection for the simplified model:\n\nSA → Creates firm → Sets FIRM_ADMIN permissions → Firm Admin distributes to employees\n\nBase URL: http://localhost:8080",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{saToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "saToken",
+      "value": ""
+    },
+    {
+      "key": "firmToken",
+      "value": ""
+    },
+    {
+      "key": "firmId",
+      "value": ""
+    },
+    {
+      "key": "firmAdminRoleId",
+      "value": ""
+    },
+    {
+      "key": "advocateRoleId",
+      "value": ""
+    },
+    {
+      "key": "paralegalRoleId",
+      "value": ""
+    },
+    {
+      "key": "clientRoleId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Super Admin Setup",
+      "item": [
+        {
+          "name": "Register Super Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"superadmin\",\n    \"email\": \"admin@system.com\",\n    \"password\": \"Test@123\",\n    \"fullName\": \"Super Admin\",\n    \"mobileNo\": \"9800000000\",\n    \"secretKey\": \"your-registration-secret\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login Super Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('saToken', json.data.accessToken);",
+                  "    console.log('saToken saved:', json.data.accessToken.substring(0, 20) + '...');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"superadmin\",\n    \"password\": \"Test@123\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "login"]
+            }
+          }
+        },
+        {
+          "name": "List All System Roles",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/roles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "roles"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Create Firm",
+      "item": [
+        {
+          "name": "Create Firm",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data) {",
+                  "    if (json.data.firmId) pm.collectionVariables.set('firmId', json.data.firmId);",
+                  "    if (json.data.adminUserId) pm.collectionVariables.set('firmAdminUserId', json.data.adminUserId);",
+                  "    console.log('firmId:', json.data.firmId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"lawFirmCode\": \"TESTFIRM\",\n    \"name\": \"Test Law Firm\",\n    \"firmType\": \"FIRM\",\n    \"email\": \"info@testfirm.com\",\n    \"phone\": \"9800000010\",\n    \"adminUsername\": \"firmadmin\",\n    \"adminEmail\": \"admin@testfirm.com\",\n    \"adminMobileNo\": \"9800000011\",\n    \"adminPassword\": \"AdminPass123!\",\n    \"adminFullName\": \"Firm Admin User\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms"]
+            }
+          }
+        },
+        {
+          "name": "View Firm Roles (SA)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && Array.isArray(json.data)) {",
+                  "    json.data.forEach(function(role) {",
+                  "        if (role.code === 'FIRM_ADMIN') pm.collectionVariables.set('firmAdminRoleId', role.id);",
+                  "        if (role.code === 'ADVOCATE') pm.collectionVariables.set('advocateRoleId', role.id);",
+                  "        if (role.code === 'PARALEGAL') pm.collectionVariables.set('paralegalRoleId', role.id);",
+                  "        if (role.code === 'CLIENT') pm.collectionVariables.set('clientRoleId', role.id);",
+                  "    });",
+                  "    console.log('Roles saved. FIRM_ADMIN:', pm.collectionVariables.get('firmAdminRoleId'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms/{{firmId}}/roles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms", "{{firmId}}", "roles"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Set FIRM_ADMIN Permissions (Ceiling)",
+      "item": [
+        {
+          "name": "Override FIRM_ADMIN Permissions",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"roleId\": \"{{firmAdminRoleId}}\",\n    \"permissionIds\": []\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms/{{firmId}}/roles/{{firmAdminRoleId}}/permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms", "{{firmId}}", "roles", "{{firmAdminRoleId}}", "permissions"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Firm Admin Operations",
+      "item": [
+        {
+          "name": "Login Firm Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('firmToken', json.data.accessToken);",
+                  "    console.log('firmToken saved');",
+                  "} else if (json.data && json.data.status === 'PASSWORD_CHANGE_REQUIRED') {",
+                  "    console.log('PASSWORD_CHANGE_REQUIRED — use change-password endpoint first');",
+                  "    pm.collectionVariables.set('passwordChangeToken', json.data.passwordChangeToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"lawFirmCode\": \"TESTFIRM\",\n    \"username\": \"firmadmin\",\n    \"password\": \"AdminPass123!\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "List Firm Roles (Firm Admin)",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{firmToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/roles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "roles"]
+            }
+          }
+        },
+        {
+          "name": "View ADVOCATE Permissions + Ceiling",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{firmToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/roles/{{advocateRoleId}}/permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "roles", "{{advocateRoleId}}", "permissions"]
+            }
+          }
+        },
+        {
+          "name": "Assign Permissions to ADVOCATE",
+          "request": {
+            "method": "PUT",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{firmToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"roleId\": \"{{advocateRoleId}}\",\n    \"permissionIds\": []\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/roles/{{advocateRoleId}}/permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "roles", "{{advocateRoleId}}", "permissions"]
+            }
+          }
+        },
+        {
+          "name": "Assign Permissions to PARALEGAL",
+          "request": {
+            "method": "PUT",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{firmToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"roleId\": \"{{paralegalRoleId}}\",\n    \"permissionIds\": []\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/roles/{{paralegalRoleId}}/permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "roles", "{{paralegalRoleId}}", "permissions"]
+            }
+          }
+        },
+        {
+          "name": "View Role Users",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{firmToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/roles/{{advocateRoleId}}/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "roles", "{{advocateRoleId}}", "users"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. SA Custom Role On-Behalf",
+      "item": [
+        {
+          "name": "Create Custom Role for Firm",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"name\": \"Senior Advocate\",\n    \"code\": \"SENIOR_ADVOCATE\",\n    \"description\": \"Senior advocate with extended permissions\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms/{{firmId}}/roles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms", "{{firmId}}", "roles"]
+            }
+          }
+        },
+        {
+          "name": "Set Custom Role Permissions (No Ceiling)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"roleId\": \"\",\n    \"permissionIds\": []\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms/{{firmId}}/roles//permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms", "{{firmId}}", "roles", "", "permissions"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Multi-Firm Isolation",
+      "item": [
+        {
+          "name": "Create Firm B",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"lawFirmCode\": \"FIRMB\",\n    \"name\": \"Firm B\",\n    \"firmType\": \"FIRM\",\n    \"email\": \"info@firmB.com\",\n    \"phone\": \"9800000020\",\n    \"adminUsername\": \"firmBadmin\",\n    \"adminEmail\": \"admin@firmB.com\",\n    \"adminMobileNo\": \"9800000021\",\n    \"adminPassword\": \"AdminPass123!\",\n    \"adminFullName\": \"Firm B Admin\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms"]
+            }
+          }
+        },
+        {
+          "name": "View Firm B Roles",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms/{{firmBId}}/roles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms", "{{firmBId}}", "roles"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
