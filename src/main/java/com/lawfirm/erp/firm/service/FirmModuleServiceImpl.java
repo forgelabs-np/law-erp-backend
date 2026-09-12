@@ -3,8 +3,6 @@ package com.lawfirm.erp.firm.service;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
-import com.lawfirm.erp.common.enums.AllowedExtensions;
-import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.dto.firm.request.EnableModuleRequest;
@@ -23,7 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -37,8 +34,6 @@ public class FirmModuleServiceImpl implements FirmModuleService {
     private final ModuleRepository moduleRepository;
     private final CurrentUserResolver currentUserResolver;
     private final AuditService auditService;
-
-    private static final Set<String> ALLOWED_EXTENSIONS = AllowedExtensions.getExtensionsAsSet();
 
     @Transactional
     public FirmModuleResponse enableModuleForFirm(UUID firmId, EnableModuleRequest request) {
@@ -54,20 +49,8 @@ public class FirmModuleServiceImpl implements FirmModuleService {
 
         if (firmModule != null) {
             firmModule.setIsEnabled(request.getIsEnabled());
-            if (request.getTrialDays() != null && request.getTrialDays() > 0) {
-                firmModule.setExpiresAt(LocalDateTime.now().plusDays(request.getTrialDays()));
-                firmModule.setIsTrial(true);
-            }
-
-            if (request.getMaxFileSizeMb() != null) {
-                firmModule.setMaxFileSizeMb(request.getMaxFileSizeMb());
-            }
-            if (request.getAllowedExtensions() != null) {
-                validateExtensions(request.getAllowedExtensions());
-                firmModule.setAllowedExtensions(request.getAllowedExtensions());
-            }
-            if (request.getNotes() != null) {
-                firmModule.setNotes(request.getNotes());
+            if (request.getIsEnabled()) {
+                firmModule.setEnabledAt(LocalDateTime.now());
             }
 
             firmModule = firmModuleRepository.save(firmModule);
@@ -77,25 +60,15 @@ public class FirmModuleServiceImpl implements FirmModuleService {
                     AuditEntity.FIRM_MODULE,
                     firmModule.getId(),
                     "Module " + module.getCode() + " configured for firm " + firm.getLawFirmCode() +
-                            " (enabled: " + request.getIsEnabled() + ", maxFileSize: " +
-                            (request.getMaxFileSizeMb() != null ? request.getMaxFileSizeMb() + "MB" : "default") + ")"
+                            " (enabled: " + request.getIsEnabled() + ")"
             );
         } else {
             firmModule = FirmModule.builder()
                     .firm(firm)
                     .module(module)
                     .isEnabled(request.getIsEnabled())
-                    .enabledAt(LocalDateTime.now())
-                    .maxFileSizeMb(request.getMaxFileSizeMb() != null ? request.getMaxFileSizeMb() : 10)
-                    .allowedExtensions(request.getAllowedExtensions() != null ?
-                            request.getAllowedExtensions() : AllowedExtensions.getDefaultExtensions())
-                    .notes(request.getNotes())
+                    .enabledAt(request.getIsEnabled() ? LocalDateTime.now() : null)
                     .build();
-
-            if (request.getTrialDays() != null && request.getTrialDays() > 0) {
-                firmModule.setExpiresAt(LocalDateTime.now().plusDays(request.getTrialDays()));
-                firmModule.setIsTrial(true);
-            }
 
             firmModule = firmModuleRepository.save(firmModule);
         }
@@ -112,22 +85,6 @@ public class FirmModuleServiceImpl implements FirmModuleService {
         );
 
         return toResponse(firmModule);
-    }
-
-    private void validateExtensions(String extensions) {
-        if (extensions == null || extensions.trim().isEmpty()) {
-            return;
-        }
-
-        String[] parts = extensions.split(",");
-        for (String ext : parts) {
-            String trimmed = ext.trim().toLowerCase();
-            if (!AllowedExtensions.isValid(trimmed)) {
-                throw new BusinessRuleException(
-                        "Invalid file extension: '" + trimmed + "'. Allowed: " + AllowedExtensions.getAsCsv()
-                );
-            }
-        }
     }
 
     public FirmModuleResponse getModuleConfig(UUID firmId, UUID moduleId) {

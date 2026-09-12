@@ -59,6 +59,10 @@ public class MeResponse {
         private String address;
         private String jurisdiction;
         private String logoUrl;
+        private String status;             // ACTIVE, SUSPENDED, TRIAL, EXPIRED
+        private boolean isTrial;
+        private LocalDateTime trialExpiresAt;
+        private Long daysRemaining;        // null if not trial
     }
 
     @Data

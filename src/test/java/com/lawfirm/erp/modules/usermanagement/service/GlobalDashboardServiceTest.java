@@ -167,8 +167,8 @@ class GlobalDashboardServiceTest {
         when(userRepository.countByUserType(UserType.CLIENT)).thenReturn(0L);
 
         // FirmStats
-        when(firmRepository.count()).thenReturn(2L);
-        when(firmRepository.countByStatus(FirmStatus.ACTIVE)).thenReturn(1L);
+        when(firmRepository.countFirmsWithFirmAdmin()).thenReturn(2L);
+        when(firmRepository.countActiveFirmsWithFirmAdmin()).thenReturn(1L);
 
         // CaseStats — for super admin, firmId is null so count() and findAll() are used
         when(matterRepository.count()).thenReturn(2L);

@@ -22,6 +22,8 @@ public class NotificationRenderer {
             case HEARING_REMINDER -> renderHearingReminder(event);
             case APPEAL_DEADLINE -> renderAppealDeadline(event);
             case APPEAL_LAPSED -> renderAppealLapsed(event);
+            case TRIAL_EXPIRING -> renderTrialExpiring(event);
+            case TRIAL_EXPIRED -> renderTrialExpired(event);
             case ANNOUNCEMENT -> renderAnnouncement(event);
         };
     }
@@ -68,6 +70,27 @@ public class NotificationRenderer {
         return new RenderedNotification(
                 NotificationConstants.APPEAL_LAPSED_TITLE,
                 String.format(NotificationConstants.APPEAL_LAPSED_BODY, matterNumber, courtCaseRef));
+    }
+
+    private RenderedNotification renderTrialExpiring(NotificationEvent event) {
+        String firmName = str(event.variables(), "firmName");
+        String daysRemaining = str(event.variables(), "daysRemaining");
+        int days;
+        try {
+            days = Integer.parseInt(daysRemaining);
+        } catch (NumberFormatException e) {
+            days = 0;
+        }
+        return new RenderedNotification(
+                NotificationConstants.TRIAL_EXPIRING_TITLE,
+                String.format(NotificationConstants.TRIAL_EXPIRING_BODY, firmName, days));
+    }
+
+    private RenderedNotification renderTrialExpired(NotificationEvent event) {
+        String firmName = str(event.variables(), "firmName");
+        return new RenderedNotification(
+                NotificationConstants.TRIAL_EXPIRED_TITLE,
+                String.format(NotificationConstants.TRIAL_EXPIRED_BODY, firmName));
     }
 
     private RenderedNotification renderAnnouncement(NotificationEvent event) {

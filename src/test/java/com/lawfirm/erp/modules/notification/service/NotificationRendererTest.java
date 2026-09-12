@@ -73,6 +73,33 @@ class NotificationRendererTest {
     }
 
     @Test
+    @DisplayName("TRIAL_EXPIRING renders firm name and days remaining")
+    void rendersTrialExpiring() {
+        NotificationEvent event = NotificationEvent.toUser(FIRM_ID, UUID.randomUUID(),
+                NotificationType.TRIAL_EXPIRING, "FIRM", FIRM_ID,
+                Map.of("firmName", "Apex Law", "daysRemaining", "3"));
+
+        var rendered = renderer.render(event, UUID.randomUUID());
+
+        assertEquals("Trial period expiring soon", rendered.title());
+        assertTrue(rendered.body().contains("Apex Law"));
+        assertTrue(rendered.body().contains("3"));
+    }
+
+    @Test
+    @DisplayName("TRIAL_EXPIRED renders firm name")
+    void rendersTrialExpired() {
+        NotificationEvent event = NotificationEvent.toUser(FIRM_ID, UUID.randomUUID(),
+                NotificationType.TRIAL_EXPIRED, "FIRM", FIRM_ID,
+                Map.of("firmName", "Apex Law"));
+
+        var rendered = renderer.render(event, UUID.randomUUID());
+
+        assertEquals("Trial period expired", rendered.title());
+        assertTrue(rendered.body().contains("Apex Law"));
+    }
+
+    @Test
     @DisplayName("ALERT types render their copy (hearing reminder)")
     void rendersHearingReminder() {
         NotificationEvent event = NotificationEvent.toUser(FIRM_ID, UUID.randomUUID(),

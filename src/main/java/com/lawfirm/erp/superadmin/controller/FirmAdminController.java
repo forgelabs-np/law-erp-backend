@@ -5,6 +5,7 @@ import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.dto.firm.request.CreateFirmRequest;
+import com.lawfirm.erp.dto.firm.request.ExtendTrialRequest;
 import com.lawfirm.erp.dto.firm.response.FirmAdminResponse;
 import com.lawfirm.erp.dto.firm.response.FirmCreationResponse;
 import com.lawfirm.erp.firm.service.FirmAdminService;
@@ -78,5 +79,35 @@ public class FirmAdminController {
                 firmAdminService.toggleFirmAdminStatus(adminId),
                 "Firm admin status toggled successfully"
         );
+    }
+
+    @PutMapping("/{firmId}/suspend")
+    @Operation(summary = FirmConstants.SUSPEND_FIRM_SUMMARY)
+    public ResponseEntity<ApiResponse<Void>> suspendFirm(@PathVariable UUID firmId) {
+        firmService.suspendFirm(firmId);
+        return responseHandler.ok(null, "Firm suspended successfully");
+    }
+
+    @PutMapping("/{firmId}/activate")
+    @Operation(summary = FirmConstants.ACTIVATE_FIRM_SUMMARY)
+    public ResponseEntity<ApiResponse<Void>> activateFirm(@PathVariable UUID firmId) {
+        firmService.activateFirm(firmId);
+        return responseHandler.ok(null, "Firm activated successfully");
+    }
+
+    @PutMapping("/{firmId}/extend-trial")
+    @Operation(summary = FirmConstants.EXTEND_TRIAL_SUMMARY)
+    public ResponseEntity<ApiResponse<Void>> extendTrial(
+            @PathVariable UUID firmId,
+            @Valid @RequestBody ApiRequest<ExtendTrialRequest> request) {
+        firmService.extendTrial(firmId, request.getData().getAdditionalDays());
+        return responseHandler.ok(null, "Trial extended successfully");
+    }
+
+    @PutMapping("/{firmId}/convert-to-permanent")
+    @Operation(summary = FirmConstants.CONVERT_TO_PERMANENT_SUMMARY)
+    public ResponseEntity<ApiResponse<Void>> convertToPermanent(@PathVariable UUID firmId) {
+        firmService.convertToPermanent(firmId);
+        return responseHandler.ok(null, "Firm converted to permanent successfully");
     }
 }

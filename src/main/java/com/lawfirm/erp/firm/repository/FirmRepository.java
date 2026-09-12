@@ -18,6 +18,17 @@ public interface FirmRepository extends JpaRepository<Firm, UUID> {
     @Query("SELECT COUNT(f) FROM Firm f WHERE f.status = :status")
     long countByStatus(@Param("status") com.lawfirm.erp.common.enums.FirmStatus status);
 
+    /** Find all trial firms. */
+    List<Firm> findByIsTrialTrue();
+
+    /** Count firms that have at least one FIRM_ADMIN user — only these should be counted as 'real' firms. */
+    @Query("SELECT COUNT(DISTINCT u.firm.id) FROM User u WHERE u.userType = 'FIRM' AND u.firm IS NOT NULL")
+    long countFirmsWithFirmAdmin();
+
+    /** Count active firms that have at least one FIRM_ADMIN user. */
+    @Query("SELECT COUNT(DISTINCT u.firm.id) FROM User u JOIN u.firm f WHERE u.userType = 'FIRM' AND f.status = 'ACTIVE'")
+    long countActiveFirmsWithFirmAdmin();
+
     // ── Trend queries ─────────────────────────────────────────────────────
 
     /** Daily new firm counts grouped by date. */

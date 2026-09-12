@@ -1,7 +1,7 @@
 # Project State
 
 ## Current Focus
-**RBAC simplified** (325 tests green) — removed entire template/sync infrastructure (~900+ lines). New model: SA sets FIRM_ADMIN permissions via override (no ceiling for FIRM_ADMIN), Firm Admin distributes subset to employee roles (ceilinged by FIRM_ADMIN's permissions). Custom roles supported. Per-firm isolation confirmed.
+**Trial period + firm lifecycle** (344 tests green) — firm creation supports trial period (configurable days), daily scheduler sends expiry notifications, suspended firms blocked at `/me`, extend/convert-to-permanent endpoints. Also fixed: firm count dashboard (only FIRM_ADMIN firms), simplified enable-module request.
 
 ## Branch
 `devG`
@@ -12,14 +12,14 @@
 - Modules: Auth, RBAC, Case Management, Invoicing, Super Admin, Customer, Firm, Tenant, Scraper
 
 ## Recent Work (this session)
-- **RBAC simplification** — removed TemplatePermissionService, TemplateSyncPlanner, TemplateSyncRunner, FirmSyncExecutor, SyncJob, DTOs, cascade logic; simplified Role entity (removed parent_role_id, last_sa_edit_at, extends_role); new ceiling model: FIRM_ADMIN=no ceiling, others=FIRM_ADMIN perms; 8 new E2E tests; 325 tests green
-- **Scraper fixes** — WIP compile errors fixed (typo'd response type, nonexistent `notFound`, missing imports); `getActiveCourts()` = client cases ∩ registry kill-switch; matches endpoint ordered newest-first
-- **Court registry** — replaced fabricated seed with verified data scraped from supremecourt.gov.np (77 district courts, exact id↔name); high courts on a separate `appeal/syspublic.php` system → deliberately not seeded
-- **English court names** — `Court` split into `court_name_nepali` + `court_name_english`; new `CourtSeeder` `@Service` collaborator upserts the registry at startup (never overwrites `isActive`/`courtType`); DTOs/mapper expose both names
-- **Pattern alignment** — seeding out of `ScraperServiceImpl` into a dedicated collaborator per the controller/service/Impl/collaborator pattern
+- **Trial period feature** — `Firm` entity has `isTrial`, `trialDays`, `trialStartedAt`, `trialExpiresAt`; SA creates trial firms; `/me` gates on suspended/expired; `TrialExpiryScheduler` sends daily notifications; endpoints: suspend, activate, extend-trial, convert-to-permanent
+- **Dashboard firm count fix** — `FirmStats.totalFirms` now counts only firms with FIRM_ADMIN users
+- **Enable module simplified** — `EnableModuleRequest` reduced to `moduleId` + `isEnabled`
+- **Postman updated** — `RBAC-V3.postman_collection.json` now includes trial firm creation, Get Me, and firm lifecycle endpoints (suspend/activate/extend-trial/convert-to-permanent)
+- **RBAC simplification** — removed template layer, simplified ceiling model, 325 tests green
 
 ## Deep History Index
-- `memory/2026-09-12.md` — RBAC simplification: removed template layer, simplified ceiling model, 325 tests green
+- `memory/2026-09-12.md` — RBAC simplification, trial period feature, dashboard fixes, enable-module simplification (344 tests)
 - `memory/2026-09-09.md` — notification module design (v1 scope locked), preview endpoint GET→POST fix
 - `memory/2026-09-08.md` — delegation chain built (all 5 phases): template editing, diff-sync async job, both-direction cascade, SA firm-role visibility, `docs/rbac-delegation-chain-design.md`
 - `memory/2026-09-07.md` — RBAC state-of-the-world audit + `docs/rbac-roles-and-permissions.md` (gaps: immutable system templates, no SA firm-role read API)

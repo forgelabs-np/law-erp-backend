@@ -30,4 +30,10 @@ public final class NotificationConstants {
     public static final String APPEAL_LAPSED_BODY = "No appeal was filed for matter %s (%s) before the deadline — the judgment is now final.";
     public static final String ANNOUNCEMENT_TITLE = "%s";
     public static final String ANNOUNCEMENT_BODY = "%s";
+
+    // ── Trial ─────────────────────────────────────────────────────────
+    public static final String TRIAL_EXPIRING_TITLE = "Trial period expiring soon";
+    public static final String TRIAL_EXPIRING_BODY = "Your trial for %s expires in %d day(s). Please contact support to continue after the trial ends.";
+    public static final String TRIAL_EXPIRED_TITLE = "Trial period expired";
+    public static final String TRIAL_EXPIRED_BODY = "Your trial for %s has expired. Please contact support to regain access.";
 }

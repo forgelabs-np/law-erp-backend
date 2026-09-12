@@ -118,8 +118,9 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
                     .map(f -> f.getStatus() == FirmStatus.ACTIVE ? 1L : 0L)
                     .orElse(0L);
         } else {
-            total = firmRepository.count();
-            active = firmRepository.countByStatus(FirmStatus.ACTIVE);
+            // Only count firms that have at least one FIRM_ADMIN user
+            total = firmRepository.countFirmsWithFirmAdmin();
+            active = firmRepository.countActiveFirmsWithFirmAdmin();
         }
         return GlobalDashboardResponse.FirmStats.builder()
                 .totalFirms(total)

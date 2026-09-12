@@ -14,6 +14,9 @@ public enum NotificationType {
     HEARING_REMINDER(NotificationCategory.ALERT),
     APPEAL_DEADLINE(NotificationCategory.ALERT),
 
+    TRIAL_EXPIRING(NotificationCategory.ALERT),
+    TRIAL_EXPIRED(NotificationCategory.SYSTEM),
+
     ANNOUNCEMENT(NotificationCategory.BROADCAST);
 
     private final NotificationCategory category;

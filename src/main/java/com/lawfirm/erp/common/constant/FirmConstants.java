@@ -36,6 +36,12 @@ public final class FirmConstants {
     public static final String GET_FIRM_ADMIN_BY_ID_SUMMARY = "Get firm admin by ID";
     public static final String TOGGLE_FIRM_ADMIN_STATUS_SUMMARY = "Toggle firm admin status (activate/deactivate)";
 
+    // Firm lifecycle (Super Admin)
+    public static final String SUSPEND_FIRM_SUMMARY = "Suspend a firm — blocks all firm users from accessing the system";
+    public static final String ACTIVATE_FIRM_SUMMARY = "Activate a suspended or trial firm";
+    public static final String EXTEND_TRIAL_SUMMARY = "Extend a trial firm's expiry date";
+    public static final String CONVERT_TO_PERMANENT_SUMMARY = "Convert a trial firm to a permanent (paid) firm";
+
     // FirmConfigController
     public static final String GET_FIRM_CONFIG_SUMMARY = "Get firm config values";
     public static final String GET_FIRM_CONFIG_DESCRIPTION = "Returns brand colors, email footer, timezone, etc.";

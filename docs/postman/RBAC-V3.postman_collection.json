@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "RBAC V3 — Simplified Roles & Permissions",
-    "description": "Complete RBAC testing collection for the simplified model:\n\nSA → Creates firm → Sets FIRM_ADMIN permissions → Firm Admin distributes to employees\n\nBase URL: http://localhost:8080",
+    "description": "Complete RBAC testing collection for the simplified model:\n\nSA → Creates firm → Sets FIRM_ADMIN permissions → Firm Admin distributes to employees\n\nIncludes: Firm lifecycle (suspend/activate/extend-trial/convert-to-permanent)\n\nBase URL: http://localhost:8080",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -126,7 +126,7 @@
       "name": "2. Create Firm",
       "item": [
         {
-          "name": "Create Firm",
+          "name": "Create Firm (Permanent)",
           "event": [
             {
               "listen": "test",
@@ -153,7 +153,43 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"data\": {\n    \"lawFirmCode\": \"TESTFIRM\",\n    \"name\": \"Test Law Firm\",\n    \"firmType\": \"FIRM\",\n    \"email\": \"info@testfirm.com\",\n    \"phone\": \"9800000010\",\n    \"adminUsername\": \"firmadmin\",\n    \"adminEmail\": \"admin@testfirm.com\",\n    \"adminMobileNo\": \"9800000011\",\n    \"adminPassword\": \"AdminPass123!\",\n    \"adminFullName\": \"Firm Admin User\"\n  }\n}"
+              "raw": "{\n  \"data\": {\n    \"lawFirmCode\": \"TESTFIRM\",\n    \"name\": \"Test Law Firm\",\n    \"firmType\": \"FIRM\",\n    \"email\": \"info@testfirm.com\",\n    \"phone\": \"9800000010\",\n    \"adminUsername\": \"firmadmin\",\n    \"adminEmail\": \"admin@testfirm.com\",\n    \"adminMobileNo\": \"9800000011\",\n    \"adminPassword\": \"AdminPass123!\",\n    \"adminFullName\": \"Firm Admin User\",\n    \"isTrial\": false\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms"]
+            }
+          }
+        },
+        {
+          "name": "Create Trial Firm (15 days)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data) {",
+                  "    if (json.data.firmId) pm.collectionVariables.set('trialFirmId', json.data.firmId);",
+                  "    console.log('trialFirmId:', json.data.firmId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"lawFirmCode\": \"TRIALFIRM\",\n    \"name\": \"Trial Law Firm\",\n    \"firmType\": \"FIRM\",\n    \"email\": \"info@trialfirm.com\",\n    \"phone\": \"9800000030\",\n    \"adminUsername\": \"trialadmin\",\n    \"adminEmail\": \"admin@trialfirm.com\",\n    \"adminMobileNo\": \"9800000031\",\n    \"adminPassword\": \"AdminPass123!\",\n    \"adminFullName\": \"Trial Firm Admin\",\n    \"isTrial\": true,\n    \"trialDays\": 15\n  }\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/super-admin/firms",
@@ -260,6 +296,44 @@
               "raw": "{{baseUrl}}/api/v1/auth/login",
               "host": ["{{baseUrl}}"],
               "path": ["api", "v1", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Me (Firm Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data) {",
+                  "    console.log('Firm status:', json.data.firm ? json.data.firm.status : 'N/A');",
+                  "    console.log('Is trial:', json.data.firm ? json.data.firm.isTrial : false);",
+                  "    console.log('Trial expires:', json.data.firm ? json.data.firm.trialExpiresAt : 'N/A');",
+                  "    console.log('Days remaining:', json.data.firm ? json.data.firm.daysRemaining : 'N/A');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{firmToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "me"]
             }
           }
         },
@@ -391,7 +465,67 @@
       ]
     },
     {
-      "name": "5. SA Custom Role On-Behalf",
+      "name": "5. Firm Lifecycle (SA)",
+      "description": "Suspend, activate, extend trial, convert to permanent",
+      "item": [
+        {
+          "name": "Suspend Firm",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms/{{firmId}}/suspend",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms", "{{firmId}}", "suspend"]
+            }
+          }
+        },
+        {
+          "name": "Activate Firm",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms/{{firmId}}/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms", "{{firmId}}", "activate"]
+            }
+          }
+        },
+        {
+          "name": "Extend Trial (7 days)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"additionalDays\": 7\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms/{{trialFirmId}}/extend-trial",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms", "{{trialFirmId}}", "extend-trial"]
+            }
+          }
+        },
+        {
+          "name": "Convert Trial to Permanent",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms/{{trialFirmId}}/convert-to-permanent",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms", "{{trialFirmId}}", "convert-to-permanent"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. SA Custom Role On-Behalf",
       "item": [
         {
           "name": "Create Custom Role for Firm",
@@ -438,7 +572,7 @@
       ]
     },
     {
-      "name": "6. Multi-Firm Isolation",
+      "name": "7. Multi-Firm Isolation",
       "item": [
         {
           "name": "Create Firm B",
@@ -452,7 +586,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"data\": {\n    \"lawFirmCode\": \"FIRMB\",\n    \"name\": \"Firm B\",\n    \"firmType\": \"FIRM\",\n    \"email\": \"info@firmB.com\",\n    \"phone\": \"9800000020\",\n    \"adminUsername\": \"firmBadmin\",\n    \"adminEmail\": \"admin@firmB.com\",\n    \"adminMobileNo\": \"9800000021\",\n    \"adminPassword\": \"AdminPass123!\",\n    \"adminFullName\": \"Firm B Admin\"\n  }\n}"
+              "raw": "{\n  \"data\": {\n    \"lawFirmCode\": \"FIRMB\",\n    \"name\": \"Firm B\",\n    \"firmType\": \"FIRM\",\n    \"email\": \"info@firmB.com\",\n    \"phone\": \"9800000020\",\n    \"adminUsername\": \"firmBadmin\",\n    \"adminEmail\": \"admin@firmB.com\",\n    \"adminMobileNo\": \"9800000021\",\n    \"adminPassword\": \"AdminPass123!\",\n    \"adminFullName\": \"Firm B Admin\",\n    \"isTrial\": false\n  }\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/super-admin/firms",

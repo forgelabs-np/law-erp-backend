@@ -1,6 +1,8 @@
 package com.lawfirm.erp.modules.me.service;
 
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
+import com.lawfirm.erp.common.enums.FirmStatus;
+import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.exception.UnauthorizedException;
 import com.lawfirm.erp.common.repository.UserRepository;
@@ -43,6 +45,19 @@ public class MeServiceImpl implements MeService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
+        // Gate: suspended firm users cannot access anything
+        if (user.getFirm() != null && user.getFirm().getStatus() == FirmStatus.SUSPENDED) {
+            throw new ForbiddenException("Your firm account has been suspended. Contact support.");
+        }
+
+        // Gate: trial expired — firm users get empty modules
+        boolean trialExpired = false;
+        if (user.getFirm() != null && Boolean.TRUE.equals(user.getFirm().getIsTrial())
+                && user.getFirm().getTrialExpiresAt() != null
+                && user.getFirm().getTrialExpiresAt().isBefore(LocalDateTime.now())) {
+            trialExpired = true;
+        }
+
         List<Permission> permissions = user.getRole() != null
                 ? rolePermissionRepository.findPermissionsByRoleId(user.getRole().getId())
                 : List.of();
@@ -51,7 +66,9 @@ public class MeServiceImpl implements MeService {
                 .map(Permission::getCode)
                 .collect(Collectors.toList());
 
-        List<MeResponse.ModuleAccess> moduleAccess = buildModuleAccess(user, permissions);
+        List<MeResponse.ModuleAccess> moduleAccess = trialExpired
+                ? List.of()
+                : buildModuleAccess(user, permissions);
 
         return MeResponse.builder()
                 .id(user.getId())
@@ -63,7 +80,7 @@ public class MeServiceImpl implements MeService {
                 .userType(user.getUserType() != null ? user.getUserType().name() : null)
                 .firm(meMapper.toFirmInfo(user.getFirm()))
                 .role(meMapper.toRoleInfo(user.getRole()))
-                .permissions(permCodes)
+                .permissions(trialExpired ? List.of() : permCodes)
                 .modules(moduleAccess)
                 .brandColorPrimary(resolveBrandPrimary(user))
                 .brandColorSecondary(resolveBrandSecondary(user))
