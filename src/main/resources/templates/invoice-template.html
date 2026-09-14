@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: sans-serif; font-size: 12px; color: #333; line-height: 1.5; }
+
+        .invoice-container { width: 100%; padding: 40px; }
+
+        /* Header */
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid #1A237E; padding-bottom: 20px; }
+        .header-left h1 { font-size: 28px; color: #1A237E; font-weight: 700; letter-spacing: 2px; }
+        .header-left p { color: #666; font-size: 11px; margin-top: 4px; }
+        .header-right { text-align: right; }
+        .header-right .invoice-label { font-size: 36px; color: #1A237E; font-weight: 700; letter-spacing: 3px; }
+
+        /* Status badge */
+        .status-badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-top: 8px; }
+        .status-DRAFT { background: #E0E0E0; color: #424242; }
+        .status-SENT { background: #FFF3E0; color: #E65100; }
+        .status-PAID { background: #E8F5E9; color: #2E7D32; }
+        .status-OVERDUE { background: #FFEBEE; color: #C62828; }
+        .status-CANCELED { background: #F3E5F5; color: #6A1B9A; }
+
+        /* Invoice meta */
+        .meta-section { display: flex; justify-content: space-between; margin-bottom: 30px; }
+        .meta-box { width: 48%; }
+        .meta-box h3 { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #999; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+        .meta-box p { font-size: 12px; margin-bottom: 3px; }
+        .meta-box .label { color: #888; font-size: 11px; }
+        .meta-box .value { font-weight: 600; }
+
+        /* Line items table */
+        .items-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+        .items-table thead th { background: #1A237E; color: white; padding: 10px 12px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+        .items-table thead th:last-child, .items-table thead th:nth-child(2), .items-table thead th:nth-child(3) { text-align: right; }
+        .items-table tbody td { padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 12px; }
+        .items-table tbody td:last-child, .items-table tbody td:nth-child(2), .items-table tbody td:nth-child(3) { text-align: right; }
+        .items-table tbody tr:nth-child(even) { background: #F8F9FA; }
+        .items-table tbody tr:last-child td { border-bottom: 2px solid #1A237E; }
+
+        /* Totals */
+        .totals-section { display: flex; justify-content: flex-end; margin-bottom: 30px; }
+        .totals-box { width: 280px; }
+        .totals-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 12px; }
+        .totals-row.subtotal { border-top: 1px solid #ddd; padding-top: 10px; }
+        .totals-row.tax { color: #666; }
+        .totals-row.total { border-top: 2px solid #1A237E; padding-top: 10px; margin-top: 4px; font-size: 16px; font-weight: 700; color: #1A237E; }
+
+        /* Notes / Payment */
+        .footer-section { display: flex; justify-content: space-between; margin-top: 20px; border-top: 1px solid #eee; padding-top: 20px; }
+        .footer-box { width: 48%; }
+        .footer-box h3 { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #999; margin-bottom: 8px; }
+        .footer-box p { font-size: 11px; color: #555; margin-bottom: 3px; }
+
+        /* Platform footer */
+        .platform-footer { margin-top: 30px; text-align: center; font-size: 9px; color: #bbb; border-top: 1px solid #eee; padding-top: 12px; }
+    </style>
+</head>
+<body>
+    <div class="invoice-container">
+
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <h1 th:text="${platformName}">NepalCRM Platform</h1>
+                <p th:text="${platformAddress}">Kathmandu, Nepal</p>
+            </div>
+            <div class="header-right">
+                <div class="invoice-label">INVOICE</div>
+                <div th:text="${invoice.invoiceNumber}" style="font-size: 14px; font-weight: 600; margin-top: 4px;">INV-2025-0001</div>
+                <div class="status-badge" th:text="${invoice.status}" th:class="'status-' + ${invoice.status}">DRAFT</div>
+            </div>
+        </div>
+
+        <!-- Meta: Bill To + Invoice Details -->
+        <div class="meta-section">
+            <div class="meta-box">
+                <h3>Bill To</h3>
+                <p class="value" th:text="${firm?.name ?: 'Firm Name'}">Firm Name</p>
+                <p th:text="${firm?.address ?: ''}"></p>
+                <p th:text="${firm?.email ?: ''}"></p>
+                <p th:text="${firm?.phone ?: ''}"></p>
+            </div>
+            <div class="meta-box">
+                <h3>Invoice Details</h3>
+                <p><span class="label">Invoice Date: </span><span class="value" th:text="${#temporals.format(invoice.issueDate, 'dd MMM yyyy')}">25 Aug 2025</span></p>
+                <p><span class="label">Due Date: </span><span class="value" th:text="${#temporals.format(invoice.dueDate, 'dd MMM yyyy')}">24 Sep 2025</span></p>
+                <p th:if="${invoice.paymentTerms != null}"><span class="label">Terms: </span><span class="value" th:text="${invoice.paymentTerms}">Net 30 days</span></p>
+            </div>
+        </div>
+
+        <!-- Line Items -->
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 5%;">#</th>
+                    <th style="width: 45%;">Description</th>
+                    <th style="width: 15%; text-align: right;">Qty</th>
+                    <th style="width: 17%; text-align: right;">Rate</th>
+                    <th style="width: 18%; text-align: right;">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="item, iter : ${items}">
+                    <td th:text="${iter.index + 1}">1</td>
+                    <td th:text="${item.description}">Service description</td>
+                    <td th:text="${#numbers.formatDecimal(item.quantity, 1, 2)}" style="text-align: right;">1.00</td>
+                    <td th:text="'NPR ' + ${#numbers.formatDecimal(item.unitPrice, 1, 2)}" style="text-align: right;">NPR 15,000.00</td>
+                    <td th:text="'NPR ' + ${#numbers.formatDecimal(item.amount, 1, 2)}" style="text-align: right;">NPR 15,000.00</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Totals -->
+        <div class="totals-section">
+            <div class="totals-box">
+                <div class="totals-row subtotal">
+                    <span>Subtotal</span>
+                    <span th:text="'NPR ' + ${#numbers.formatDecimal(invoice.subtotal, 1, 2)}">NPR 0.00</span>
+                </div>
+                <div class="totals-row tax" th:if="${invoice.taxRate != null and invoice.taxRate > 0}">
+                    <span th:text="'Tax (' + ${#numbers.formatDecimal(invoice.taxRate, 1, 2)} + '%)'">Tax (13%)</span>
+                    <span th:text="'NPR ' + ${#numbers.formatDecimal(invoice.taxAmount, 1, 2)}">NPR 0.00</span>
+                </div>
+                <div class="totals-row total">
+                    <span>Total</span>
+                    <span th:text="'NPR ' + ${#numbers.formatDecimal(invoice.total, 1, 2)}">NPR 0.00</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notes & Payment Info -->
+        <div class="footer-section">
+            <div class="footer-box" th:if="${invoice.notes != null}">
+                <h3>Notes</h3>
+                <p th:text="${invoice.notes}">Payment instructions here</p>
+            </div>
+            <div class="footer-box">
+                <h3>Payment Information</h3>
+                <p>Bank: Nepal Investment Bank</p>
+                <p>A/C: 01234567890123</p>
+                <p>Name: NepalCRM Platform Pvt. Ltd.</p>
+            </div>
+        </div>
+
+        <!-- Platform Footer -->
+        <div class="platform-footer">
+            <p th:text="'Generated on ' + ${generatedAt} + ' | ' + ${platformName}">Generated on 2025-08-25 | NepalCRM Platform</p>
+        </div>
+
+    </div>
+</body>
+</html>

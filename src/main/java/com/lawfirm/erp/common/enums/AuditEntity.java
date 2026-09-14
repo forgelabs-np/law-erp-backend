@@ -20,6 +20,12 @@ public enum AuditEntity {
     HEARING,
     DEPARTMENT,
     AUTH,
+    MATTER,
+    COURT_CASE,
+    COURT_EVENT,
     EMAIL_CONFIG,
-    SYSTEM_CONFIG
+    SYSTEM_CONFIG,
+    PROJECT,
+    CREDENTIAL,
+    RENEWAL
 }

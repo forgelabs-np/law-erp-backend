@@ -1,7 +1,7 @@
 package com.lawfirm.erp.modules.casemanagement.dto.response;
 
-import com.lawfirm.erp.modules.casemanagement.enums.HearingStatus;
-import com.lawfirm.erp.modules.casemanagement.enums.HearingType;
+import com.lawfirm.erp.modules.casemanagement.enums.CourtEventStatus;
+import com.lawfirm.erp.modules.casemanagement.enums.CourtEventType;
 import lombok.Builder;
 import lombok.Data;
 
@@ -12,16 +12,28 @@ import java.util.UUID;
 @Data
 @Builder
 public class CalendarEventResponse {
+
     private UUID id;
-    private UUID caseId;
-    private String caseNumber;
-    private String caseTitle;
-    private String title;
-    private LocalDate date;
-    private LocalTime time;
+
+    private UUID courtCaseId;
+
+    private String ourCourtCaseRef;
+
+    private String matterNumber;
+
+    private String matterTitle;
+
+    private CourtEventType eventType;
+
+    private LocalDate scheduledDate;
+
+    private LocalTime scheduledTime;
+
     private LocalTime endTime;
+
     private String courtRoom;
-    private HearingType hearingType;
-    private HearingStatus status;
-    private UUID advocateId;
+
+    private CourtEventStatus status;
+
+    private UUID attendingAdvocateId;
 }

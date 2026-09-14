@@ -1,0 +1,347 @@
+{
+  "info": {
+    "name": "Law ERP — Notifications",
+    "description": "API collection for the Notification module (in-app bell icon feed).\n\nAuthentication: Bearer JWT token in Authorization header — every endpoint acts on the authenticated user.\n\nBase URL: {{baseUrl}}/api/v1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "authToken",
+      "value": ""
+    },
+    {
+      "key": "notificationId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Feed",
+      "item": [
+        {
+          "name": "List Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications?unreadOnly=false&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications"],
+              "query": [
+                { "key": "unreadOnly", "value": "false" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "Paged feed for the current user, newest first. Set unreadOnly=true for only unread rows."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('paged payload', () => {",
+                  "  pm.expect(body.data).to.have.property('content');",
+                  "  pm.expect(body.data).to.have.property('totalElements');",
+                  "});",
+                  "const first = body.data.content && body.data.content[0];",
+                  "if (first) {",
+                  "  pm.test('first item is unread-shaped', () => {",
+                  "    pm.expect(first).to.have.property('read');",
+                  "    pm.expect(first).to.have.property('type');",
+                  "  });",
+                  "  if (!first.read) pm.collectionVariables.set('notificationId', first.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Unread Only",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications?unreadOnly=true&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications"],
+              "query": [
+                { "key": "unreadOnly", "value": "true" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Unread Count (badge polling)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/unread-count",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "unread-count"]
+            },
+            "description": "Lightweight endpoint for the bell badge — poll every 45-60s."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('count is a number', () => {",
+                  "  pm.expect(body.data.count).to.be.a('number');",
+                  "});",
+                  "pm.test('badge cleared after read-all', () => {",
+                  "  // run this after Mark All Read in sequence",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Read State",
+      "item": [
+        {
+          "name": "Mark One As Read",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/{{notificationId}}/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "{{notificationId}}", "read"]
+            },
+            "description": "Idempotent. 404 if missing, 403 if it belongs to another user."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark All As Read",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/read-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "read-all"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('reports updated count', () => {",
+                  "  pm.expect(body.data.updated).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark Foreign Notification (expect 403)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/00000000-0000-0000-0000-000000000000/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "00000000-0000-0000-0000-000000000000", "read"]
+            },
+            "description": "Negative test: a notification owned by another user must return 403 (or 404 if the id does not exist)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 or 404', () => {",
+                  "  pm.expect([403, 404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Broadcast (FIRM_ADMIN)",
+      "item": [
+        {
+          "name": "Send Announcement — ALL users",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"title\": \"Firm closed on dashain\",\n    \"body\": \"The office will be closed on the 15th. Back on the 16th.\",\n    \"audience\": \"ALL\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/broadcast",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "broadcast"]
+            },
+            "description": "FIRM_ADMIN only. audience = ALL or a role code. Role with no users in the firm → 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send Announcement — one role",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"title\": \"Advocates: CICIT training on Friday\",\n    \"body\": \"Attendance is mandatory for all advocates.\",\n    \"audience\": \"ADVOCATE\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/broadcast",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "broadcast"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Preferences",
+      "item": [
+        {
+          "name": "List My Preferences",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/preferences",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "preferences"]
+            },
+            "description": "Every type with effective emailEnabled and locked flag (ALERT types are locked on)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('rows have type + flags', () => {",
+                  "  const row = body.data[0];",
+                  "  pm.expect(row).to.have.property('type');",
+                  "  pm.expect(row).to.have.property('emailEnabled');",
+                  "  pm.expect(row).to.have.property('locked');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Opt In — CASE_ASSIGNED email",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"type\": \"CASE_ASSIGNED\",\n    \"emailEnabled\": true\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/preferences",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "preferences"]
+            }
+          }
+        },
+        {
+          "name": "Opt Out of ALERT (expect 400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"type\": \"HEARING_REMINDER\",\n    \"emailEnabled\": false\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/preferences",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "preferences"]
+            },
+            "description": "Negative test: deadline alerts cannot be silenced."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

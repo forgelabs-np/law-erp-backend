@@ -58,4 +58,11 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
     Optional<Role> findFirmRoleByCode(@Param("firmId") UUID firmId,
                                       @Param("roleCode") String roleCode);
 
+    /** Active roles only — avoids loading + filtering in Java. */
+    @Query("SELECT r FROM Role r WHERE r.active = true ORDER BY r.roleName ASC")
+    List<Role> findAllActive();
+
+    /** Count permissions for a role in a single query — avoids N+1 in role listing. */
+    @Query("SELECT COUNT(rp) FROM RolePermission rp WHERE rp.role.id = :roleId")
+    long countPermissionsByRoleId(@Param("roleId") UUID roleId);
 }

@@ -39,4 +39,17 @@ public class Firm extends ActiveAuditableEntity {
 
     @Column(columnDefinition = "TEXT")
     private String settings;
+
+    // ── Trial fields ──────────────────────────────────────────────────
+    @Column(name = "is_trial")
+    private Boolean isTrial = false;
+
+    @Column(name = "trial_days")
+    private Integer trialDays;
+
+    @Column(name = "trial_started_at")
+    private LocalDateTime trialStartedAt;
+
+    @Column(name = "trial_expires_at")
+    private LocalDateTime trialExpiresAt;
 }

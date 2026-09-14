@@ -90,16 +90,6 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             Pageable pageable);
 
 
-    /** FIX: Use (:action IS NULL OR a.action = :action) so null action returns all rows */
-    @Query("SELECT a FROM AuditLog a WHERE (:action IS NULL OR a.action = :action) " +
-            "AND (a.createdAt >= COALESCE(:from, a.createdAt)) " +
-            "AND (a.createdAt <= COALESCE(:to, a.createdAt)) " +
-            "ORDER BY a.createdAt DESC")
-    Page<AuditLog> findByActionGlobal(
-            @Param("action") AuditAction action,
-            @Param("from") LocalDateTime from,
-            @Param("to") LocalDateTime to,
-            Pageable pageable);
     // ── Additional useful queries ──────────────────────────────────────────
 
     /**
@@ -110,6 +100,12 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     Page<AuditLog> findRecentByFirm(
             @Param("firmId") UUID firmId,
             Pageable pageable);
+
+    /**
+     * Get recent audit logs across all firms (super admin).
+     */
+    @Query("SELECT a FROM AuditLog a ORDER BY a.createdAt DESC")
+    Page<AuditLog> findRecent(Pageable pageable);
 
     /**
      * Count audit logs by action type for a firm.
@@ -127,5 +123,48 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     Page<AuditLog> findByFirmAndIp(
             @Param("firmId") UUID firmId,
             @Param("ipAddress") String ipAddress,
+            Pageable pageable);
+
+    // ── Super Admin: cross-firm queries ────────────────────────────────────
+
+    /**
+     * All audit logs with optional date range, action, userType, and userId filters.
+     */
+    @Query("SELECT a FROM AuditLog a " +
+            "WHERE (:action IS NULL OR a.action = :action) " +
+            "AND (:userType IS NULL OR a.userType = :userType) " +
+            "AND (:userId IS NULL OR a.userId = :userId) " +
+            "AND (a.createdAt >= COALESCE(:from, a.createdAt)) " +
+            "AND (a.createdAt <= COALESCE(:to, a.createdAt)) " +
+            "ORDER BY a.createdAt DESC")
+    Page<AuditLog> findAllWithFilters(
+            @Param("action") AuditAction action,
+            @Param("userType") String userType,
+            @Param("userId") UUID userId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            Pageable pageable);
+
+    /**
+     * Audit logs for a specific user across all firms.
+     */
+    @Query("SELECT a FROM AuditLog a WHERE a.userId = :userId " +
+            "AND (a.createdAt >= COALESCE(:from, a.createdAt)) " +
+            "AND (a.createdAt <= COALESCE(:to, a.createdAt)) " +
+            "ORDER BY a.createdAt DESC")
+    Page<AuditLog> findByUserIdWithFilters(
+            @Param("userId") UUID userId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            Pageable pageable);
+
+    /**
+     * Entity history across all firms.
+     */
+    @Query("SELECT a FROM AuditLog a WHERE a.entityType = :entityType AND a.entityId = :entityId " +
+            "ORDER BY a.createdAt DESC")
+    Page<AuditLog> findByEntityTypeAndEntityId(
+            @Param("entityType") AuditEntity entityType,
+            @Param("entityId") UUID entityId,
             Pageable pageable);
 }

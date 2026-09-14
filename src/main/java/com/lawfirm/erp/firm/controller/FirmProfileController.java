@@ -1,5 +1,6 @@
 package com.lawfirm.erp.firm.controller;
 
+import com.lawfirm.erp.common.constant.FirmConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -25,7 +26,7 @@ public class FirmProfileController {
     private final ResponseHandler responseHandler;
 
     @GetMapping("/profile")
-    @Operation(summary = "Get firm profile")
+    @Operation(summary = FirmConstants.GET_FIRM_PROFILE_SUMMARY)
     public ResponseEntity<ApiResponse<FirmProfileResponse>> getProfile() {
         return responseHandler.ok(
                 firmProfileService.getMyFirmProfile(),
@@ -35,7 +36,7 @@ public class FirmProfileController {
 
     @PutMapping("/profile")
     @PostMapping("/profile")
-    @Operation(summary = "Update firm profile")
+    @Operation(summary = FirmConstants.UPDATE_FIRM_PROFILE_SUMMARY)
     public ResponseEntity<ApiResponse<FirmProfileResponse>> updateProfile(
             @Valid @RequestBody ApiRequest<UpdateFirmProfileRequest> request) {
         return responseHandler.ok(

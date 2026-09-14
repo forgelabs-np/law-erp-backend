@@ -1,5 +1,6 @@
 package com.lawfirm.erp.firm.controller;
 
+import com.lawfirm.erp.common.constant.FirmConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.dto.PagedResponse;
@@ -28,7 +29,7 @@ public class ClientController {
     private final ResponseHandler responseHandler;
 
     @PostMapping
-    @Operation(summary = "Create client")
+    @Operation(summary = FirmConstants.CREATE_CLIENT_SUMMARY)
     public ResponseEntity<ApiResponse<ClientResponse>> createClient(
             @Valid @RequestBody ApiRequest<CreateClientRequest> request) {
         return responseHandler.ok(
@@ -38,7 +39,7 @@ public class ClientController {
     }
 
     @GetMapping
-    @Operation(summary = "Get all clients (paginated)")
+    @Operation(summary = FirmConstants.GET_ALL_CLIENTS_SUMMARY)
     public ResponseEntity<ApiResponse<PagedResponse<ClientResponse>>> getAllClients(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -49,7 +50,7 @@ public class ClientController {
     }
 
     @GetMapping("/{clientId}")
-    @Operation(summary = "Get client by ID")
+    @Operation(summary = FirmConstants.GET_CLIENT_BY_ID_SUMMARY)
     public ResponseEntity<ApiResponse<ClientResponse>> getClientById(@PathVariable UUID clientId) {
         return responseHandler.ok(
                 clientService.getClientById(clientId),
@@ -58,7 +59,7 @@ public class ClientController {
     }
 
     @PatchMapping("/{clientId}/portal-access")
-    @Operation(summary = "Enable/disable client portal access")
+    @Operation(summary = FirmConstants.TOGGLE_CLIENT_PORTAL_SUMMARY)
     public ResponseEntity<ApiResponse<ClientResponse>> togglePortalAccess(
             @PathVariable UUID clientId,
             @Valid @RequestBody ApiRequest<Boolean> request) {

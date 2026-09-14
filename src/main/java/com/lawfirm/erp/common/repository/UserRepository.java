@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -61,6 +62,12 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query("UPDATE User u SET u.permissionVersion = u.permissionVersion + 1 WHERE u.id = :userId")
     void incrementPermissionVersion(@Param("userId") UUID userId);
 
+    /** Batched invalidation — one UPDATE per role instead of one per user (spec §6). */
+    @Modifying
+    @Transactional
+    @Query("UPDATE User u SET u.permissionVersion = u.permissionVersion + 1 WHERE u.role.id = :roleId")
+    void incrementPermissionVersionByRole(@Param("roleId") UUID roleId);
+
     @Query("SELECT u.id FROM User u WHERE u.role.id = :roleId")
     List<UUID> findUserIdsByRoleId(@Param("roleId") UUID roleId);
 
@@ -100,6 +107,23 @@ public interface UserRepository extends JpaRepository<User, UUID> {
                                       @Param("search") String search,
                                       @Param("firmCode") String firmCode);
 
+    /**
+     * Paginated version — no JOIN FETCH (Spring Data manages pagination via count query).
+     * Role and firm are lazy-loaded; use EntityGraph or handle in service.
+     */
+    @Query("""
+            SELECT u FROM User u
+            WHERE (:userType IS NULL OR u.userType = :userType)
+              AND (:search IS NULL OR LOWER(u.username) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+                   OR LOWER(u.fullName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))
+              AND (:firmCode IS NULL OR u.firm.lawFirmCode = CAST(:firmCode AS string))
+            ORDER BY u.createdAt DESC
+            """)
+    Page<User> findAllWithRoleAndFirmPaged(@Param("userType") UserType userType,
+                                           @Param("search") String search,
+                                           @Param("firmCode") String firmCode,
+                                           Pageable pageable);
+
     @Query("SELECT u.role.id as roleId, COUNT(u) as cnt FROM User u WHERE u.firm.id = :firmId GROUP BY u.role.id")
     List<Object[]> countUsersByRoleIds(@Param("firmId") UUID firmId);
 
@@ -109,6 +133,13 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     // Or scoped to one firm:
     @Query("SELECT u FROM User u WHERE u.role.roleCode = 'FIRM_ADMIN' AND u.firm.id = :firmId")
     List<User> findFirmAdminsByFirmId(@Param("firmId") UUID firmId);
+
+    // ── Notification fan-out (id-only projections) ────────────────────────
+    @Query("SELECT u.id FROM User u WHERE u.firm.id = :firmId AND u.role.roleCode = :roleCode")
+    List<UUID> findUserIdsByFirmIdAndRoleCode(@Param("firmId") UUID firmId, @Param("roleCode") String roleCode);
+
+    @Query("SELECT u.id FROM User u WHERE u.firm.id = :firmId")
+    List<UUID> findUserIdsByFirmId(@Param("firmId") UUID firmId);
 
     // ── For employee/client code generation
     @Query("SELECT COUNT(u) FROM User u WHERE u.firm.id = :firmId AND u.userType = :userType")
@@ -120,4 +151,42 @@ public interface UserRepository extends JpaRepository<User, UUID> {
                                             Pageable pageable);
 
     boolean existsByUsername(@Param("username") String username);
+
+    /** Count all users in a firm — avoids loading all users into memory. */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.firm.id = :firmId")
+    long countByFirmId(@Param("firmId") UUID firmId);
+
+    /** Count active users in a firm. */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.firm.id = :firmId AND u.active = true")
+    long countActiveByFirmId(@Param("firmId") UUID firmId);
+
+    /** Count users by role code in a firm — avoids N+1 in role listing. */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.firm.id = :firmId AND u.role.roleCode = :roleCode")
+    long countByFirmIdAndRoleCode(@Param("firmId") UUID firmId, @Param("roleCode") String roleCode);
+
+    /** Count users by user type. */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.userType = :userType")
+    long countByUserType(@Param("userType") UserType userType);
+
+    // ── Trend queries ─────────────────────────────────────────────────────
+
+    /** Daily new user counts with active/inactive split, grouped by date. */
+    @Query("SELECT FUNCTION('DATE', u.createdAt) as d, COUNT(u) as total, " +
+           "SUM(CASE WHEN u.active = true THEN 1 ELSE 0 END) as active, " +
+           "SUM(CASE WHEN u.active = false THEN 1 ELSE 0 END) as inactive, " +
+           "SUM(CASE WHEN u.userType = 'CLIENT' THEN 1 ELSE 0 END) as clients " +
+           "FROM User u WHERE u.createdAt >= :from AND u.createdAt < :to " +
+           "GROUP BY FUNCTION('DATE', u.createdAt) ORDER BY d ASC")
+    List<Object[]> countDailyByDateRange(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /** Firm-scoped daily new user counts. */
+    @Query("SELECT FUNCTION('DATE', u.createdAt) as d, COUNT(u) as total, " +
+           "SUM(CASE WHEN u.active = true THEN 1 ELSE 0 END) as active, " +
+           "SUM(CASE WHEN u.active = false THEN 1 ELSE 0 END) as inactive, " +
+           "SUM(CASE WHEN u.userType = 'CLIENT' THEN 1 ELSE 0 END) as clients " +
+           "FROM User u WHERE u.firm.id = :firmId AND u.createdAt >= :from AND u.createdAt < :to " +
+           "GROUP BY FUNCTION('DATE', u.createdAt) ORDER BY d ASC")
+    List<Object[]> countDailyByFirmIdAndDateRange(@Param("firmId") UUID firmId,
+                                                   @Param("from") LocalDateTime from,
+                                                   @Param("to") LocalDateTime to);
 }

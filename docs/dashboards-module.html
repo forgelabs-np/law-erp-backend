@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dashboards — Case Dashboard &amp; Global Dashboard: API Guide + Frontend Integration</title>
+<style>
+  :root{
+    --ink:#1a2332; --muted:#5b6b7f; --accent:#0b6bcb; --accent2:#7c3aed;
+    --line:#d8e0ea; --bg:#ffffff; --codebg:#f4f6fa; --ok:#0e9f6e; --warn:#b45309; --bad:#c81e1e;
+  }
+  *{box-sizing:border-box}
+  body{font-family:"Segoe UI",Arial,sans-serif;color:var(--ink);font-size:11px;line-height:1.5;margin:0}
+  .cover{height:95vh;display:flex;flex-direction:column;justify-content:center;page-break-after:always;border-bottom:6px solid var(--accent)}
+  .cover .kicker{color:var(--accent);font-weight:700;letter-spacing:.2em;text-transform:uppercase;font-size:13px}
+  .cover h1{font-size:34px;line-height:1.15;margin:10px 0 6px}
+  .cover h2{font-size:17px;color:var(--muted);font-weight:400;margin:0 0 26px}
+  .cover .meta{color:var(--muted);font-size:12px;line-height:1.7}
+  h1{font-size:22px;border-bottom:2px solid var(--accent);padding-bottom:6px;margin:34px 0 12px}
+  h2{font-size:15px;margin:26px 0 8px;color:#0f3a63}
+  h3{font-size:12.5px;margin:18px 0 6px;color:#12406e}
+  p{margin:6px 0}
+  ul,ol{margin:6px 0;padding-left:22px}
+  li{margin:3px 0}
+  table{border-collapse:collapse;width:100%;margin:10px 0;font-size:10.5px}
+  th{background:#eef2f8;text-align:left;padding:6px 8px;border:1px solid var(--line);font-size:10.5px}
+  td{padding:6px 8px;border:1px solid var(--line);vertical-align:top}
+  code{font-family:Consolas,"Courier New",monospace;font-size:10px;background:var(--codebg);padding:1px 4px;border-radius:3px}
+  pre{background:var(--codebg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow:auto;font-size:10px;line-height:1.45;page-break-inside:avoid}
+  pre code{background:none;padding:0}
+  .endpoint{background:#0f3a63;color:#fff;font-family:Consolas,monospace;font-size:10.5px;padding:5px 10px;border-radius:4px;margin:14px 0 4px;page-break-inside:avoid}
+  .method{display:inline-block;font-weight:700;padding:1px 8px;border-radius:3px;margin-right:8px;color:#fff}
+  .GET{background:var(--ok)} .POST{background:var(--accent)} .PUT{background:var(--accent2)} .DELETE{background:var(--bad)}
+  .note{background:#fff8e6;border-left:4px solid var(--warn);padding:8px 12px;margin:10px 0;border-radius:0 4px 4px 0}
+  .okbox{background:#eafaf2;border-left:4px solid var(--ok);padding:8px 12px;margin:10px 0;border-radius:0 4px 4px 0}
+  .badbox{background:#fdecec;border-left:4px solid var(--bad);padding:8px 12px;margin:10px 0;border-radius:0 4px 4px 0}
+  .grid{display:flex;gap:18px} .col{flex:1}
+  .tag{display:inline-block;background:#eef2f8;border:1px solid var(--line);border-radius:10px;padding:1px 8px;font-size:9.5px;color:var(--muted)}
+  .footer{margin-top:30px;color:var(--muted);font-size:10px;border-top:1px solid var(--line);padding-top:8px}
+  @page{size:A4;margin:16mm 14mm}
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <div class="kicker">Law ERP · Freebuff Desktop</div>
+  <h1>Dashboards</h1>
+  <h2>Case Dashboard &amp; Global Dashboard — what changed, API reference, curl collection &amp; frontend integration guide</h2>
+  <div class="meta">
+    <p><b>Base path:</b> <code>/api/v1</code> &nbsp;·&nbsp; <b>Server port:</b> <code>6969</code> (dev) &nbsp;·&nbsp; <b>Auth:</b> Bearer JWT</p>
+    <p><b>Audience:</b> backend developers, frontend developers</p>
+    <p><b>Scope:</b> the new dashboard feature set — Case Dashboard, Case Assignments, Global Dashboard</p>
+    <p><b>Date:</b> 2026-08-19</p>
+  </div>
+</div>
+
+<!-- ============ 1. WHAT CHANGED ============ -->
+<h1>1 · What Changed</h1>
+
+<p>This is the complete list of backend changes the frontend needs to know about. The <b>new feature</b> is the
+dashboard set — two dashboards plus the case-assignment endpoints that power the case dashboard's role filter.
+On top of that, one field was removed from employee CRUD and several bugs were fixed that change API behaviour.</p>
+
+<table>
+  <tr><th>#</th><th>Change</th><th>Type</th><th>Frontend impact</th></tr>
+  <tr><td>1</td><td><b>Case Dashboard</b> — <code>GET /api/v1/firm/dashboard</code></td><td>New feature</td><td>One call replaces several list queries; role-filtered server-side</td></tr>
+  <tr><td>2</td><td><b>Case Assignments</b> — <code>POST/GET/DELETE /api/v1/firm/matters/{matterNumber}/assignments</code></td><td>New feature</td><td>Assign/revoke team members; drives the advocate role filter</td></tr>
+  <tr><td>3</td><td><b>Global Dashboard</b> — <code>GET /api/v1/modules/dashboard</code></td><td>New feature</td><td>Site-wide cross-module stats; SUPER_ADMIN vs FIRM_ADMIN scoping</td></tr>
+  <tr><td>4</td><td><b>Department removed from employee CRUD</b></td><td>Removal</td><td>Stop sending <code>departmentId</code> in create/update employee</td></tr>
+  <tr><td>5</td><td><b>Bug fix: FIRM_ADMIN role now honoured on dashboards</b></td><td>Fix</td><td>FIRM_ADMIN now sees <i>all</i> firm matters (previously an empty dashboard)</td></tr>
+  <tr><td>6</td><td><b>Bug fix: no-hearing matters no longer crash the dashboard</b></td><td>Fix</td><td><code>daysSinceLastHearing</code> is now <code>null</code> when there is no hearing (not a 500)</td></tr>
+  <tr><td>7</td><td><b>Bug fix: stale flag is consistent</b></td><td>Fix</td><td><code>stale: true</code> also for matters that have never had a hearing</td></tr>
+</table>
+
+<h2>Honest scope check</h2>
+<p>The <b>new feature work</b> is items 1–3 (the two dashboards + case assignments). Items 4–7 are changes made
+in the same session that the frontend must also account for — item 4 is a field removal, items 5–7 change
+response values. There were no other API changes.</p>
+
+<!-- ============ 2. CASE DASHBOARD ============ -->
+<h1>2 · Case Dashboard</h1>
+
+<div class="endpoint"><span class="method GET">GET</span>/api/v1/firm/dashboard</div>
+<p>Role-filtered case overview for a single firm. <b>One call</b> returns everything the dashboard screen needs.</p>
+
+<table>
+  <tr><th>Role</th><th>What they see</th></tr>
+  <tr><td>FIRM_ADMIN</td><td>All firm matters + all of today's events + full positioning + stale list</td></tr>
+  <tr><td>ADVOCATE / PARALEGAL</td><td>Only matters they are assigned to (via Case Assignments) + only their own events today</td></tr>
+  <tr><td>SUPER_ADMIN / CLIENT</td><td>403 — not allowed</td></tr>
+</table>
+
+<h3>Response (envelope: <code>{ "success", "responseCode", "message", "data" }</code>)</h3>
+<pre><code>{
+  "data": {
+    "stats": {
+      "totalMatters": 45, "activeMatters": 32, "dormantMatters": 8,
+      "closedMatters": 5, "todayEventsCount": 6, "staleCount": 12
+    },
+    "todayEvents": [
+      {
+        "eventId": "…", "ourCourtCaseRef": "APX-MAT-2026-00001-D1",
+        "matterNumber": "APX-MAT-2026-00001", "matterTitle": "Contract dispute - ACME vs Beta",
+        "eventType": "PESHI", "scheduledDate": "2083-05-15", "scheduledTime": "10:30:00",
+        "endTime": "11:00:00", "status": "SCHEDULED",
+        "courtRoom": "Room 3", "judgeName": "Hon. Judge X",
+        "attendingAdvocateId": "…", "attendingAdvocateName": "Ram Shrestha"
+      }
+    ],
+    "casePositioning": [
+      {
+        "matterId": "…", "matterNumber": "APX-MAT-2026-00001", "matterTitle": "…",
+        "matterType": "LITIGATION", "matterStatus": "ACTIVE",
+        "courtCaseId": "…", "ourCourtCaseRef": "APX-MAT-2026-00001-D1",
+        "courtName": "Kathmandu District Court", "stage": "FIRST_HEARING", "caseStatus": "ACTIVE",
+        "advocateId": "…",
+        "lastHearingDate": "2083-04-29", "lastHearingType": "PESHI",
+        "lastHearingStatus": "HELD", "lastHearingOutcome": "Adjourned - next date given",
+        "nextEventDate": "2083-05-15", "nextEventType": "PESHI",
+        "nextEventCourtRoom": "Room 3", "nextEventJudge": "Hon. Judge X",
+        "totalEvents": 4, "daysSinceLastHearing": 18, "stale": false
+      }
+    ],
+    "staleCases": [ /* subset of casePositioning where stale == true */ ]
+  }
+}</code></pre>
+
+<div class="badbox"><b>Frontend:</b> <code>daysSinceLastHearing</code> is an <b>Integer, nullable</b>. It is
+<code>null</code> when a matter has never had a hearing (do not render "0 days"). <code>stale</code> is
+<code>true</code> when the last hearing is 90+ days ago <i>or</i> there has never been a hearing.</div>
+
+<h3>Curl</h3>
+<pre><code>curl -s "http://localhost:6969/api/v1/firm/dashboard" \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+
+<!-- ============ 3. CASE ASSIGNMENTS ============ -->
+<h1>3 · Case Assignments</h1>
+
+<p>Assign employees (advocates, paralegals, juniors, supervisors) to matters. Multiple people can be assigned
+to one matter with different roles. These assignments are what the case dashboard's role filter uses —
+an ADVOCATE/PARALEGAL sees exactly the matters they are assigned to.</p>
+
+<div class="endpoint"><span class="method POST">POST</span>/api/v1/firm/matters/{matterNumber}/assignments</div>
+<p>Assign an employee to a matter. The user must be a firm employee (<code>FIRM_USER</code>); CLIENT accounts are rejected.</p>
+<pre><code>curl -s -X POST "http://localhost:6969/api/v1/firm/matters/APX-MAT-2026-00001/assignments" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"data":{"userId":"&lt;employee-uuid&gt;","assignmentRole":"PRIMARY_ADVOCATE"}}'</code></pre>
+
+<p><b>assignmentRole</b> enum:</p>
+<table>
+  <tr><th>Value</th><th>Meaning</th></tr>
+  <tr><td>PRIMARY_ADVOCATE</td><td>Lead counsel on the matter</td></tr>
+  <tr><td>CO_ADVOCATE</td><td>Secondary counsel</td></tr>
+  <tr><td>PARALEGAL</td><td>Paralegal support</td></tr>
+  <tr><td>JUNIOR</td><td>Junior associate</td></tr>
+  <tr><td>SUPERVISOR</td><td>Supervising partner</td></tr>
+</table>
+
+<div class="endpoint"><span class="method GET">GET</span>/api/v1/firm/matters/{matterNumber}/assignments</div>
+<p>List everyone assigned to a matter.</p>
+<pre><code>curl -s "http://localhost:6969/api/v1/firm/matters/APX-MAT-2026-00001/assignments" \
+  -H "Authorization: Bearer $TOKEN"
+# data: [ { "id", "matterId", "matterNumber", "matterTitle",
+#           "userId", "userName", "assignmentRole", "createdAt" } ]</code></pre>
+
+<div class="endpoint"><span class="method DELETE">DELETE</span>/api/v1/firm/matters/{matterNumber}/assignments/{userId}</div>
+<p>Revoke all assignments for that user on the matter.</p>
+<pre><code>curl -s -X DELETE "http://localhost:6969/api/v1/firm/matters/APX-MAT-2026-00001/assignments/&lt;userId&gt;" \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+
+<div class="note"><b>Note:</b> matter creation is unchanged — <code>POST /api/v1/firm/matters</code> (see the
+curl collection). Create the matter first, then assign its team.</div>
+
+<!-- ============ 4. GLOBAL DASHBOARD ============ -->
+<h1>4 · Global Dashboard</h1>
+
+<div class="endpoint"><span class="method GET">GET</span>/api/v1/modules/dashboard</div>
+<p>Site-wide, cross-module stats. Scope depends on the caller's role:</p>
+
+<table>
+  <tr><th>Section</th><th>FIRM_ADMIN (firm-scoped)</th><th>SUPER_ADMIN (all firms)</th></tr>
+  <tr><td>userStats</td><td>Users of own firm</td><td>All users, all firms</td></tr>
+  <tr><td>firmStats</td><td>Own firm only (<code>totalFirms: 1</code>)</td><td>All firms</td></tr>
+  <tr><td>caseStats</td><td>Own firm's matters</td><td>All matters</td></tr>
+  <tr><td>scraperStats</td><td colspan="2">Platform-wide scraper totals</td></tr>
+  <tr><td>recentActivity</td><td>Audit log for own firm</td><td>All audit log</td></tr>
+</table>
+
+<h3>Response</h3>
+<pre><code>{
+  "data": {
+    "userStats": {
+      "totalUsers": 12, "activeUsers": 10, "inactiveUsers": 2,
+      "totalAdvocates": 5, "totalParalegals": 3, "totalClients": 2, "totalFirmAdmins": 1
+    },
+    "firmStats": { "totalFirms": 1, "activeFirms": 1, "suspendedFirms": 0 },
+    "caseStats": {
+      "totalMatters": 45, "activeMatters": 32, "closedMatters": 5,
+      "staleMatters": 12, "todayEvents": 6
+    },
+    "scraperStats": {
+      "courtsTracked": 2, "totalDailyHearings": 14280, "totalWeeklyHearings": 8605,
+      "totalMatches": 23, "lastScrapeTime": "2026-08-18T00:00:00"
+    },
+    "recentActivity": [
+      { "summary": "Matter created: APX-MAT-2026-00001", "action": "MATTER_CREATED",
+        "entityType": "MATTER", "userName": "Ram Shrestha", "createdAt": "…" }
+    ]
+  }
+}</code></pre>
+
+<h3>Curl</h3>
+<pre><code># FIRM_ADMIN (own firm) or SUPER_ADMIN (all firms) — same endpoint, scope is automatic
+curl -s "http://localhost:6969/api/v1/modules/dashboard" \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+
+<!-- ============ 5. DEPARTMENT REMOVAL ============ -->
+<h1>5 · Department Removed From Employee CRUD</h1>
+
+<p>The employee create/update endpoints no longer accept a <code>departmentId</code> field, and the employee
+response no longer contains a <code>department</code> object. The whole Department feature was dead code and
+has been deleted.</p>
+
+<div class="badbox"><b>Frontend:</b> remove <code>departmentId</code> from any employee create/update form and
+drop the department column from employee tables. Sending <code>departmentId</code> today is ignored (the DTO no
+longer maps it); it will not error, but it does nothing.</div>
+
+<!-- ============ 6. FRONTEND INTEGRATION GUIDE ============ -->
+<h1>6 · Frontend Integration Guide</h1>
+
+<h2>6.1 Authentication flow (unchanged, but required)</h2>
+<p>Both dashboards need a JWT. Login returns a <code>status</code> that tells the UI what to do next:</p>
+<pre><code>POST /api/v1/auth/login
+{ "data": { "lawFirmCode": "APEX-LAW", "username": "…", "password": "…" } }
+
+Response status:
+  SUCCESS                   -> store accessToken, go to app
+  PASSWORD_CHANGE_REQUIRED  -> show change-password screen, use passwordChangeToken
+  MFA_SETUP_REQUIRED        -> show QR code (mfaQrCodeUri), then POST /auth/mfa/setup/confirm
+  MFA_REQUIRED              -> show 6-digit input, POST /auth/mfa/validate
+  (all with mfaToken + totpCode)</code></pre>
+
+<h2>6.2 Case dashboard screen — one API call</h2>
+<pre><code>GET /api/v1/firm/dashboard   (Authorization: Bearer &lt;token&gt;)</code></pre>
+<p>Render the four sections directly from the response — the backend already applied the role filter, so the
+frontend does <b>not</b> filter anything:</p>
+<ol>
+  <li><b>stats</b> — summary cards: total / active / dormant / closed matters, today's events, stale count.</li>
+  <li><b>todayEvents</b> — today's hearings: time, court room, judge, attending advocate, case ref.</li>
+  <li><b>casePositioning</b> — per-matter rows: current court, stage, last hearing date/outcome, next event, days since last hearing, stale flag.</li>
+  <li><b>staleCases</b> — the subset of positioning where <code>stale == true</code> (90+ days).</li>
+</ol>
+
+<h2>6.3 Assigning a team (admin flow)</h2>
+<ol>
+  <li>Create the matter: <code>POST /api/v1/firm/matters</code> (existing endpoint, unchanged).</li>
+  <li>Assign the team: <code>POST /api/v1/firm/matters/{matterNumber}/assignments</code> per employee + role.</li>
+  <li>To show who's on a matter: <code>GET /api/v1/firm/matters/{matterNumber}/assignments</code>.</li>
+  <li>To remove: <code>DELETE /api/v1/firm/matters/{matterNumber}/assignments/{userId}</code>.</li>
+</ol>
+
+<h2>6.4 Global dashboard screen (admin-only)</h2>
+<pre><code>GET /api/v1/modules/dashboard   (Authorization: Bearer &lt;token&gt;)</code></pre>
+<p>Only FIRM_ADMIN and SUPER_ADMIN may call it. Show the five sections:
+userStats (user counts by role), firmStats (firms), caseStats (matters + today's events + stale),
+scraperStats (court scraper totals), recentActivity (last 10 audit entries).</p>
+
+<h2>6.5 Role-based UI rules</h2>
+<table>
+  <tr><th>Screen</th><th>Show to</th><th>Hidden from</th></tr>
+  <tr><td>Case Dashboard + Assignments</td><td>FIRM_ADMIN, ADVOCATE, PARALEGAL</td><td>SUPER_ADMIN, CLIENT</td></tr>
+  <tr><td>Global Dashboard</td><td>FIRM_ADMIN, SUPER_ADMIN</td><td>ADVOCATE, PARALEGAL, CLIENT</td></tr>
+</table>
+
+<h2>6.6 What changed vs. the old frontend behaviour</h2>
+<ul>
+  <li><b>FIRM_ADMIN dashboard is no longer empty.</b> A bug meant the admin role was never detected, so admins
+  saw only "assigned" matters (usually none). After the fix, FIRM_ADMIN sees <i>all</i> firm matters.</li>
+  <li><b>No more 500 on the dashboard.</b> A matter without a court case or without any hearing used to crash the
+  whole dashboard; now it renders with <code>daysSinceLastHearing: null</code>.</li>
+  <li><b>Employee forms:</b> remove the department field.</li>
+</ul>
+
+<!-- ============ 7. FULL CURL COLLECTION ============ -->
+<h1>7 · Full Curl Collection</h1>
+
+<p>Ready-to-run: <code>docs/dashboards-curl-collection.sh</code> (edit the CONFIG block at the top).
+Postman: <code>docs/dashboard.postman_collection.json</code>. The same commands are below for copy/paste.</p>
+
+<h2>Auth</h2>
+<pre><code>BASE=http://localhost:6969
+
+# 1. Login
+curl -s -X POST "$BASE/api/v1/auth/login" -H "Content-Type: application/json" \
+  -d '{"data":{"lawFirmCode":"APEX-LAW","username":"firmadmin","password":"pass"}}'
+
+# 2. If PASSWORD_CHANGE_REQUIRED
+curl -s -X POST "$BASE/api/v1/auth/change-password" -H "Content-Type: application/json" \
+  -d '{"data":{"passwordChangeToken":"&lt;pct&gt;","newPassword":"NewPass123","confirmPassword":"NewPass123"}}'
+
+# 3. If MFA_REQUIRED
+curl -s -X POST "$BASE/api/v1/auth/mfa/validate" -H "Content-Type: application/json" \
+  -d '{"data":{"mfaToken":"&lt;mfaToken&gt;","totpCode":"123456"}}'
+
+TOKEN="&lt;accessToken&gt;"
+AUTH="Authorization: Bearer $TOKEN"</code></pre>
+
+<h2>Case Dashboard</h2>
+<pre><code># Role-filtered (FIRM_ADMIN = all, ADVOCATE/PARALEGAL = assigned only)
+curl -s "$BASE/api/v1/firm/dashboard" -H "$AUTH"
+
+# Create a matter (feeds the dashboard)
+curl -s -X POST "$BASE/api/v1/firm/matters" -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"data":{"matterType":"LITIGATION","title":"Contract dispute - ACME vs Beta","originatingCourtLevel":"DISTRICT","courtName":"Kathmandu District Court","courtCaseNumber":"081-C1-7530","filingDate":"2083-04-29"}}'
+
+# Assign an employee (PRIMARY_ADVOCATE)
+curl -s -X POST "$BASE/api/v1/firm/matters/APX-MAT-2026-00001/assignments" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"data":{"userId":"&lt;employee-uuid&gt;","assignmentRole":"PRIMARY_ADVOCATE"}}'
+
+# List assignments
+curl -s "$BASE/api/v1/firm/matters/APX-MAT-2026-00001/assignments" -H "$AUTH"
+
+# Revoke assignment
+curl -s -X DELETE "$BASE/api/v1/firm/matters/APX-MAT-2026-00001/assignments/&lt;userId&gt;" -H "$AUTH"</code></pre>
+
+<h2>Global Dashboard</h2>
+<pre><code># FIRM_ADMIN = own firm | SUPER_ADMIN = all firms
+curl -s "$BASE/api/v1/modules/dashboard" -H "$AUTH"
+
+# Super admin login (separate endpoint, also MFA-gated)
+curl -s -X POST "$BASE/api/v1/super-admin/login" -H "Content-Type: application/json" \
+  -d '{"data":{"username":"superadmin","password":"pass"}}'</code></pre>
+
+<div class="footer">LAW ERP — Dashboards feature documentation · 2026-08-19 · Backend: <code>com.lawfirm.erp.modules.casemanagement</code> (dashboard/assignments) + <code>com.lawfirm.erp.modules.usermanagement</code> (global dashboard)</div>
+
+</body>
+</html>

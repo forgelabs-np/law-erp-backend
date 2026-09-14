@@ -15,4 +15,22 @@ public class ApiResponse<T> implements Serializable {
     private String message;
     private Integer responseCode;
     private T data;
+
+    public static <T> ApiResponse<T> success(T data) {
+        return ApiResponse.<T>builder()
+                .success(true)
+                .responseCode(0)
+                .message("")
+                .data(data)
+                .build();
+    }
+
+    public static <T> ApiResponse<T> success(String message, T data) {
+        return ApiResponse.<T>builder()
+                .success(true)
+                .responseCode(0)
+                .message(message)
+                .data(data)
+                .build();
+    }
 }

@@ -1,19 +1,27 @@
 package com.lawfirm.erp.superadmin.service;
 
 import com.lawfirm.erp.modules.audit.service.AuditService;
+import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.AuthStatus;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.dto.admin.response.AdminUserResponse;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
+import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
+import com.lawfirm.erp.rbac.entity.RolePermission;
+import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
+import com.lawfirm.erp.dto.admin.response.RoleResponse;
+import com.lawfirm.erp.common.exception.ResourceNotFoundException;
+import com.lawfirm.erp.auth.mapper.AuthMapper;
 import com.lawfirm.erp.auth.security.JwtUtil;
 import com.lawfirm.erp.auth.security.TotpUtil;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +33,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
@@ -32,12 +44,14 @@ import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -51,9 +65,13 @@ class SuperAdminServiceTest {
     @Mock private FirmRepository firmRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private AuditService auditService;
+    @Mock private AuthMapper authMapper;
+    @Mock private SystemConfigService systemConfigService;
+    @Mock private RolePermissionRepository rolePermissionRepository;
+    @Mock private com.lawfirm.erp.rbac.mapper.RbacResponseMapper rbacResponseMapper;
 
     @InjectMocks
-    private SuperAdminService superAdminService;
+    private SuperAdminServiceImpl superAdminService;
 
     private static final UUID SUPER_ADMIN_ID = UUID.randomUUID();
     private static final UUID SYSTEM_FIRM_ID = UUID.randomUUID();
@@ -69,6 +87,13 @@ class SuperAdminServiceTest {
     private User superAdmin;
     private Firm systemFirm;
     private Role superAdminRole;
+
+    private static final LoginResponse SUCCESS_RESPONSE = LoginResponse.builder()
+            .status(AuthStatus.SUCCESS).accessToken(ACCESS_TOKEN).refreshToken(REFRESH_TOKEN).expiresIn(86400000L).build();
+    private static final LoginResponse MFA_SETUP_RESPONSE = LoginResponse.builder()
+            .status(AuthStatus.MFA_SETUP_REQUIRED).mfaToken(MFA_TOKEN).mfaQrCodeUri("otpauth://totp/...").mfaManualKey("JBSW Y3DP EHPK 3PXP").build();
+    private static final LoginResponse MFA_REQUIRED_RESPONSE = LoginResponse.builder()
+            .status(AuthStatus.MFA_REQUIRED).mfaToken(MFA_TOKEN).build();
 
     @BeforeEach
     void setUp() {
@@ -92,6 +117,8 @@ class SuperAdminServiceTest {
                 .build();
         superAdmin.setId(SUPER_ADMIN_ID);
         superAdmin.setActive(true);
+
+        lenient().when(systemConfigService.getGlobal(anyString())).thenReturn(Optional.empty());
     }
 
     @Nested
@@ -106,12 +133,11 @@ class SuperAdminServiceTest {
             mockAuthentication();
             when(jwtUtil.generateAccessToken(superAdmin)).thenReturn(ACCESS_TOKEN);
             when(jwtUtil.generateRefreshToken(superAdmin)).thenReturn(REFRESH_TOKEN);
+            when(authMapper.toSuccessResponse(ACCESS_TOKEN, REFRESH_TOKEN)).thenReturn(SUCCESS_RESPONSE);
 
             LoginResponse response = login(USERNAME, PASSWORD, null);
 
             assertEquals(AuthStatus.SUCCESS, response.getStatus());
-            assertEquals(ACCESS_TOKEN, response.getAccessToken());
-            assertEquals(REFRESH_TOKEN, response.getRefreshToken());
             verify(authenticationManager).authenticate(any());
             verify(jwtUtil).generateAccessToken(superAdmin);
             verify(jwtUtil).generateRefreshToken(superAdmin);
@@ -138,6 +164,7 @@ class SuperAdminServiceTest {
             when(totpUtil.generateSecret()).thenReturn(MFA_SECRET);
             when(totpUtil.buildQrCodeUri(MFA_SECRET, USERNAME, "SYSTEM")).thenReturn("otpauth://totp/...");
             when(totpUtil.formatSecretForDisplay(MFA_SECRET)).thenReturn("JBSW Y3DP EHPK 3PXP");
+            when(authMapper.toMfaSetupResponse(MFA_TOKEN, "otpauth://totp/...", "JBSW Y3DP EHPK 3PXP")).thenReturn(MFA_SETUP_RESPONSE);
 
             LoginResponse response = login(USERNAME, PASSWORD, null);
 
@@ -161,6 +188,7 @@ class SuperAdminServiceTest {
             when(jwtUtil.generateMfaToken(superAdmin)).thenReturn(MFA_TOKEN);
             when(totpUtil.buildQrCodeUri(MFA_SECRET, USERNAME, "SYSTEM")).thenReturn("otpauth://totp/...");
             when(totpUtil.formatSecretForDisplay(MFA_SECRET)).thenReturn("JBSW Y3DP EHPK 3PXP");
+            when(authMapper.toMfaSetupResponse(MFA_TOKEN, "otpauth://totp/...", "JBSW Y3DP EHPK 3PXP")).thenReturn(MFA_SETUP_RESPONSE);
 
             LoginResponse response = login(USERNAME, PASSWORD, null);
 
@@ -187,6 +215,7 @@ class SuperAdminServiceTest {
             mockFindSuperAdmin();
             mockAuthentication();
             when(jwtUtil.generateMfaToken(superAdmin)).thenReturn(MFA_TOKEN);
+            when(authMapper.toMfaRequiredResponse(MFA_TOKEN)).thenReturn(MFA_REQUIRED_RESPONSE);
 
             LoginResponse response = login(USERNAME, PASSWORD, null);
 
@@ -201,6 +230,7 @@ class SuperAdminServiceTest {
             mockFindSuperAdmin();
             mockAuthentication();
             when(jwtUtil.generateMfaToken(superAdmin)).thenReturn(MFA_TOKEN);
+            when(authMapper.toMfaRequiredResponse(MFA_TOKEN)).thenReturn(MFA_REQUIRED_RESPONSE);
 
             LoginResponse response = login(USERNAME, PASSWORD, "");
 
@@ -215,12 +245,11 @@ class SuperAdminServiceTest {
             when(totpUtil.verify(MFA_SECRET, VALID_TOTP)).thenReturn(true);
             when(jwtUtil.generateAccessToken(superAdmin)).thenReturn(ACCESS_TOKEN);
             when(jwtUtil.generateRefreshToken(superAdmin)).thenReturn(REFRESH_TOKEN);
+            when(authMapper.toSuccessResponse(ACCESS_TOKEN, REFRESH_TOKEN)).thenReturn(SUCCESS_RESPONSE);
 
             LoginResponse response = login(USERNAME, PASSWORD, VALID_TOTP);
 
             assertEquals(AuthStatus.SUCCESS, response.getStatus());
-            assertEquals(ACCESS_TOKEN, response.getAccessToken());
-            assertEquals(REFRESH_TOKEN, response.getRefreshToken());
             verify(auditService).log(AuditAction.LOGIN, AuditEntity.AUTH, SUPER_ADMIN_ID, "Super Admin logged in: admin");
         }
 
@@ -292,6 +321,10 @@ class SuperAdminServiceTest {
     @DisplayName("User → Role view (getAllUsersWithRoles)")
     class UserRoleView {
 
+        private Pageable defaultPageable() {
+            return PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
+        }
+
         @Test
         @DisplayName("Returns every user with its role and firm mapped")
         void returnsUsersWithRoles() {
@@ -316,16 +349,19 @@ class SuperAdminServiceTest {
                     .build();
             firmAdmin.setId(UUID.randomUUID());
             firmAdmin.setActive(true);
+            firmAdmin.setCreatedAt(LocalDateTime.now());
 
-            when(userRepository.findAllWithRoleAndFirm(null, null, null))
-                    .thenReturn(List.of(superAdmin, firmAdmin));
+            superAdmin.setCreatedAt(LocalDateTime.now().minusHours(1));
 
-            List<AdminUserResponse> result = superAdminService.getAllUsersWithRoles(null, null, null);
+            when(userRepository.findAllWithRoleAndFirmPaged(null, null, null, defaultPageable()))
+                    .thenReturn(new PageImpl<>(List.of(firmAdmin, superAdmin), defaultPageable(), 2));
 
-            assertEquals(2, result.size());
+            PagedResponse<AdminUserResponse> result = superAdminService.getAllUsersWithRoles(null, null, null, 0, 20);
+
+            assertEquals(2, result.getContent().size());
 
             // Firm admin user → its firm-scoped role + firm
-            AdminUserResponse ram = result.stream()
+            AdminUserResponse ram = result.getContent().stream()
                     .filter(r -> "ram.sharma".equals(r.getUsername()))
                     .findFirst().orElseThrow();
             assertEquals("Ram Sharma", ram.getFullName());
@@ -337,13 +373,13 @@ class SuperAdminServiceTest {
             assertEquals("Apex Law", ram.getFirmName());
 
             // Super admin user → SUPER_ADMIN role + SYSTEM firm
-            AdminUserResponse sa = result.stream()
+            AdminUserResponse sa = result.getContent().stream()
                     .filter(r -> USERNAME.equals(r.getUsername()))
                     .findFirst().orElseThrow();
             assertEquals("SUPER_ADMIN", sa.getRoleCode());
             assertEquals("SYSTEM", sa.getFirmCode());
 
-            verify(userRepository).findAllWithRoleAndFirm(null, null, null);
+            verify(userRepository).findAllWithRoleAndFirmPaged(null, null, null, defaultPageable());
         }
 
         @Test
@@ -355,54 +391,122 @@ class SuperAdminServiceTest {
                     .userType(UserType.CLIENT)
                     .build();
             orphan.setId(UUID.randomUUID());
+            orphan.setCreatedAt(LocalDateTime.now());
 
-            when(userRepository.findAllWithRoleAndFirm(null, null, null))
-                    .thenReturn(List.of(orphan));
+            when(userRepository.findAllWithRoleAndFirmPaged(null, null, null, defaultPageable()))
+                    .thenReturn(new PageImpl<>(List.of(orphan), defaultPageable(), 1));
 
-            List<AdminUserResponse> result = superAdminService.getAllUsersWithRoles(null, null, null);
+            PagedResponse<AdminUserResponse> result = superAdminService.getAllUsersWithRoles(null, null, null, 0, 20);
 
-            assertEquals(1, result.size());
-            assertNull(result.get(0).getRoleId());
-            assertNull(result.get(0).getRoleName());
-            assertNull(result.get(0).getFirmId());
-            assertNull(result.get(0).getFirmCode());
+            assertEquals(1, result.getContent().size());
+            assertNull(result.getContent().get(0).getRoleId());
+            assertNull(result.getContent().get(0).getRoleName());
+            assertNull(result.getContent().get(0).getFirmId());
+            assertNull(result.getContent().get(0).getFirmCode());
         }
 
         @Test
         @DisplayName("Passes userType/search/firmCode filters to the repository (trimmed)")
         void passesFiltersToRepository() {
-            when(userRepository.findAllWithRoleAndFirm(UserType.FIRM_USER, "ram", "APX"))
-                    .thenReturn(List.of(superAdmin));
+            when(userRepository.findAllWithRoleAndFirmPaged(UserType.FIRM_USER, "ram", "APX", defaultPageable()))
+                    .thenReturn(new PageImpl<>(List.of(superAdmin), defaultPageable(), 1));
 
-            List<AdminUserResponse> result =
-                    superAdminService.getAllUsersWithRoles(UserType.FIRM_USER, "  ram  ", " APX ");
+            PagedResponse<AdminUserResponse> result =
+                    superAdminService.getAllUsersWithRoles(UserType.FIRM_USER, "  ram  ", " APX ", 0, 20);
 
-            assertEquals(1, result.size());
-            verify(userRepository).findAllWithRoleAndFirm(UserType.FIRM_USER, "ram", "APX");
+            assertEquals(1, result.getContent().size());
+            verify(userRepository).findAllWithRoleAndFirmPaged(UserType.FIRM_USER, "ram", "APX", defaultPageable());
         }
 
         @Test
         @DisplayName("Uppercases firmCode before passing it to the repository")
         void uppercasesFirmCode() {
-            when(userRepository.findAllWithRoleAndFirm(UserType.CLIENT, "ram", "APX"))
-                    .thenReturn(List.of(superAdmin));
+            when(userRepository.findAllWithRoleAndFirmPaged(UserType.CLIENT, "ram", "APX", defaultPageable()))
+                    .thenReturn(new PageImpl<>(List.of(superAdmin), defaultPageable(), 1));
 
-            List<AdminUserResponse> result =
-                    superAdminService.getAllUsersWithRoles(UserType.CLIENT, "ram", " apx ");
+            PagedResponse<AdminUserResponse> result =
+                    superAdminService.getAllUsersWithRoles(UserType.CLIENT, "ram", " apx ", 0, 20);
 
-            assertEquals(1, result.size());
-            verify(userRepository).findAllWithRoleAndFirm(UserType.CLIENT, "ram", "APX");
+            assertEquals(1, result.getContent().size());
+            verify(userRepository).findAllWithRoleAndFirmPaged(UserType.CLIENT, "ram", "APX", defaultPageable());
         }
 
         @Test
         @DisplayName("Blank search/firmCode are normalized to null filters")
         void blankFiltersBecomeNull() {
-            when(userRepository.findAllWithRoleAndFirm(null, null, null))
-                    .thenReturn(List.of(superAdmin));
+            when(userRepository.findAllWithRoleAndFirmPaged(null, null, null, defaultPageable()))
+                    .thenReturn(new PageImpl<>(List.of(superAdmin), defaultPageable(), 1));
 
-            superAdminService.getAllUsersWithRoles(null, "   ", "");
+            superAdminService.getAllUsersWithRoles(null, "   ", "", 0, 20);
 
-            verify(userRepository).findAllWithRoleAndFirm(null, null, null);
+            verify(userRepository).findAllWithRoleAndFirmPaged(null, null, null, defaultPageable());
+        }
+    }
+
+    @Nested
+    @DisplayName("getFirmRoles — SA discoverability of a firm's roles (Phase 1)")
+    class GetFirmRoles {
+
+        @Test
+        @DisplayName("Unknown firm -> ResourceNotFoundException")
+        void unknownFirm_notFound() {
+            when(firmRepository.existsById(SYSTEM_FIRM_ID)).thenReturn(false);
+
+            assertThrows(ResourceNotFoundException.class,
+                    () -> superAdminService.getFirmRoles(SYSTEM_FIRM_ID));
+        }
+
+        @Test
+        @DisplayName("Firm roles returned with permissions and user counts")
+        void returnsRolesWithPermissionsAndCounts() {
+            when(firmRepository.existsById(SYSTEM_FIRM_ID)).thenReturn(true);
+
+            Firm firm = new Firm();
+            firm.setId(SYSTEM_FIRM_ID);
+
+            Role role = new Role();
+            role.setId(SYSTEM_ROLE_ID);
+            role.setRoleName("Paralegal");
+            role.setRoleCode("PARALEGAL");
+            role.setIsSystem(false);
+            role.setFirm(firm);
+            when(roleRepository.findByFirmIdAndIsSystemFalse(SYSTEM_FIRM_ID)).thenReturn(List.of(role));
+
+            when(userRepository.countUsersByRoleIds(SYSTEM_FIRM_ID))
+                    .thenReturn(List.<Object[]>of(new Object[]{SYSTEM_ROLE_ID, 3L}));
+
+            Permission perm = Permission.builder()
+                    .code("CASE_MANAGEMENT:VIEW")
+                    .build();
+            RolePermission rp = RolePermission.builder()
+                    .role(role)
+                    .permission(perm)
+                    .build();
+            when(rolePermissionRepository.findByRoleIdIn(List.of(SYSTEM_ROLE_ID)))
+                    .thenReturn(List.of(rp));
+            when(rbacResponseMapper.toPermissionResponse(perm)).thenReturn(
+                    com.lawfirm.erp.dto.admin.response.PermissionResponse.builder()
+                            .code("CASE_MANAGEMENT:VIEW")
+                            .build());
+
+            List<RoleResponse> result = superAdminService.getFirmRoles(SYSTEM_FIRM_ID);
+
+            assertEquals(1, result.size());
+            assertEquals("PARALEGAL", result.get(0).getCode());
+            assertEquals(3, result.get(0).getUserCount());
+            assertEquals(1, result.get(0).getPermissions().size());
+            assertEquals("CASE_MANAGEMENT:VIEW", result.get(0).getPermissions().get(0).getCode());
+        }
+
+        @Test
+        @DisplayName("Firm with no roles -> empty list, not error")
+        void noRoles_emptyList() {
+            when(firmRepository.existsById(SYSTEM_FIRM_ID)).thenReturn(true);
+            when(roleRepository.findByFirmIdAndIsSystemFalse(SYSTEM_FIRM_ID)).thenReturn(List.of());
+
+            List<RoleResponse> result = superAdminService.getFirmRoles(SYSTEM_FIRM_ID);
+
+            assertTrue(result.isEmpty());
         }
     }
 

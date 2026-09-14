@@ -50,3 +50,6 @@ security:
 super-admin:
   registration-secret: "cdae9adca9e7cb0ab2afb82e2a2a74b7"
 
+app:
+  name: Tarikh
+  production: false

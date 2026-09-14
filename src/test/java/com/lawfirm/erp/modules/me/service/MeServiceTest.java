@@ -2,7 +2,9 @@ package com.lawfirm.erp.modules.me.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lawfirm.erp.common.enums.FirmStatus;
 import com.lawfirm.erp.common.enums.UserType;
+import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.entity.User;
@@ -10,6 +12,7 @@ import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.entity.FirmModule;
 import com.lawfirm.erp.firm.repository.FirmModuleRepository;
 import com.lawfirm.erp.modules.me.dto.MeResponse;
+import com.lawfirm.erp.modules.me.mapper.MeMapper;
 import com.lawfirm.erp.rbac.entity.Module;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
@@ -42,9 +45,10 @@ class MeServiceTest {
     @Mock private ModuleRepository moduleRepository;
     @Mock private CurrentUserResolver currentUserResolver;
     @Mock private SystemConfigService systemConfigService;
+    @Mock private MeMapper meMapper;
 
     @InjectMocks
-    private MeService meService;
+    private MeServiceImpl meService;
 
     private static final UUID USER_ID = UUID.randomUUID();
     private static final UUID FIRM_ID = UUID.randomUUID();
@@ -350,6 +354,58 @@ class MeServiceTest {
 
         assertEquals(1, response.getModules().size());
         assertFalse(response.getModules().get(0).isEnabled());
+    }
+
+    @Test
+    @DisplayName("Suspended firm user gets ForbiddenException")
+    void suspendedFirm_throwsForbidden() {
+        Firm firm = firm();
+        firm.setStatus(FirmStatus.SUSPENDED);
+        Role role = role();
+        User user = firmUser(firm, role);
+        when(currentUserResolver.getCurrentUserId()).thenReturn(USER_ID);
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+
+        assertThrows(ForbiddenException.class, () -> meService.getMe());
+    }
+
+    @Test
+    @DisplayName("Trial expired firm user gets empty modules and permissions")
+    void trialExpired_returnsEmptyModulesAndPermissions() {
+        Firm firm = firm();
+        firm.setIsTrial(true);
+        firm.setTrialExpiresAt(LocalDateTime.now().minusDays(1));
+        Role role = role();
+        User user = firmUser(firm, role);
+        stubBasics(user);
+
+        MeResponse response = meService.getMe();
+
+        assertTrue(response.getModules().isEmpty());
+        assertTrue(response.getPermissions().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Trial firm user with valid expiry sees modules normally")
+    void trialActive_seesModules() {
+        Firm firm = firm();
+        firm.setIsTrial(true);
+        firm.setTrialExpiresAt(LocalDateTime.now().plusDays(10));
+        Role role = role();
+        User user = firmUser(firm, role);
+        stubBasics(user);
+
+        Module billing = module("BILLING", "Billing", null);
+        when(moduleRepository.findAllWithParentOrderByDisplayOrder()).thenReturn(List.of(billing));
+        when(rolePermissionRepository.findPermissionsByRoleId(any()))
+                .thenReturn(List.of(perm("BILLING:VIEW")));
+        when(firmModuleRepository.findByFirmIdWithModule(FIRM_ID))
+                .thenReturn(List.of(firmModule(billing, true)));
+
+        MeResponse response = meService.getMe();
+
+        assertEquals(1, response.getModules().size());
+        assertEquals(1, response.getPermissions().size());
     }
 
     @Test

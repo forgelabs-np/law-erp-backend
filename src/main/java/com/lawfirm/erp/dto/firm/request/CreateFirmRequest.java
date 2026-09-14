@@ -48,4 +48,9 @@ public class CreateFirmRequest {
 
     @NotBlank(message = "Admin full name is required")
     private String adminFullName;
+
+    // ── Trial ─────────────────────────────────────────────────────────
+    private Boolean isTrial = false;
+
+    private Integer trialDays;
 }

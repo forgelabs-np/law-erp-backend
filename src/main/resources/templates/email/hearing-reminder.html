@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:'Segoe UI',Arial,sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:40px 0;">
+        <tr>
+            <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding:32px 40px 20px;text-align:center;background-color:#1A237E;"
+                            th:style="'padding:32px 40px 20px;text-align:center;background-color:' + ${primaryColor}">
+                            <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:600;" th:text="${firmName}">Firm Name</h1>
+                        </td>
+                    </tr>
+                    <!-- Body -->
+                    <tr>
+                        <td style="padding:32px 40px;">
+                            <h2 style="margin:0 0 8px;color:#333;font-size:20px;"
+                                th:text="${recipientType == 'CLIENT'} ? 'Upcoming Hearing Reminder' : 'Hearing Reminder — Tomorrow'">
+                                Upcoming Hearing Reminder</h2>
+                            <p style="margin:0 0 16px;color:#555;font-size:15px;line-height:1.6;" th:text="'Dear ' + ${fullName} + ','">Dear Client,</p>
+                            <p style="margin:0 0 16px;color:#555;font-size:15px;line-height:1.6;"
+                               th:text="${recipientType == 'CLIENT'} ? 'This is a reminder that your case has a hearing scheduled for tomorrow. Please make sure you are prepared and arrive on time.' : 'This is a reminder of the hearing scheduled for tomorrow. Please ensure you are prepared and arrive at the court on time.'">
+                                This is a reminder that your case has a hearing scheduled for tomorrow.</p>
+
+                            <!-- Hearing details box -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8f9fa;border-radius:6px;margin-bottom:20px;">
+                                <tr>
+                                    <td style="padding:20px;">
+                                        <p style="margin:0 0 8px;color:#333;font-size:14px;">
+                                            <strong>Matter:</strong>
+                                            <span th:text="${matterNumber}">APX-MAT-2026-00001</span>
+                                            <span th:if="${matterTitle}" th:text="' — ' + ${matterTitle}" style="color:#666;">Title</span>
+                                        </p>
+                                        <p style="margin:0 0 8px;color:#333;font-size:14px;">
+                                            <strong>Case Ref:</strong>
+                                            <span th:text="${courtCaseRef}" style="color:#0066cc;">DC1</span>
+                                        </p>
+                                        <p style="margin:0 0 8px;color:#333;font-size:14px;">
+                                            <strong>Court:</strong>
+                                            <span th:text="${courtName}">Kathmandu District Court</span>
+                                        </p>
+                                        <p style="margin:0 0 8px;color:#333;font-size:14px;">
+                                            <strong>Date:</strong>
+                                            <span th:text="${hearingDate}">Tuesday, 24 August 2026</span>
+                                        </p>
+                                        <p style="margin:0 0 8px;color:#333;font-size:14px;">
+                                            <strong>Time:</strong>
+                                            <span th:text="${hearingTime}">10:00 AM</span>
+                                        </p>
+                                        <p th:if="${courtRoom}" style="margin:0 0 8px;color:#333;font-size:14px;">
+                                            <strong>Courtroom:</strong>
+                                            <span th:text="${courtRoom}">Room 5</span>
+                                        </p>
+                                        <p th:if="${judgeName}" style="margin:0;color:#333;font-size:14px;">
+                                            <strong>Judge:</strong>
+                                            <span th:text="${judgeName}">Hon. Judge Name</span>
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- CTA Button -->
+                            <table cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">
+                                <tr>
+                                    <td align="center" style="background-color:#1A237E;border-radius:6px;padding:12px 32px;"
+                                        th:style="'background-color:' + ${primaryColor} + ';border-radius:6px;padding:12px 32px;'">
+                                        <a th:if="${recipientType == 'CLIENT'}" th:href="${portalUrl}"
+                                           style="color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;">View Case in Portal</a>
+                                        <a th:unless="${recipientType == 'CLIENT'}" th:href="${loginUrl}"
+                                           style="color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;">Open Case in System</a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin:0;color:#777;font-size:13px;line-height:1.5;">
+                                If you have any questions, please contact your lawyer or the firm office.
+                            </p>
+                            <p th:if="${emailFooter}" style="margin:16px 0 0;color:#999;font-size:12px;line-height:1.5;text-align:center;border-top:1px solid #eee;padding-top:16px;" th:text="${emailFooter}">Footer</p>
+                        </td>
+                    </tr>
+                </table>
+                <p style="margin:16px 0 0;color:#aaa;font-size:11px;">Powered by NepalCRM Platform</p>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

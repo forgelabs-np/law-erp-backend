@@ -67,7 +67,7 @@
         ORDER BY sort_order ASC, display_order ASC
     </select>
 
-    <!-- ✅ FIXED: Use module_permissions junction table -->
+    <!--  FIXED: Use module_permissions junction table -->
     <select id="countPermissionsByModuleId" resultType="int">
         SELECT COUNT(*)
         FROM module_permissions

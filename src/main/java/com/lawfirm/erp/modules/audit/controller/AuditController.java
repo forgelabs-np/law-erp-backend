@@ -1,5 +1,7 @@
 package com.lawfirm.erp.modules.audit.controller;
 
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
+import com.lawfirm.erp.common.constant.AuditConstants;
 import com.lawfirm.erp.modules.audit.entity.AuditLog;
 import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
 import com.lawfirm.erp.common.dto.ApiResponse;
@@ -16,7 +18,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -28,11 +29,11 @@ import java.util.UUID;
 @RequestMapping("/api/v1/firm/audit")
 @RequiredArgsConstructor
 @Tag(name = "Firm Audit Logs", description = "Firm admin activity timeline")
-@PreAuthorize("hasRole('FIRM_ADMIN')")
 public class AuditController {
 
     private final AuditLogRepository auditLogRepository;
     private final CurrentUserResolver currentUserResolver;
+    private final PermissionEvaluator permissionEvaluator;
     private final ResponseHandler responseHandler;
 
     /**
@@ -40,12 +41,13 @@ public class AuditController {
      * Optional filters: from, to date range.
      */
     @GetMapping
-    @Operation(summary = "Get full firm activity timeline")
+    @Operation(summary = AuditConstants.GET_FIRM_TIMELINE_SUMMARY)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getFirmTimeline(
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate fromDate,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate toDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        permissionEvaluator.require("AUDIT:VIEW");
 
         UUID firmId = getRequiredFirmId();
 
@@ -63,13 +65,14 @@ public class AuditController {
      * User timeline — "what did Advocate1 do?"
      */
     @GetMapping("/users/{userId}")
-    @Operation(summary = "Get activity timeline for a specific user")
+    @Operation(summary = AuditConstants.GET_USER_TIMELINE_SUMMARY)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getUserTimeline(
             @PathVariable UUID userId,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate fromDate,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate toDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        permissionEvaluator.require("AUDIT:VIEW");
 
         UUID firmId = getRequiredFirmId();
 
@@ -87,12 +90,13 @@ public class AuditController {
      * Entity history — "show me everything that happened to Case #142"
      */
     @GetMapping("/entities/{entityType}/{entityId}")
-    @Operation(summary = "Get full history of a specific entity")
+    @Operation(summary = AuditConstants.GET_ENTITY_HISTORY_SUMMARY)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getEntityHistory(
             @PathVariable AuditEntity entityType,
             @PathVariable UUID entityId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        permissionEvaluator.require("AUDIT:VIEW");
 
         UUID firmId = getRequiredFirmId();
 
@@ -105,13 +109,14 @@ public class AuditController {
 
    
     @GetMapping("/actions")
-    @Operation(summary = "Filter activity by action type")
+    @Operation(summary = AuditConstants.GET_BY_ACTION_SUMMARY)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getByAction(
             @RequestParam(required = false) AuditAction action,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate fromDate,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate toDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        permissionEvaluator.require("AUDIT:VIEW");
 
         UUID firmId = getRequiredFirmId();
 

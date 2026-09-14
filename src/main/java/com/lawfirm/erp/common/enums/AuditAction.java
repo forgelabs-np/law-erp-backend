@@ -13,6 +13,7 @@ public enum AuditAction {
     PASSWORD_CHANGED,
     TOKEN_REFRESHED,
     MFA_ENABLED,
+    MFA_RESET,
 
     // ── User / Employee ──────────────────────
     USER_CREATED,
@@ -38,6 +39,21 @@ public enum AuditAction {
     CASE_ARCHIVED,
     CASE_REOPENED,
 
+    // ── Matter / Court case / Court event (Phase 10) ──
+    MATTER_CREATED,
+    MATTER_UPDATED,
+    COURT_CASE_CREATED,
+    COURT_CASE_UPDATED,
+    COURT_CASE_STAGE_CHANGED,
+    COURT_CASE_CLOSED,
+    APPEAL_FILED,
+    JUDGMENT_RECORDED,
+    COURT_EVENT_SCHEDULED,
+    COURT_EVENT_UPDATED,
+    COURT_EVENT_HELD,
+    COURT_EVENT_ADJOURNED,
+    COURT_EVENT_CANCELLED,
+
     // ── Document management ──────────────────
     DOCUMENT_UPLOADED,
     DOCUMENT_DELETED,
@@ -47,6 +63,7 @@ public enum AuditAction {
     // ── Billing ──────────────────────────────
     INVOICE_CREATED,
     INVOICE_UPDATED,
+    INVOICE_DELETED,
     INVOICE_APPROVED,
     INVOICE_SENT,
     PAYMENT_RECORDED,
@@ -60,6 +77,9 @@ public enum AuditAction {
     FIRM_CREATED,
     FIRM_UPDATED,
     FIRM_SUSPENDED,
+    FIRM_ACTIVATED,
+    FIRM_TRIAL_EXTENDED,
+    FIRM_CONVERTED_PERMANENT,
     FIRM_MODULE_ENABLED,
     FIRM_MODULE_DISABLED,
     FIRM_MODULE_CONFIGURED,
@@ -84,14 +104,21 @@ public enum AuditAction {
     MODULE_UPDATED,
     MODULE_DELETED,
 
-    // ── Email ────────────────────────────────
+    // ── Email / config (Phase 10) ──────────────
     EMAIL_SENT,
     EMAIL_FAILED,
     EMAIL_CONFIG_UPDATED,
     EMAIL_CONFIG_TESTED,
     EMAIL_CONFIG_DELETED,
-
-    // ── System Config ─────────────────────────
     CONFIG_UPDATED,
-    CONFIG_DELETED
+    CONFIG_DELETED,
+
+    // ── Project management ───────────────────
+    PROJECT_CREATED,
+    PROJECT_UPDATED,
+    PROJECT_COMPLETED,
+    CREDENTIAL_ADDED,
+    CREDENTIAL_REVEALED,
+    RENEWAL_CREATED,
+    RENEWAL_COMPLETED
 }

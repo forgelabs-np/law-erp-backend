@@ -8,7 +8,6 @@ import lombok.*;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 @Entity
 @Table(name = "roles",
@@ -32,17 +31,6 @@ public class Role extends ActiveAuditableEntity {
 
     @Column(name = "is_system")
     private Boolean isSystem = false;
-
-    @Column(name = "parent_role_id")
-    private UUID parentRoleId;
-
-    // NEW: Role hierarchy (extends another role)
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "extends_role_id")
-    private Role extendsRole;
-
-    @OneToMany(mappedBy = "extendsRole", fetch = FetchType.LAZY)
-    private List<Role> extendedBy = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(name = "applicable_to")

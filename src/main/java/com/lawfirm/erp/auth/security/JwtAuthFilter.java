@@ -128,6 +128,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 if (detail.getFirmId() != null) {
                     authenticatedUser.setFirmId(UUID.fromString(detail.getFirmId()));
                 }
+                if (detail.getRole() != null) {
+                    authenticatedUser.setRoles(List.of(detail.getRole()));
+                }
 
                 @SuppressWarnings("unchecked")
                 List<String> permissions = claims.get("permissions", List.class);

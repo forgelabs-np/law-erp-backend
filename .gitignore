@@ -34,3 +34,7 @@ build/
 
 ### Freebuff ###
 .freebuff/
+
+### Secrets ###
+.env
+application-local.yml

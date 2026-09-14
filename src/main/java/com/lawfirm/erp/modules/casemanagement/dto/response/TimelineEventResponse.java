@@ -10,13 +10,26 @@ import java.util.UUID;
 @Data
 @Builder
 public class TimelineEventResponse {
+
     private UUID id;
-    private UUID caseId;
-    private String caseNumber;
-    private String caseTitle;
+
+    private UUID matterId;
+
+    private String matterNumber;
+
+    private String matterTitle;
+
+    private UUID courtCaseId;
+
+    private String ourCourtCaseRef;
+
     private TimelineEventType eventType;
+
     private String title;
+
     private String description;
+
     private LocalDateTime createdAt;
+
     private UUID createdBy;
 }

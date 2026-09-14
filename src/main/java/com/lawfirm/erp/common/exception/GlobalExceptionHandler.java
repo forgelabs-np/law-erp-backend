@@ -10,11 +10,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -126,6 +128,21 @@ public class GlobalExceptionHandler {
         String message = "Invalid value '" + ex.getValue() + "' for parameter '" + ex.getName() + "'";
         log.warn("Type mismatch: {}", message);
         return responseHandler.error(message, ApiStatus.BAD_REQUEST, HttpStatus.BAD_REQUEST);
+    }
+
+    // Wrong HTTP method on an existing endpoint (e.g. GET on a POST-only path)
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        log.warn("Method not supported: {}", ex.getMessage());
+        return responseHandler.error("HTTP method not supported for this endpoint",
+                ApiStatus.BAD_REQUEST, HttpStatus.METHOD_NOT_ALLOWED);
+    }
+
+    // Unknown path — no controller mapping at all
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(NoResourceFoundException ex) {
+        log.warn("Endpoint not found: {}", ex.getMessage());
+        return responseHandler.error("Endpoint not found", ApiStatus.NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler(RuntimeException.class)

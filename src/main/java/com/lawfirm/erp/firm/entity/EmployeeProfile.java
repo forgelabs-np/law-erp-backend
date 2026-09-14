@@ -11,7 +11,7 @@ import java.time.LocalDate;
  * Employee-specific profile data — 1:1 with User.
  *
  * User table = authentication (who can log in, what role, what firm).
- * EmployeeProfile = professional data (designation, bar council, department etc.)
+ * EmployeeProfile = professional data (designation, bar council, etc.).
  *
  * This separation keeps User lean and lets EmployeeProfile grow
  * independently without touching auth logic.

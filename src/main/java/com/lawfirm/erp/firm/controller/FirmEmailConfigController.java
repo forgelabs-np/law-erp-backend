@@ -1,5 +1,6 @@
 package com.lawfirm.erp.firm.controller;
 
+import com.lawfirm.erp.common.constant.FirmConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -34,7 +35,7 @@ public class FirmEmailConfigController {
     private final ResponseHandler responseHandler;
 
     @GetMapping
-    @Operation(summary = "Get firm email config", description = "Returns SMTP config WITHOUT the password. smtpPasswordSet indicates if a password was configured.")
+    @Operation(summary = FirmConstants.GET_EMAIL_CONFIG_SUMMARY, description = FirmConstants.GET_EMAIL_CONFIG_DESCRIPTION)
     public ResponseEntity<ApiResponse<FirmEmailConfigResponse>> getConfig() {
         UUID firmId = getRequiredFirmId();
         var config = firmEmailConfigService.getByFirmId(firmId);
@@ -45,8 +46,8 @@ public class FirmEmailConfigController {
     }
 
     @PutMapping
-    @Operation(summary = "Create or update firm email config",
-               description = "Set SMTP settings. Use smtpPassword = \"__UNCHANGED__\" to keep existing password without resending it.")
+    @Operation(summary = FirmConstants.SAVE_EMAIL_CONFIG_SUMMARY,
+               description = FirmConstants.SAVE_EMAIL_CONFIG_DESCRIPTION)
     public ResponseEntity<ApiResponse<FirmEmailConfigResponse>> saveConfig(
             @Valid @RequestBody FirmEmailConfigRequest request) {
         UUID firmId = getRequiredFirmId();
@@ -67,8 +68,8 @@ public class FirmEmailConfigController {
     }
 
     @PostMapping("/test")
-    @Operation(summary = "Test SMTP connection",
-               description = "Attempts to connect to the configured SMTP server. Updates testedAt and testPassed fields.")
+    @Operation(summary = FirmConstants.TEST_EMAIL_CONNECTION_SUMMARY,
+               description = FirmConstants.TEST_EMAIL_CONNECTION_DESCRIPTION)
     public ResponseEntity<ApiResponse<TestResultResponse>> testConnection() {
         UUID firmId = getRequiredFirmId();
         boolean passed = firmEmailConfigService.testConnection(firmId);
@@ -79,8 +80,8 @@ public class FirmEmailConfigController {
     }
 
     @DeleteMapping
-    @Operation(summary = "Delete firm email config",
-               description = "Removes the firm's SMTP config. All emails will use platform global SMTP.")
+    @Operation(summary = FirmConstants.DELETE_EMAIL_CONFIG_SUMMARY,
+               description = FirmConstants.DELETE_EMAIL_CONFIG_DESCRIPTION)
     public ResponseEntity<ApiResponse<Void>> deleteConfig() {
         UUID firmId = getRequiredFirmId();
         firmEmailConfigService.delete(firmId);

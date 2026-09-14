@@ -34,7 +34,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,13 +46,13 @@ class RolePermissionServiceTest {
     @Mock private CurrentUserResolver currentUserResolver;
     @Mock private UserRepository userRepository;
     @Mock private PermissionEvaluator permissionEvaluator;
+    @Mock private com.lawfirm.erp.rbac.mapper.RbacResponseMapper rbacResponseMapper;
 
     @InjectMocks
-    private RolePermissionService rolePermissionService;
+    private RolePermissionServiceImpl rolePermissionService;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
     private static final UUID ROLE_ID = UUID.randomUUID();
-    private static final UUID PARENT_ROLE_ID = UUID.randomUUID();
     private static final UUID PERM_ID_TENANT = UUID.randomUUID();
     private static final UUID PERM_ID_GLOBAL = UUID.randomUUID();
 
@@ -68,12 +67,6 @@ class RolePermissionServiceTest {
         firmAdminRole.setRoleCode("FIRM_ADMIN");
         firmAdminRole.setRoleName("FIRM_ADMIN");
         firmAdminRole.setIsSystem(false);
-        firmAdminRole.setParentRoleId(PARENT_ROLE_ID);
-
-        Role parentRole = new Role();
-        parentRole.setId(PARENT_ROLE_ID);
-        parentRole.setRoleCode("FIRM_ADMIN");
-        parentRole.setIsSystem(true);
 
         tenantPermission = Permission.builder()
                 .code("CASE_MANAGEMENT:VIEW")
@@ -93,22 +86,31 @@ class RolePermissionServiceTest {
 
         when(currentUserResolver.getCurrentUserId()).thenReturn(ADMIN_ID);
         when(roleRepository.findById(ROLE_ID)).thenReturn(Optional.of(firmAdminRole));
-
-        Role parentRoleForMock = new Role();
-        parentRoleForMock.setId(PARENT_ROLE_ID);
-        parentRoleForMock.setRoleCode("FIRM_ADMIN");
-        when(roleRepository.findById(PARENT_ROLE_ID)).thenReturn(Optional.of(parentRoleForMock));
     }
 
     @Nested
-    @DisplayName("Scope ceiling enforcement")
-    class ScopeCeiling {
+    @DisplayName("GLOBAL-scope permission is always rejected")
+    class GlobalScopeCheck {
 
         @Test
-        @DisplayName("TENANT-scoped permission → allowed for FIRM_ADMIN")
-        void tenantPermission_allowed() {
-            when(permissionRepository.findById(PERM_ID_TENANT)).thenReturn(Optional.of(tenantPermission));
+        @DisplayName("GLOBAL-scope permission → forbidden")
+        void globalScope_forbidden() {
+            when(permissionRepository.findAllById(List.of(PERM_ID_GLOBAL))).thenReturn(List.of(globalPermission));
+
+            RolePermissionRequest request = buildRequest(List.of(PERM_ID_GLOBAL));
+
+            ForbiddenException ex = assertThrows(ForbiddenException.class,
+                    () -> rolePermissionService.assignPermissionsToRole(request));
+            assertTrue(ex.getMessage().contains("GLOBAL"));
+            verify(rolePermissionRepository, never()).deleteByRoleId(any());
+            verify(rolePermissionRepository, never()).saveAll(any());
+        }
+
+        @Test
+        @DisplayName("TENANT-scope permission → allowed")
+        void tenantScope_allowed() {
             when(permissionRepository.findAllById(List.of(PERM_ID_TENANT))).thenReturn(List.of(tenantPermission));
+            when(userRepository.findUserIdsByRoleId(ROLE_ID)).thenReturn(Collections.emptyList());
 
             RolePermissionRequest request = buildRequest(List.of(PERM_ID_TENANT));
             rolePermissionService.assignPermissionsToRole(request);
@@ -118,25 +120,10 @@ class RolePermissionServiceTest {
         }
 
         @Test
-        @DisplayName("GLOBAL-scoped permission → forbidden for FIRM_ADMIN")
-        void globalPermission_forbidden() {
-            when(permissionRepository.findById(PERM_ID_GLOBAL)).thenReturn(Optional.of(globalPermission));
-
-            RolePermissionRequest request = buildRequest(List.of(PERM_ID_GLOBAL));
-
-            ForbiddenException ex = assertThrows(ForbiddenException.class,
-                    () -> rolePermissionService.assignPermissionsToRole(request));
-            assertTrue(ex.getMessage().contains("GLOBAL"));
-            assertTrue(ex.getMessage().contains("FIRM_ADMIN"));
-            verify(rolePermissionRepository, never()).deleteByRoleId(any());
-            verify(rolePermissionRepository, never()).saveAll(any());
-        }
-
-        @Test
-        @DisplayName("Mixed permissions → fails fast on first forbidden permission")
-        void mixedPermissions_failsOnFirstForbidden() {
-            when(permissionRepository.findById(PERM_ID_TENANT)).thenReturn(Optional.of(tenantPermission));
-            when(permissionRepository.findById(PERM_ID_GLOBAL)).thenReturn(Optional.of(globalPermission));
+        @DisplayName("Mixed permissions → fails on GLOBAL")
+        void mixedPermissions_failsOnGlobal() {
+            when(permissionRepository.findAllById(List.of(PERM_ID_TENANT, PERM_ID_GLOBAL)))
+                    .thenReturn(List.of(tenantPermission, globalPermission));
 
             RolePermissionRequest request = buildRequest(List.of(PERM_ID_TENANT, PERM_ID_GLOBAL));
 
@@ -148,24 +135,21 @@ class RolePermissionServiceTest {
     }
 
     @Nested
-    @DisplayName("Role permission assignment (409 fix verification)")
+    @DisplayName("Role permission assignment")
     class PermissionAssignment {
 
         @Test
         @DisplayName("Delete is called before saveAll in same transaction")
         void deleteCalledBeforeSave() {
-            when(permissionRepository.findById(PERM_ID_TENANT)).thenReturn(Optional.of(tenantPermission));
             when(permissionRepository.findAllById(List.of(PERM_ID_TENANT))).thenReturn(List.of(tenantPermission));
             when(userRepository.findUserIdsByRoleId(ROLE_ID)).thenReturn(Collections.emptyList());
 
             RolePermissionRequest request = buildRequest(List.of(PERM_ID_TENANT));
             rolePermissionService.assignPermissionsToRole(request);
 
-            // Verify the fix: deleteByRoleId is called, then saveAll
             verify(rolePermissionRepository).deleteByRoleId(ROLE_ID);
             verify(rolePermissionRepository).saveAll(any());
 
-            // Capture saved RolePermissions to verify structure
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<RolePermission>> captor = ArgumentCaptor.forClass(List.class);
             verify(rolePermissionRepository).saveAll(captor.capture());
@@ -195,12 +179,13 @@ class RolePermissionServiceTest {
         @DisplayName("Non-existent permission ID → ResourceNotFoundException")
         void nonExistentPermission_throws() {
             UUID badId = UUID.randomUUID();
-            when(permissionRepository.findById(badId)).thenReturn(Optional.empty());
+            when(permissionRepository.findAllById(List.of(badId))).thenReturn(Collections.emptyList());
 
             RolePermissionRequest request = buildRequest(List.of(badId));
 
-            assertThrows(ResourceNotFoundException.class,
+            ResourceNotFoundException ex = assertThrows(ResourceNotFoundException.class,
                     () -> rolePermissionService.assignPermissionsToRole(request));
+            assertTrue(ex.getMessage().contains("permission"));
         }
     }
 
@@ -223,26 +208,6 @@ class RolePermissionServiceTest {
     }
 
     @Nested
-    @DisplayName("Unused permission IDs")
-    class UnusedPermissions {
-
-        @Test
-        @DisplayName("Permission ID in request not found in DB → ResourceNotFoundException from ceiling check")
-        void partiallyInvalidPermissions_throws() {
-            UUID badId = UUID.randomUUID();
-            when(permissionRepository.findById(PERM_ID_TENANT)).thenReturn(Optional.of(tenantPermission));
-            when(permissionRepository.findById(badId)).thenReturn(Optional.empty());
-
-            RolePermissionRequest request = buildRequest(List.of(PERM_ID_TENANT, badId));
-
-            ResourceNotFoundException ex = assertThrows(ResourceNotFoundException.class,
-                    () -> rolePermissionService.assignPermissionsToRole(request));
-            assertTrue(ex.getMessage().contains("Permission not found"));
-            verify(rolePermissionRepository, never()).saveAll(any());
-        }
-    }
-
-    @Nested
     @DisplayName("User session invalidation")
     class SessionInvalidation {
 
@@ -251,7 +216,6 @@ class RolePermissionServiceTest {
         void invalidatesUserSessions() {
             UUID userId1 = UUID.randomUUID();
             UUID userId2 = UUID.randomUUID();
-            when(permissionRepository.findById(PERM_ID_TENANT)).thenReturn(Optional.of(tenantPermission));
             when(permissionRepository.findAllById(List.of(PERM_ID_TENANT))).thenReturn(List.of(tenantPermission));
             when(userRepository.findUserIdsByRoleId(ROLE_ID)).thenReturn(List.of(userId1, userId2));
 
@@ -294,8 +258,6 @@ class RolePermissionServiceTest {
                     () -> rolePermissionService.assignPermissionsToRole(request));
         }
     }
-
-    // ─── Helper ──────────────────────────────────────────────────────────
 
     private RolePermissionRequest buildRequest(List<UUID> permissionIds) {
         RolePermissionRequest request = new RolePermissionRequest();

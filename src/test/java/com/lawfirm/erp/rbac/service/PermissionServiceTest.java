@@ -13,6 +13,8 @@ import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.entity.RolePermission;
+import com.lawfirm.erp.rbac.repository.ModulePermissionRepository;
+import com.lawfirm.erp.rbac.repository.ModuleRepository;
 import com.lawfirm.erp.rbac.repository.PermissionRepository;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
@@ -46,11 +48,14 @@ class PermissionServiceTest {
     @Mock private PermissionRepository permissionRepository;
     @Mock private RoleRepository roleRepository;
     @Mock private RolePermissionRepository rolePermissionRepository;
+    @Mock private ModuleRepository moduleRepository;
+    @Mock private ModulePermissionRepository modulePermissionRepository;
     @Mock private CurrentUserResolver currentUserResolver;
     @Mock private AuditService auditService;
+    @Mock private com.lawfirm.erp.rbac.mapper.RbacResponseMapper rbacResponseMapper;
 
     @InjectMocks
-    private PermissionService permissionService;
+    private PermissionServiceImpl permissionService;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
     private static final UUID SUPER_ADMIN_ROLE_ID = UUID.randomUUID();
@@ -78,6 +83,22 @@ class PermissionServiceTest {
         existingPermission.setActive(true);
 
         when(currentUserResolver.getCurrentUserId()).thenReturn(ADMIN_ID);
+
+        lenient().when(rbacResponseMapper.toPermissionResponse(any(Permission.class))).thenAnswer(i -> {
+            Permission p = i.getArgument(0);
+            return com.lawfirm.erp.dto.admin.response.PermissionResponse.builder()
+                    .id(p.getId()).action(p.getAction()).scope(p.getScope())
+                    .code(p.getCode()).description(p.getDescription())
+                    .isActive(p.isActive()).createdAt(p.getCreatedAt()).build();
+        });
+        lenient().when(rbacResponseMapper.toPermissionResponseList(any())).thenAnswer(i -> {
+            java.util.List<Permission> perms = i.getArgument(0);
+            return perms.stream().map(p -> com.lawfirm.erp.dto.admin.response.PermissionResponse.builder()
+                    .id(p.getId()).action(p.getAction()).scope(p.getScope())
+                    .code(p.getCode()).description(p.getDescription())
+                    .isActive(p.isActive()).createdAt(p.getCreatedAt()).build())
+                    .collect(java.util.stream.Collectors.toList());
+        });
     }
 
     @Nested
@@ -273,7 +294,7 @@ class PermissionServiceTest {
             inactive.setId(UUID.randomUUID());
             inactive.setActive(false);
 
-            when(permissionRepository.findAll()).thenReturn(List.of(existingPermission, inactive));
+            when(permissionRepository.findAllActive()).thenReturn(List.of(existingPermission));
 
             List<PermissionResponse> responses = permissionService.findActive();
 

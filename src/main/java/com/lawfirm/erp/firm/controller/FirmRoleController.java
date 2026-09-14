@@ -1,9 +1,12 @@
 package com.lawfirm.erp.firm.controller;
 
+import com.lawfirm.erp.common.constant.FirmConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
+import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
+import com.lawfirm.erp.dto.admin.request.RoleRequest;
 import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
 import com.lawfirm.erp.dto.firm.response.FirmRolePermissionsResponse;
@@ -31,11 +34,23 @@ public class FirmRoleController {
     private final ResponseHandler responseHandler;
 
 
+    @PostMapping
+    @Operation(
+            summary = FirmConstants.CREATE_FIRM_ROLE_SUMMARY,
+            description = FirmConstants.CREATE_FIRM_ROLE_DESCRIPTION
+    )
+    public ResponseEntity<ApiResponse<RoleResponse>> createRole(
+            @Valid @RequestBody ApiRequest<RoleRequest> request) {
+        return responseHandler.ok(
+                firmRoleService.createRole(request.getData()),
+                "Custom role created successfully"
+        );
+    }
+
     @GetMapping
     @Operation(
-            summary = "Get all roles for this firm",
-            description = "Returns firm-scoped roles only. System templates are excluded. " +
-                    "These are the roles firm admin can assign to employees."
+            summary = FirmConstants.GET_FIRM_ROLES_SUMMARY,
+            description = FirmConstants.GET_FIRM_ROLES_DESCRIPTION
     )
     public ResponseEntity<ApiResponse<List<RoleResponse>>> getFirmRoles() {
         return responseHandler.ok(
@@ -46,12 +61,8 @@ public class FirmRoleController {
 
     @GetMapping("/{roleId}/permissions")
     @Operation(
-            summary = "Get permissions for a firm role",
-            description = "Returns two lists: " +
-                    "(1) currentPermissions — what this role currently has. " +
-                    "(2) availablePermissions — everything the system ceiling allows, " +
-                    "with 'assigned' flag showing which are active. " +
-                    "Use availablePermissions to build the checkbox UI for editing."
+            summary = FirmConstants.GET_ROLE_PERMISSIONS_SUMMARY,
+            description = FirmConstants.GET_ROLE_PERMISSIONS_DESCRIPTION
     )
     public ResponseEntity<ApiResponse<FirmRolePermissionsResponse>> getRolePermissions(
             @PathVariable UUID roleId) {
@@ -63,8 +74,8 @@ public class FirmRoleController {
 
     @GetMapping("/{roleId}/users")
     @Operation(
-            summary = "Get users assigned to this role",
-            description = "Lists all users within the firm who hold this role."
+            summary = FirmConstants.GET_ROLE_USERS_SUMMARY,
+            description = FirmConstants.GET_ROLE_USERS_DESCRIPTION
     )
     public ResponseEntity<ApiResponse<List<RoleUserResponse>>> getRoleUsers(
             @PathVariable UUID roleId) {
@@ -76,11 +87,8 @@ public class FirmRoleController {
 
     @PutMapping("/{roleId}/permissions")
     @Operation(
-            summary = "Update permissions for a firm role",
-            description = "Replaces all permissions on a firm-scoped role. " +
-                    "Ceiling enforced — cannot assign permissions beyond what the system role allows. " +
-                    "All users holding this role will have their JWT invalidated immediately " +
-                    "and must re-login to get the updated permissions."
+            summary = FirmConstants.UPDATE_ROLE_PERMISSIONS_SUMMARY,
+            description = FirmConstants.UPDATE_ROLE_PERMISSIONS_DESCRIPTION
     )
     public ResponseEntity<ApiResponse<RolePermissionResponse>> updateRolePermissions(
             @PathVariable UUID roleId,
@@ -92,5 +100,27 @@ public class FirmRoleController {
                 firmRoleService.updateRolePermissions(roleId, request.getData()),
                 "Role permissions updated. Affected users must re-login."
         );
+    }
+
+    @PatchMapping("/{roleId}/toggle")
+    @Operation(
+            summary = FirmConstants.TOGGLE_FIRM_ROLE_SUMMARY,
+            description = FirmConstants.TOGGLE_FIRM_ROLE_DESCRIPTION
+    )
+    public ResponseEntity<ApiResponse<RoleResponse>> toggleRoleStatus(@PathVariable UUID roleId) {
+        return responseHandler.ok(
+                firmRoleService.toggleRoleStatus(roleId),
+                "Role status toggled successfully"
+        );
+    }
+
+    @DeleteMapping("/{roleId}")
+    @Operation(
+            summary = FirmConstants.DELETE_FIRM_ROLE_SUMMARY,
+            description = FirmConstants.DELETE_FIRM_ROLE_DESCRIPTION
+    )
+    public ResponseEntity<ApiResponse<Void>> deleteRole(@PathVariable UUID roleId) {
+        firmRoleService.deleteRole(roleId);
+        return responseHandler.ok(null, "Custom role deleted successfully");
     }
 }

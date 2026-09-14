@@ -1,5 +1,7 @@
 package com.lawfirm.erp.rbac.controller;
 
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
+import com.lawfirm.erp.common.constant.RbacConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -12,7 +14,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,16 +23,17 @@ import java.util.UUID;
 @RequestMapping("/api/v1/admin/modules")
 @RequiredArgsConstructor
 @Tag(name = "Admin - Module Management", description = "Super Admin module management APIs")
-@PreAuthorize("hasRole('SUPER_ADMIN')")
 public class ModuleController {
 
     private final ModuleService moduleService;
+    private final PermissionEvaluator permissionEvaluator;
     private final ResponseHandler responseHandler;
 
     @PostMapping
-    @Operation(summary = "Create or update module")
+    @Operation(summary = RbacConstants.UPSERT_MODULE_SUMMARY)
     public ResponseEntity<ApiResponse<ModuleResponse>> upsertModule(
             @Valid @RequestBody ApiRequest<ModuleRequest> request) {
+        permissionEvaluator.require("MENU_MANAGEMENT:CREATE");
         return responseHandler.ok(
                 moduleService.upsertModule(request.getData()),
                 "Module saved successfully"
@@ -39,8 +41,9 @@ public class ModuleController {
     }
 
     @GetMapping
-    @Operation(summary = "Get all modules")
+    @Operation(summary = RbacConstants.GET_ALL_MODULES_SUMMARY)
     public ResponseEntity<ApiResponse<List<ModuleResponse>>> getAllModules() {
+        permissionEvaluator.require("MENU_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 moduleService.getAllModules(),
                 "Modules fetched successfully"
@@ -48,8 +51,9 @@ public class ModuleController {
     }
 
     @GetMapping("/active")
-    @Operation(summary = "Get active modules")
+    @Operation(summary = RbacConstants.GET_ACTIVE_MODULES_SUMMARY)
     public ResponseEntity<ApiResponse<List<ModuleResponse>>> getActiveModules() {
+        permissionEvaluator.require("MENU_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 moduleService.getActiveModules(),
                 "Active modules fetched successfully"
@@ -57,8 +61,9 @@ public class ModuleController {
     }
 
     @GetMapping("/{moduleId}")
-    @Operation(summary = "Get module by ID")
+    @Operation(summary = RbacConstants.GET_MODULE_BY_ID_SUMMARY)
     public ResponseEntity<ApiResponse<ModuleResponse>> getModuleById(@PathVariable UUID moduleId) {
+        permissionEvaluator.require("MENU_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 moduleService.getModuleById(moduleId),
                 "Module fetched successfully"
@@ -66,15 +71,17 @@ public class ModuleController {
     }
 
     @DeleteMapping("/{moduleId}")
-    @Operation(summary = "Delete module")
+    @Operation(summary = RbacConstants.DELETE_MODULE_SUMMARY)
     public ResponseEntity<ApiResponse<Void>> deleteModule(@PathVariable UUID moduleId) {
+        permissionEvaluator.require("MENU_MANAGEMENT:DELETE");
         moduleService.deleteModule(moduleId);
         return responseHandler.ok(null, "Module deleted successfully");
     }
 
     @PatchMapping("/{moduleId}/toggle")
-    @Operation(summary = "Toggle module status")
+    @Operation(summary = RbacConstants.TOGGLE_MODULE_SUMMARY)
     public ResponseEntity<ApiResponse<ModuleResponse>> toggleModuleStatus(@PathVariable UUID moduleId) {
+        permissionEvaluator.require("MENU_MANAGEMENT:EDIT");
         return responseHandler.ok(
                 moduleService.toggleModuleStatus(moduleId),
                 "Module status toggled successfully"
@@ -82,10 +89,11 @@ public class ModuleController {
     }
 
     @PostMapping("/{moduleId}/permissions")
-    @Operation(summary = "Assign permissions to module")
+    @Operation(summary = RbacConstants.ASSIGN_PERMISSIONS_TO_MODULE_SUMMARY)
     public ResponseEntity<ApiResponse<ModuleResponse>> assignPermissionsToModule(
             @PathVariable UUID moduleId,
             @Valid @RequestBody ApiRequest<AssignPermissionsRequest> request) {
+        permissionEvaluator.require("MENU_MANAGEMENT:EDIT");
         return responseHandler.ok(
                 moduleService.assignPermissionsToModule(moduleId, request.getData().getPermissionIds()),
                 "Permissions assigned to module successfully"

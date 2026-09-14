@@ -1,13 +1,19 @@
 package com.lawfirm.erp.superadmin.controller;
 
+import com.lawfirm.erp.common.constant.SuperAdminConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
+import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.enums.Message;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.dto.admin.response.AdminUserResponse;
-import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
+import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
+import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
+import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.dto.auth.request.RegisterSuperAdminRequest;
+import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
+import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
 import com.lawfirm.erp.dto.auth.response.RegisterResponse;
 import com.lawfirm.erp.superadmin.service.SuperAdminService;
@@ -20,6 +26,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/super-admin")
@@ -28,10 +35,11 @@ import java.util.List;
 public class SuperAdminController {
 
     private final SuperAdminService superAdminService;
+    private final com.lawfirm.erp.firm.service.FirmRoleService firmRoleService;
     private final ResponseHandler responseHandler;
 
     @PostMapping("/register")
-    @Operation(summary = "Register Super Admin (One-time only)", description = "Creates the first super admin. Will fail if already exists.")
+    @Operation(summary = SuperAdminConstants.REGISTER_SUMMARY, description = SuperAdminConstants.REGISTER_DESCRIPTION)
     public ResponseEntity<ApiResponse<RegisterResponse>> registerSuperAdmin(
             @Valid @RequestBody ApiRequest<RegisterSuperAdminRequest> request) {
         return responseHandler.ok(
@@ -42,7 +50,7 @@ public class SuperAdminController {
     }
 
     @PostMapping("/login")
-    @Operation(summary = "Super Admin Login", description = "Login for super admin - No lawFirmCode required")
+    @Operation(summary = SuperAdminConstants.LOGIN_SUMMARY, description = SuperAdminConstants.LOGIN_DESCRIPTION)
     public ResponseEntity<ApiResponse<LoginResponse>> loginSuperAdmin(
             @Valid @RequestBody ApiRequest<SuperAdminLoginRequest> request) {
         return responseHandler.ok(
@@ -54,19 +62,72 @@ public class SuperAdminController {
 
     @GetMapping("/users")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
-    @Operation(
-            summary = "Get all users with their roles",
-            description = "User-first view for the super admin: returns every user with its role " +
-                    "(name/code) and firm (code/name). Optional filters: userType, " +
-                    "search (partial username match, case-insensitive), firmCode."
-    )
-    public ResponseEntity<ApiResponse<List<AdminUserResponse>>> getAllUsersWithRoles(
+    @Operation(summary = SuperAdminConstants.GET_USERS_SUMMARY, description = SuperAdminConstants.GET_USERS_DESCRIPTION)
+    public ResponseEntity<ApiResponse<PagedResponse<AdminUserResponse>>> getAllUsersWithRoles(
             @RequestParam(required = false) UserType userType,
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) String firmCode) {
+            @RequestParam(required = false) String firmCode,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         return responseHandler.ok(
-                superAdminService.getAllUsersWithRoles(userType, search, firmCode),
+                superAdminService.getAllUsersWithRoles(userType, search, firmCode, page, size),
                 "Users with roles fetched successfully"
         );
+    }
+
+    @GetMapping("/firms/{firmId}/roles")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(summary = SuperAdminConstants.GET_FIRM_ROLES_SUMMARY, description = SuperAdminConstants.GET_FIRM_ROLES_DESCRIPTION)
+    public ResponseEntity<ApiResponse<List<com.lawfirm.erp.dto.admin.response.RoleResponse>>> getFirmRoles(
+            @PathVariable UUID firmId) {
+        return responseHandler.ok(
+                superAdminService.getFirmRoles(firmId),
+                "Firm roles fetched successfully"
+        );
+    }
+
+    @PostMapping("/firms/{firmId}/roles")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(summary = SuperAdminConstants.CREATE_FIRM_ROLE_SUMMARY, description = SuperAdminConstants.CREATE_FIRM_ROLE_DESCRIPTION)
+    public ResponseEntity<ApiResponse<com.lawfirm.erp.dto.admin.response.RoleResponse>> createFirmRole(
+            @PathVariable UUID firmId,
+            @Valid @RequestBody ApiRequest<com.lawfirm.erp.dto.admin.request.RoleRequest> request) {
+        return responseHandler.ok(
+                firmRoleService.createRoleForFirm(firmId, request.getData()),
+                "Firm role created successfully"
+        );
+    }
+
+    @PutMapping("/firms/{firmId}/roles/{roleId}/permissions")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(summary = SuperAdminConstants.OVERRIDE_ROLE_PERMS_SUMMARY, description = SuperAdminConstants.OVERRIDE_ROLE_PERMS_DESCRIPTION)
+    public ResponseEntity<ApiResponse<RolePermissionResponse>> overrideRolePermissions(
+            @PathVariable UUID firmId,
+            @PathVariable UUID roleId,
+            @Valid @RequestBody ApiRequest<RolePermissionRequest> request) {
+        request.getData().setRoleId(roleId);
+        return responseHandler.ok(
+                superAdminService.overrideRolePermissions(firmId, roleId, request.getData()),
+                "Role permissions overridden by Super Admin"
+        );
+    }
+
+    @PostMapping("/users/{userId}/reset-password")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(summary = "Reset any user's password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(
+            @PathVariable UUID userId,
+            @Valid @RequestBody ApiRequest<ResetPasswordRequest> request) {
+        superAdminService.resetPassword(userId, request.getData());
+        return responseHandler.ok(null, "Password reset successfully. User must re-login.");
+    }
+
+    @PostMapping("/mfa/reset")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(summary = SuperAdminConstants.RESET_MFA_SUMMARY, description = SuperAdminConstants.RESET_MFA_DESCRIPTION)
+    public ResponseEntity<ApiResponse<Void>> resetMfa(
+            @Valid @RequestBody ApiRequest<MfaResetRequest> request) {
+        superAdminService.resetMfa(request.getData());
+        return responseHandler.ok(null, "MFA reset successfully. User must re-setup authenticator on next login.");
     }
 }

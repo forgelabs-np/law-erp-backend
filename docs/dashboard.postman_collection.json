@@ -1,0 +1,197 @@
+{
+  "info": {
+    "name": "Dashboards (Case Management + Global)",
+    "_postman_id": "7a1c3e5f-9b2d-4c6e-8a1f-3d5b7c9e0f2a",
+    "description": "LAW ERP — the two dashboards.\n\nBase path: /api/v1. Server port: 6969 (dev).\n\n1. Case Dashboard  GET /firm/dashboard        — FIRM_ADMIN / ADVOCATE / PARALEGAL\n   FIRM_ADMIN sees all firm matters + today's events + positioning + stale (90+ days).\n   ADVOCATE / PARALEGAL see only matters they are assigned to (via /firm/matters/{no}/assignments).\n\n2. Global Dashboard GET /modules/dashboard    — FIRM_ADMIN / SUPER_ADMIN\n   FIRM_ADMIN sees firm-scoped stats (users, own firm, matters, scraper, recent activity).\n   SUPER_ADMIN sees all-firms aggregates.\n\nAuth: login returns a JWT; FIRM_ADMIN and SUPER_ADMIN logins require MFA (TOTP).\nFIRM_ADMIN accounts also require a forced password change on first login (PASSWORD_CHANGE_REQUIRED).\nThe MFA requests below use {{mfaToken}} and {{totpCode}} variables.\n\nConventions: responses are { \"success\", \"responseCode\", \"message\", \"data\" }.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:6969" },
+    { "key": "token", "value": "" },
+    { "key": "lawFirmCode", "value": "APEX-LAW" },
+    { "key": "username", "value": "" },
+    { "key": "password", "value": "" },
+    { "key": "mfaToken", "value": "" },
+    { "key": "totpCode", "value": "" },
+    { "key": "passwordChangeToken", "value": "" },
+    { "key": "matterNumber", "value": "APX-MAT-2026-00001" },
+    { "key": "userId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 · Auth",
+      "item": [
+        {
+          "name": "Login (internal user)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json", "type": "text" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"lawFirmCode\": \"{{lawFirmCode}}\",\n    \"username\": \"{{username}}\",\n    \"password\": \"{{password}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Change password (first login)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json", "type": "text" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"passwordChangeToken\": \"{{passwordChangeToken}}\",\n    \"newPassword\": \"NewPass123\",\n    \"confirmPassword\": \"NewPass123\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/change-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "change-password"]
+            }
+          }
+        },
+        {
+          "name": "Confirm MFA setup",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json", "type": "text" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"mfaToken\": \"{{mfaToken}}\",\n    \"totpCode\": \"{{totpCode}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/mfa/setup/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "mfa", "setup", "confirm"]
+            }
+          }
+        },
+        {
+          "name": "Validate MFA (TOTP)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json", "type": "text" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"mfaToken\": \"{{mfaToken}}\",\n    \"totpCode\": \"{{totpCode}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/mfa/validate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "mfa", "validate"]
+            }
+          }
+        },
+        {
+          "name": "Super Admin login",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json", "type": "text" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"password\": \"{{password}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 · Case Dashboard",
+      "item": [
+        {
+          "name": "Get case dashboard (role-filtered)",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" } ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "dashboard"]
+            }
+          }
+        },
+        {
+          "name": "List assignments for a matter (drives role filter)",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" } ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters/{{matterNumber}}/assignments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters", "{{matterNumber}}", "assignments"]
+            }
+          }
+        },
+        {
+          "name": "Create matter (feeds dashboard)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json", "type": "text" }, { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"matterType\": \"LITIGATION\",\n    \"title\": \"Contract dispute - ACME vs Beta\",\n    \"originatingCourtLevel\": \"DISTRICT\",\n    \"courtName\": \"Kathmandu District Court\",\n    \"courtCaseNumber\": \"081-C1-7530\",\n    \"filingDate\": \"2083-04-29\",\n    \"description\": \"Breach of contract\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters"]
+            }
+          }
+        },
+        {
+          "name": "Assign employee to matter (PRIMARY_ADVOCATE)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json", "type": "text" }, { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"userId\": \"{{userId}}\",\n    \"assignmentRole\": \"PRIMARY_ADVOCATE\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters/{{matterNumber}}/assignments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters", "{{matterNumber}}", "assignments"]
+            }
+          }
+        },
+        {
+          "name": "Revoke assignment",
+          "request": {
+            "method": "DELETE",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" } ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/matters/{{matterNumber}}/assignments/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "matters", "{{matterNumber}}", "assignments", "{{userId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 · Global Dashboard",
+      "item": [
+        {
+          "name": "Get global dashboard (SUPER_ADMIN: all firms / FIRM_ADMIN: own firm)",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" } ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/modules/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "modules", "dashboard"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
