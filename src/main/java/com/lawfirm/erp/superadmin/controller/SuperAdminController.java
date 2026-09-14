@@ -12,6 +12,7 @@ import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
 import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
 import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.dto.auth.request.RegisterSuperAdminRequest;
+import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
 import com.lawfirm.erp.dto.auth.response.RegisterResponse;
@@ -109,6 +110,16 @@ public class SuperAdminController {
                 superAdminService.overrideRolePermissions(firmId, roleId, request.getData()),
                 "Role permissions overridden by Super Admin"
         );
+    }
+
+    @PostMapping("/users/{userId}/reset-password")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(summary = "Reset any user's password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(
+            @PathVariable UUID userId,
+            @Valid @RequestBody ApiRequest<ResetPasswordRequest> request) {
+        superAdminService.resetPassword(userId, request.getData());
+        return responseHandler.ok(null, "Password reset successfully. User must re-login.");
     }
 
     @PostMapping("/mfa/reset")

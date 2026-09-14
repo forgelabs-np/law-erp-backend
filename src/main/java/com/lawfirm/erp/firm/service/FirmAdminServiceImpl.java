@@ -132,6 +132,7 @@ public class FirmAdminServiceImpl implements FirmAdminService {
                 .firmName(firm != null ? firm.getName() : null)
                 .firmCode(firm != null ? firm.getLawFirmCode() : null)
                 .firmEmail(firm != null ? firm.getEmail() : null)
+                .firmStatus(firm != null ? firm.getStatus() : null)
                 .firmType(firm != null && firm.getFirmType() != null ? firm.getFirmType().name() : null)
                 .firmAddress(firm != null ? firm.getAddress() : null)
                 .firmPhone(firm != null ? firm.getPhone() : null)

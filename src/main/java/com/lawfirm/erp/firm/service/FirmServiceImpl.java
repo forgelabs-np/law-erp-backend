@@ -14,6 +14,7 @@ import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.firm.request.CreateFirmRequest;
 import com.lawfirm.erp.dto.firm.response.FirmCreationResponse;
+import com.lawfirm.erp.dto.firm.response.FirmListResponse;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
@@ -30,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -163,6 +165,27 @@ public class FirmServiceImpl implements FirmService {
                 .adminUsername(admin.getUsername())
                 .message("Firm created successfully. Share lawFirmCode and credentials with admin.")
                 .build();
+    }
+
+    @Override
+    public List<FirmListResponse> getAllFirms() {
+        return firmRepository.findAll().stream()
+                .map(firm -> FirmListResponse.builder()
+                        .id(firm.getId())
+                        .lawFirmCode(firm.getLawFirmCode())
+                        .name(firm.getName())
+                        .firmType(firm.getFirmType())
+                        .status(firm.getStatus())
+                        .email(firm.getEmail())
+                        .phone(firm.getPhone())
+                        .address(firm.getAddress())
+                        .jurisdiction(firm.getJurisdiction())
+                        .isTrial(Boolean.TRUE.equals(firm.getIsTrial()))
+                        .trialDays(firm.getTrialDays())
+                        .trialExpiresAt(firm.getTrialExpiresAt())
+                        .createdAt(firm.getCreatedAt())
+                        .build())
+                .collect(Collectors.toList());
     }
 
     @Override

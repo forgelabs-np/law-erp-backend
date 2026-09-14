@@ -8,6 +8,7 @@ import com.lawfirm.erp.dto.firm.request.CreateFirmRequest;
 import com.lawfirm.erp.dto.firm.request.ExtendTrialRequest;
 import com.lawfirm.erp.dto.firm.response.FirmAdminResponse;
 import com.lawfirm.erp.dto.firm.response.FirmCreationResponse;
+import com.lawfirm.erp.dto.firm.response.FirmListResponse;
 import com.lawfirm.erp.firm.service.FirmAdminService;
 import com.lawfirm.erp.firm.service.FirmService;
 import io.swagger.v3.oas.annotations.Operation;

@@ -7,6 +7,7 @@ import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.exception.ResponseHandler;
+import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkDeactivateRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkRoleChangeRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
@@ -112,6 +113,16 @@ public class UserManagementController {
         permissionEvaluator.require("USER_MANAGEMENT:EDIT");
         userManagementService.resetPassword(userId, request.getData());
         return responseHandler.ok(null, "Password reset successfully. User must re-login.");
+    }
+
+    @PostMapping("/{userId}/reset-mfa")
+    @Operation(summary = "Reset MFA for a user")
+    public ResponseEntity<ApiResponse<Void>> resetMfa(
+            @PathVariable UUID userId,
+            @Valid @RequestBody ApiRequest<MfaResetRequest> request) {
+        permissionEvaluator.require("USER_MANAGEMENT:EDIT");
+        userManagementService.resetMfa(userId, request.getData());
+        return responseHandler.ok(null, "MFA reset successfully. User must re-setup authenticator on next login.");
     }
 
     @DeleteMapping("/{userId}")

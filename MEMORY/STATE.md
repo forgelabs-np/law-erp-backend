@@ -1,7 +1,7 @@
 # Project State
 
 ## Current Focus
-**Trial period + firm lifecycle** (344 tests green) — firm creation supports trial period (configurable days), daily scheduler sends expiry notifications, suspended firms blocked at `/me`, extend/convert-to-permanent endpoints. Also fixed: firm count dashboard (only FIRM_ADMIN firms), simplified enable-module request.
+**Bug fix batch + enhancements** (360 tests green) — fixed 6 bugs + added password reset for SA. GetAllFirms isTrial, custom perms in grouped, NOTIFICATION_MANAGEMENT seed, default role delete block, MFA reset for Firm Admin, SA password reset. Postman updated.
 
 ## Branch
 `devG`
@@ -12,13 +12,19 @@
 - Modules: Auth, RBAC, Case Management, Invoicing, Super Admin, Customer, Firm, Tenant, Scraper
 
 ## Recent Work (this session)
-- **Trial period feature** — `Firm` entity has `isTrial`, `trialDays`, `trialStartedAt`, `trialExpiresAt`; SA creates trial firms; `/me` gates on suspended/expired; `TrialExpiryScheduler` sends daily notifications; endpoints: suspend, activate, extend-trial, convert-to-permanent
-- **Dashboard firm count fix** — `FirmStats.totalFirms` now counts only firms with FIRM_ADMIN users
-- **Enable module simplified** — `EnableModuleRequest` reduced to `moduleId` + `isEnabled`
-- **Postman updated** — `RBAC-V3.postman_collection.json` now includes trial firm creation, Get Me, and firm lifecycle endpoints (suspend/activate/extend-trial/convert-to-permanent)
-- **RBAC simplification** — removed template layer, simplified ceiling model, 325 tests green
+- **Bug 1: GetAllFirms isTrial** — new `FirmListResponse` DTO + `GET /api/v1/super-admin/firms` endpoint
+- **Bug 2: Custom perms in grouped** — `upsert()` now creates `ModulePermission` junction rows for custom perms
+- **Bug 3: NOTIFICATION_MANAGEMENT seed** — added to DataInitializer moduleDefs + role matrix
+- **Bug 4: Default role delete block** — Firm Admin blocked from deleting ADVOCATE/PARALEGAL/CLIENT cloned roles
+- **Bug 5: departmentId** — confirmed not in backend, frontend-only
+- **Bug 6: Firm Admin MFA reset** — new endpoint `POST /api/v1/modules/users/{userId}/reset-mfa`
+- **SA password reset** — new endpoint `POST /api/v1/super-admin/users/{userId}/reset-password`
+- **Client password reset** — already existed via `POST /api/v1/modules/users/{userId}/reset-password`
+- **Tests** — 16 new tests (FirmServiceGetAll, FirmRoleDeleteDefault, UserManagementReset, SuperAdminPasswordReset)
+- **Postman** — added sections 8-11 for all new endpoints
 
 ## Deep History Index
+- `memory/2026-09-13.md` — Bug fix batch: GetAllFirms isTrial, custom perms grouped, NOTIFICATION_MANAGEMENT seed, default role delete block, MFA reset for Firm Admin, client password reset confirmed
 - `memory/2026-09-12.md` — RBAC simplification, trial period feature, dashboard fixes, enable-module simplification (344 tests)
 - `memory/2026-09-09.md` — notification module design (v1 scope locked), preview endpoint GET→POST fix
 - `memory/2026-09-08.md` — delegation chain built (all 5 phases): template editing, diff-sync async job, both-direction cascade, SA firm-role visibility, `docs/rbac-delegation-chain-design.md`

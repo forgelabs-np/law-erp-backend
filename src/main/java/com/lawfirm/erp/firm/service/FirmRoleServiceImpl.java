@@ -2,6 +2,7 @@ package com.lawfirm.erp.firm.service;
 
 import com.lawfirm.erp.dto.firm.response.FirmRolePermissionsResponse;
 import com.lawfirm.erp.modules.audit.service.AuditService;
+import com.lawfirm.erp.common.constant.RoleCode;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.PermissionScope;
@@ -230,6 +231,17 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         return "FIRM_ADMIN".equals(role.getRoleCode());
     }
 
+    /**
+     * Default roles cloned from system templates when a firm is created.
+     * Firm Admin cannot delete these — only Super Admin can.
+     */
+    private boolean isDefaultClonedRole(Role role) {
+        String code = role.getRoleCode();
+        return RoleCode.ADVOCATE.equals(code)
+                || RoleCode.PARALEGAL.equals(code)
+                || RoleCode.CLIENT.equals(code);
+    }
+
     private Role findFirmAdminRole(UUID firmId) {
         return roleRepository.findByFirmIdAndRoleCode(firmId, "FIRM_ADMIN").orElse(null);
     }
@@ -315,6 +327,15 @@ public class FirmRoleServiceImpl implements FirmRoleService {
 
         if (isFirmAdminRole(role)) {
             throw new BusinessRuleException("Cannot delete FIRM_ADMIN role. Only Super Admin can manage Firm Admins.");
+        }
+
+        // Block deletion of default cloned roles (ADVOCATE, PARALEGAL, CLIENT)
+        // These are seeded when a firm is created. Only Super Admin can delete them.
+        if (isDefaultClonedRole(role)) {
+            throw new BusinessRuleException(
+                    "Cannot delete default role '" + role.getRoleCode()
+                    + "'. Only Super Admin can delete system-seeded roles."
+            );
         }
 
         int userCount = roleRepository.countUsersByRoleId(roleId);

@@ -18,6 +18,7 @@ import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
 import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.dto.auth.request.RegisterSuperAdminRequest;
+import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
 import com.lawfirm.erp.dto.auth.response.RegisterResponse;
@@ -206,6 +207,23 @@ public class SuperAdminServiceImpl implements SuperAdminService {
                 .collect(Collectors.toList());
 
         return PagedResponse.of(userPage, content);
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(UUID userId, ResetPasswordRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        userRepository.incrementPermissionVersion(userId);
+
+        auditService.log(AuditAction.PASSWORD_CHANGED, AuditEntity.USER, userId,
+                "Password reset by Super Admin for: " + user.getUsername());
+
+        log.info("Password reset for user: {} by Super Admin", user.getUsername());
     }
 
     @Override

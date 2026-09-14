@@ -5,6 +5,7 @@ import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkDeactivateRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkRoleChangeRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
+import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.response.BulkOperationResult;
 import com.lawfirm.erp.modules.usermanagement.dto.response.UserPermissionsResponse;
 import com.lawfirm.erp.modules.usermanagement.dto.response.UserProfileResponse;
@@ -27,6 +28,8 @@ public interface UserManagementService {
     List<UserProfileResponse.ActivityEntry> getUserActivity(UUID userId, LocalDateTime from, LocalDateTime to, int page, int size);
 
     void resetPassword(UUID userId, ResetPasswordRequest request);
+
+    void resetMfa(UUID userId, MfaResetRequest request);
 
     BulkOperationResult bulkDeactivate(BulkDeactivateRequest request);
 

@@ -46,6 +46,10 @@
     {
       "key": "clientRoleId",
       "value": ""
+    },
+    {
+      "key": "employeeUserId",
+      "value": ""
     }
   ],
   "item": [
@@ -603,6 +607,207 @@
               "raw": "{{baseUrl}}/api/v1/super-admin/firms/{{firmBId}}/roles",
               "host": ["{{baseUrl}}"],
               "path": ["api", "v1", "super-admin", "firms", "{{firmBId}}", "roles"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Get All Firms (SA)",
+      "item": [
+        {
+          "name": "List All Firms (with isTrial)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Password Reset",
+      "description": "SA and Firm Admin password reset",
+      "item": [
+        {
+          "name": "SA: Reset Any User Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"newPassword\": \"NewPass123!\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/users/{{firmAdminUserId}}/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "users", "{{firmAdminUserId}}", "reset-password"]
+            }
+          }
+        },
+        {
+          "name": "Firm Admin: Reset Employee Password",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{firmToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"newPassword\": \"ResetPass123!\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/modules/users/{{employeeUserId}}/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "modules", "users", "{{employeeUserId}}", "reset-password"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. MFA Reset",
+      "description": "SA and Firm Admin MFA reset",
+      "item": [
+        {
+          "name": "SA: Reset User MFA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"userId\": \"{{firmAdminUserId}}\",\n    \"reason\": \"User lost phone\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/mfa/reset",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "mfa", "reset"]
+            }
+          }
+        },
+        {
+          "name": "Firm Admin: Reset Employee MFA",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{firmToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"userId\": \"{{employeeUserId}}\",\n    \"reason\": \"User lost authenticator\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/modules/users/{{employeeUserId}}/reset-mfa",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "modules", "users", "{{employeeUserId}}", "reset-mfa"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Role Deletion Guards",
+      "description": "Verify Firm Admin cannot delete default cloned roles",
+      "item": [
+        {
+          "name": "Delete ADVOCATE (should fail)",
+          "request": {
+            "method": "DELETE",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{firmToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/roles/{{advocateRoleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "roles", "{{advocateRoleId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete PARALEGAL (should fail)",
+          "request": {
+            "method": "DELETE",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{firmToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/roles/{{paralegalRoleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "roles", "{{paralegalRoleId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete CLIENT (should fail)",
+          "request": {
+            "method": "DELETE",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{firmToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/firm/roles/{{clientRoleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "firm", "roles", "{{clientRoleId}}"]
             }
           }
         }

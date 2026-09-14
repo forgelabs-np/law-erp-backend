@@ -10,6 +10,7 @@ import com.lawfirm.erp.dto.admin.request.PermissionRequest;
 import com.lawfirm.erp.dto.admin.response.GroupedPermissionResponse;
 import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.rbac.entity.Module;
+import com.lawfirm.erp.rbac.entity.ModulePermission;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.RolePermission;
 import com.lawfirm.erp.rbac.repository.ModulePermissionRepository;
@@ -73,6 +74,7 @@ public class PermissionServiceImpl implements PermissionService {
             log.info("Permission created: {} by admin: {}", permission.getCode(), adminId);
             permission = permissionRepository.save(permission);
             assignToSystemRoles(permission);
+            linkPermissionToModule(permission, request.getModuleCode());
 
             // ✅ AUDIT: Permission created
             auditService.log(
@@ -258,6 +260,32 @@ public class PermissionServiceImpl implements PermissionService {
                 log.info("  Auto-assigned {} -> SUPER_ADMIN", permission.getCode());
             }
         });
+    }
+
+    /**
+     * Links a custom permission to its module in the ModulePermission junction table.
+     * Without this, custom permissions are invisible in /permissions/grouped because
+     * the grouped query reads from ModulePermission, not from Permission directly.
+     */
+    private void linkPermissionToModule(Permission permission, String moduleCode) {
+        if (moduleCode == null || moduleCode.isBlank()) {
+            return;
+        }
+        Module module = moduleRepository.findByCode(moduleCode).orElse(null);
+        if (module == null) {
+            log.warn("Module not found for custom permission: {} (module: {})", permission.getCode(), moduleCode);
+            return;
+        }
+        boolean alreadyLinked = modulePermissionRepository.findPermissionsByModuleId(module.getId())
+                .stream().anyMatch(p -> p.getId().equals(permission.getId()));
+        if (!alreadyLinked) {
+            ModulePermission mp = ModulePermission.builder()
+                    .module(module)
+                    .permission(permission)
+                    .build();
+            modulePermissionRepository.save(mp);
+            log.info("  Linked {} -> module {}", permission.getCode(), moduleCode);
+        }
     }
 
     private PermissionResponse toResponse(Permission entity) {

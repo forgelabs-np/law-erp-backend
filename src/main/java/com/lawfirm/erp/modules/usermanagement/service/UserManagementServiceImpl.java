@@ -15,6 +15,7 @@ import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.modules.email.service.EmailService;
+import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkDeactivateRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkRoleChangeRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
@@ -226,6 +227,24 @@ public class UserManagementServiceImpl implements UserManagementService {
                 request.getNewPassword(),
                 user.getFirm() != null ? user.getFirm().getName() : "Your Firm"
         );
+    }
+
+    @Override
+    @Transactional
+    public void resetMfa(UUID userId, MfaResetRequest request) {
+        UUID firmId = getRequiredFirmId();
+        User user = getValidatedUser(userId, firmId);
+
+        user.setMfaSecret(null);
+        user.setMfaVerified(false);
+        // Keep mfaEnabled=true so user is forced to re-setup MFA on next login
+        userRepository.save(user);
+
+        String reason = request.getReason() != null ? request.getReason() : "No reason provided";
+        auditService.log(AuditAction.MFA_RESET, AuditEntity.AUTH, user.getId(),
+                "MFA reset by Firm Admin for: " + user.getUsername() + " (reason: " + reason + ")");
+
+        log.info("MFA reset for user: {} by Firm Admin (reason: {})", user.getUsername(), reason);
     }
 
     @Override

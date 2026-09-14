@@ -8,6 +8,7 @@ import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
 import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.dto.auth.request.RegisterSuperAdminRequest;
+import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
 import com.lawfirm.erp.dto.auth.response.RegisterResponse;
@@ -24,6 +25,8 @@ public interface SuperAdminService {
     PagedResponse<AdminUserResponse> getAllUsersWithRoles(UserType userType, String search, String firmCode, int page, int size);
 
     void resetMfa(MfaResetRequest request);
+
+    void resetPassword(UUID userId, ResetPasswordRequest request);
 
     RolePermissionResponse overrideRolePermissions(UUID firmId, UUID roleId, RolePermissionRequest request);
 

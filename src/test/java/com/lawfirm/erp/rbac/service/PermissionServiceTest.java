@@ -13,6 +13,8 @@ import com.lawfirm.erp.dto.admin.response.PermissionResponse;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.entity.RolePermission;
+import com.lawfirm.erp.rbac.repository.ModulePermissionRepository;
+import com.lawfirm.erp.rbac.repository.ModuleRepository;
 import com.lawfirm.erp.rbac.repository.PermissionRepository;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
@@ -46,6 +48,8 @@ class PermissionServiceTest {
     @Mock private PermissionRepository permissionRepository;
     @Mock private RoleRepository roleRepository;
     @Mock private RolePermissionRepository rolePermissionRepository;
+    @Mock private ModuleRepository moduleRepository;
+    @Mock private ModulePermissionRepository modulePermissionRepository;
     @Mock private CurrentUserResolver currentUserResolver;
     @Mock private AuditService auditService;
     @Mock private com.lawfirm.erp.rbac.mapper.RbacResponseMapper rbacResponseMapper;

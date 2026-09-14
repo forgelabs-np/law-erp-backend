@@ -227,6 +227,8 @@ public class DataInitializer implements CommandLineRunner {
                 {"USER_MANAGEMENT", "User Management", "Manage firm users, profiles, and bulk operations", 15, 150, "UsersIcon", "/users",
                         new PermissionAction[]{}},
                 {"DASHBOARD_MANAGEMENT", "Dashboard", "View dashboards and aggregated stats", 16, 160, "LayoutDashboardIcon", "/dashboard",
+                        new PermissionAction[]{}},
+                {"NOTIFICATION_MANAGEMENT", "Notifications", "Manage notification settings and templates", 17, 170, "BellIcon", "/notifications",
                         new PermissionAction[]{}}
         };
 
@@ -320,6 +322,7 @@ public class DataInitializer implements CommandLineRunner {
                 {"SCRAPER_MANAGEMENT",     FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
                 {"USER_MANAGEMENT",        FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
                 {"DASHBOARD_MANAGEMENT",   FULL, FULL, READ_ONLY, READ_ONLY, NO_ACCESS},
+                {"NOTIFICATION_MANAGEMENT", FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
         };
 
         String[] roleCodes = {RoleCode.SUPER_ADMIN, RoleCode.FIRM_ADMIN, RoleCode.ADVOCATE, RoleCode.PARALEGAL, RoleCode.CLIENT};

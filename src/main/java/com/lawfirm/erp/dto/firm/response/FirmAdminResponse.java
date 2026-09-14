@@ -1,5 +1,6 @@
 package com.lawfirm.erp.dto.firm.response;
 
+import com.lawfirm.erp.common.enums.FirmStatus;
 import lombok.Builder;
 import lombok.Data;
 
@@ -20,6 +21,7 @@ public class FirmAdminResponse {
     private String firmName;
     private String firmCode;
     private String firmEmail;
+    private FirmStatus firmStatus;
     private String firmType;
     private String firmAddress;
     private String firmPhone;
