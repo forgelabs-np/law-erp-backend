@@ -32,6 +32,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -156,6 +157,44 @@ public class ScraperServiceImpl implements ScraperService {
     @Override
     public Optional<ClientCase> findClientCaseByCaseNo(String caseNoInternal) {
         return clientCaseRepository.findByCaseNoInternal(caseNoInternal);
+    }
+
+    @Override
+    public ClientCase linkCourtCaseToScraper(Integer courtId, String courtCaseNumber, 
+                                              String caseNoInternal, UUID clientId) {
+        // Try to find existing client case by court's official number
+        Optional<ClientCase> existing = clientCaseRepository.findByCourtIdAndCaseNoBs(courtId, courtCaseNumber);
+        
+        if (existing.isPresent()) {
+            // Update existing case if needed
+            ClientCase clientCase = existing.get();
+            if (!caseNoInternal.equals(clientCase.getCaseNoInternal())) {
+                clientCase.setCaseNoInternal(caseNoInternal);
+                return clientCaseRepository.save(clientCase);
+            }
+            return clientCase;
+        }
+        
+        // Create new client case
+        ClientCase newCase = new ClientCase();
+        newCase.setClientId(clientId);
+        newCase.setCourtId(courtId);
+        newCase.setCaseNoBs(courtCaseNumber);
+        newCase.setCaseNoInternal(caseNoInternal);
+        newCase.setCaseStatus(com.lawfirm.erp.modules.scraper.enums.ClientCaseStatus.ACTIVE);
+        newCase.setActive(true);
+        
+        return clientCaseRepository.save(newCase);
+    }
+
+    @Override
+    public Optional<ClientCase> findByCourtIdAndCaseNoBs(Integer courtId, String caseNoBs) {
+        return clientCaseRepository.findByCourtIdAndCaseNoBs(courtId, caseNoBs);
+    }
+
+    @Override
+    public List<ClientCase> getClientCases(UUID clientId) {
+        return clientCaseRepository.findByClientIdAndActive(clientId, true);
     }
 
     @Override

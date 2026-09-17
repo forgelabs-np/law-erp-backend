@@ -43,4 +43,31 @@ public interface CourtCaseRepository extends JpaRepository<CourtCase, UUID> {
     /** Court case IDs for given matter IDs — for employee calendar filtering. */
     @Query("SELECT cc.id FROM CourtCase cc WHERE cc.matterId IN :matterIds")
     List<UUID> findIdsByMatterIdIn(@Param("matterIds") Collection<UUID> matterIds);
+
+    /**
+     * Get distinct courts where the firm has active cases.
+     * Returns court names grouped by court level with case counts.
+     * Used for scraper integration to know which courts to scrape.
+     */
+    @Query("SELECT cc.courtName, cc.courtLevel, COUNT(cc) as caseCount " +
+           "FROM CourtCase cc " +
+           "WHERE cc.firmId = :firmId AND cc.status = 'ACTIVE' " +
+           "GROUP BY cc.courtName, cc.courtLevel " +
+           "ORDER BY cc.courtLevel, cc.courtName")
+    List<Object[]> findDistinctActiveCourtsByFirmId(@Param("firmId") UUID firmId);
+
+    /**
+     * Get all active court cases for a specific court name.
+     * Used to link case management cases to scraper client cases.
+     */
+    @Query("SELECT cc FROM CourtCase cc " +
+           "WHERE cc.firmId = :firmId AND cc.courtName = :courtName AND cc.status = 'ACTIVE'")
+    List<CourtCase> findByFirmIdAndCourtNameAndStatusActive(
+            @Param("firmId") UUID firmId, @Param("courtName") String courtName);
+
+    /**
+     * Get all court cases for a specific advocate.
+     * Used for lawyer dashboard and case assignment views.
+     */
+    List<CourtCase> findByFirmIdAndAdvocateId(@Param("firmId") UUID firmId, @Param("advocateId") UUID advocateId);
 }

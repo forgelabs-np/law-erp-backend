@@ -8,6 +8,7 @@ import com.lawfirm.erp.modules.casemanagement.dto.request.RecordJudgmentRequest;
 import com.lawfirm.erp.modules.casemanagement.dto.request.UpdateCourtCaseRequest;
 import com.lawfirm.erp.modules.casemanagement.dto.request.UpdateCourtCaseStageRequest;
 import com.lawfirm.erp.modules.casemanagement.dto.response.CourtCaseResponse;
+import com.lawfirm.erp.modules.casemanagement.dto.response.FirmCourtResponse;
 import com.lawfirm.erp.modules.casemanagement.dto.response.UpcomingAppealResponse;
 import com.lawfirm.erp.modules.casemanagement.enums.CourtCaseStage;
 import com.lawfirm.erp.modules.casemanagement.service.CourtCaseService;
@@ -85,5 +86,13 @@ public class CourtCaseController {
         permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
         return responseHandler.ok(courtCaseService.getAllowedStages(ourCourtCaseRef),
                 "Allowed stages fetched successfully");
+    }
+
+    @GetMapping("/courts")
+    @Operation(summary = "Get firm courts", description = "Returns all courts where the firm has active cases with case counts. Used for scraper integration and court selection.")
+    public ResponseEntity<ApiResponse<List<FirmCourtResponse>>> getFirmCourts() {
+        permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
+        return responseHandler.ok(courtCaseService.getFirmCourts(),
+                "Firm courts fetched successfully");
     }
 }

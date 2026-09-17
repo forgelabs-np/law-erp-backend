@@ -4,6 +4,7 @@ import com.lawfirm.erp.modules.casemanagement.dto.request.RecordJudgmentRequest;
 import com.lawfirm.erp.modules.casemanagement.dto.request.UpdateCourtCaseRequest;
 import com.lawfirm.erp.modules.casemanagement.dto.request.UpdateCourtCaseStageRequest;
 import com.lawfirm.erp.modules.casemanagement.dto.response.CourtCaseResponse;
+import com.lawfirm.erp.modules.casemanagement.dto.response.FirmCourtResponse;
 import com.lawfirm.erp.modules.casemanagement.dto.response.UpcomingAppealResponse;
 import com.lawfirm.erp.modules.casemanagement.enums.CourtCaseStage;
 import com.lawfirm.erp.modules.casemanagement.entity.CourtCase;
@@ -29,4 +30,10 @@ public interface CourtCaseService {
     List<CourtCaseStage> getAllowedStages(String ourCourtCaseRef);
 
     List<UpcomingAppealResponse> listUpcomingAppealDeadlines(int withinDays);
+
+    /**
+     * Get all courts where the firm has active cases.
+     * Returns court info with case counts for scraper integration.
+     */
+    List<FirmCourtResponse> getFirmCourts();
 }

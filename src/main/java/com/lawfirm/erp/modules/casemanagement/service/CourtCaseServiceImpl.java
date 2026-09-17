@@ -12,6 +12,7 @@ import com.lawfirm.erp.modules.casemanagement.dto.request.UpdateCourtCaseRequest
 import com.lawfirm.erp.modules.casemanagement.dto.request.UpdateCourtCaseStageRequest;
 import com.lawfirm.erp.modules.casemanagement.dto.response.CourtCaseResponse;
 import com.lawfirm.erp.modules.casemanagement.dto.response.CourtCaseRoleResponse;
+import com.lawfirm.erp.modules.casemanagement.dto.response.FirmCourtResponse;
 import com.lawfirm.erp.modules.casemanagement.dto.response.UpcomingAppealResponse;
 import com.lawfirm.erp.modules.casemanagement.entity.CourtCase;
 import com.lawfirm.erp.modules.casemanagement.entity.CourtCaseRole;
@@ -252,6 +253,29 @@ public class CourtCaseServiceImpl implements CourtCaseService {
                     .matterTitle(m != null ? m.getTitle() : null)
                     .build();
         }).collect(Collectors.toList());
+    }
+
+    /**
+     * Get all courts where the firm has active cases.
+     * Returns court info with case counts for scraper integration.
+     */
+    public List<FirmCourtResponse> getFirmCourts() {
+        UUID firmId = getRequiredFirmId();
+        List<Object[]> courtData = courtCaseRepository.findDistinctActiveCourtsByFirmId(firmId);
+        
+        return courtData.stream()
+                .map(row -> {
+                    String courtName = (String) row[0];
+                    CourtLevel courtLevel = (CourtLevel) row[1];
+                    Long caseCount = (Long) row[2];
+                    
+                    return FirmCourtResponse.builder()
+                            .courtName(courtName)
+                            .courtLevel(courtLevel)
+                            .activeCaseCount(caseCount)
+                            .build();
+                })
+                .collect(Collectors.toList());
     }
 
     private UUID getRequiredFirmId() {
