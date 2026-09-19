@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -48,6 +49,23 @@ public interface MatterRepository extends JpaRepository<Matter, UUID> {
     /** Total count by firm — avoids loading all matters into memory. */
     @Query("SELECT COUNT(m) FROM Matter m WHERE m.firmId = :firmId")
     long countByFirmId(@Param("firmId") UUID firmId);
+
+    /** Platform-wide count by status — no firm filter. */
+    @Query("SELECT COUNT(m) FROM Matter m WHERE m.status = :status")
+    long countByStatus(@Param("status") MatterStatus status);
+
+    /** Count stale matters for a firm: matters whose leaf court case has no hearing in N days. */
+    @Query("SELECT COUNT(m) FROM Matter m WHERE m.firmId = :firmId AND m.currentCourtCaseId NOT IN " +
+           "(SELECT e.courtCaseId FROM CourtEvent e WHERE e.scheduledDate >= :cutoff)")
+    long countStaleByFirmId(@Param("firmId") UUID firmId, @Param("cutoff") LocalDate cutoff);
+
+    /** Count matters with a leaf court case (needed for stale calculation). */
+    @Query("SELECT COUNT(m) FROM Matter m WHERE m.firmId = :firmId AND m.currentCourtCaseId IS NOT NULL")
+    long countWithLeafByFirmId(@Param("firmId") UUID firmId);
+
+    /** Get leaf court case IDs for a firm — avoids loading full Matter entities. */
+    @Query("SELECT m.currentCourtCaseId FROM Matter m WHERE m.firmId = :firmId AND m.currentCourtCaseId IS NOT NULL")
+    List<UUID> findLeafCourtCaseIdsByFirmId(@Param("firmId") UUID firmId);
 
     /** Matter IDs where the user is the assigned partner — for employee calendar filtering. */
     @Query("SELECT m.id FROM Matter m WHERE m.firmId = :firmId AND m.assignedPartnerId = :userId")

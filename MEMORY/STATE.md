@@ -1,7 +1,7 @@
 # Project State
 
 ## Current Focus
-**Configuration module + docs** — added CONFIGURATION parent module with GLOBAL_CONFIG / FIRM_CONFIG sub-modules, RBAC permissions (SA=FULL on both, FIRM_ADMIN=READ_ONLY on GLOBAL + FULL on FIRM), wired controllers to `permissionEvaluator.require()`, created `docs/config-setup.md` with full reference + frontend guide. Next: point the prod profile at the new production database (needs `SPRING_PROFILES_ACTIVE=prod`, `DDL_AUTO`, `--env-file .env` — `.env` is not auto-loaded, and `Dockerfile.prod` doesn't set the profile).
+**Dashboard redesign + CONFIGURATION module** — 4 clean dashboard endpoints (super-admin, firm, employee, client) with typed responses and shared DashboardScope; CONFIGURATION module with GLOBAL_CONFIG/FIRM_CONFIG sub-modules, RBAC, and full docs. Next: point the prod profile at the new production database (needs `SPRING_PROFILES_ACTIVE=prod`, `DDL_AUTO`, `--env-file .env` — `.env` is not auto-loaded, and `Dockerfile.prod` doesn't set the profile).
 
 ## Branch
 `devG`
@@ -25,9 +25,10 @@
 - **Left in yml on purpose** — `jwt.*`, `config.encryption.key`, DB/mail/hikari, `cors.allowed-origins`, `permissions.cache.ttl-ms`; later candidate: `scraper.*`
 - **CONFIGURATION module** — parent module (SettingsIcon, `/settings`) with GLOBAL_CONFIG + FIRM_CONFIG sub-modules; permissions seeded + role matrix assigned; controllers wired to permission checks
 - **docs/config-setup.md** — full backend + frontend reference for the config system
+- **Dashboard redesign** — 4 typed endpoints under `usermanagement/dashboard/`: SuperAdmin (platform aggregates), FirmAdmin (firm-scoped), Employee (personal assigned), Client (personal matters); shared `DashboardScope` + `DashboardScopeFactory`; spec revised from dynamic engine to clean endpoints
 
 ## Deep History Index
-- `memory/2026-09-19.md` — system config hardening, two-table split, CONFIGURATION module + docs, sub-module permissions fix
+- `memory/2026-09-19.md` — system config hardening, two-table split, CONFIGURATION module + docs, sub-module permissions fix, dashboard redesign
 - `memory/2026-09-13.md` — Bug fix batch: GetAllFirms isTrial, custom perms grouped, NOTIFICATION_MANAGEMENT seed, default role delete block, MFA reset for Firm Admin, client password reset confirmed
 - `memory/2026-09-12.md` — RBAC simplification, trial period feature, dashboard fixes, enable-module simplification (344 tests)
 - `memory/2026-09-09.md` — notification module design (v1 scope locked), preview endpoint GET→POST fix

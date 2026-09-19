@@ -16,6 +16,9 @@ public interface RenewalInstanceRepository extends JpaRepository<RenewalInstance
 
     List<RenewalInstance> findByRenewalIdAndActive(Long renewalId, boolean active);
 
+    /** Batch fetch instances for multiple renewals — avoids N+1 per renewal. */
+    List<RenewalInstance> findByRenewalIdInAndActive(List<Long> renewalIds, boolean active);
+
     long countByRenewalIdAndStatus(Long renewalId, RenewalInstanceStatus status);
 
     /** Daily overdue scan: mark PENDING instances past their due date. */
