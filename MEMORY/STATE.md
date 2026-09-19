@@ -1,7 +1,7 @@
 # Project State
 
 ## Current Focus
-**Bug fix batch + enhancements** (360 tests green) — fixed 6 bugs + added password reset for SA. GetAllFirms isTrial, custom perms in grouped, NOTIFICATION_MANAGEMENT seed, default role delete block, MFA reset for Firm Admin, SA password reset. Postman updated.
+**Configuration module + docs** — added CONFIGURATION parent module with GLOBAL_CONFIG / FIRM_CONFIG sub-modules, RBAC permissions (SA=FULL on both, FIRM_ADMIN=READ_ONLY on GLOBAL + FULL on FIRM), wired controllers to `permissionEvaluator.require()`, created `docs/config-setup.md` with full reference + frontend guide. Next: point the prod profile at the new production database (needs `SPRING_PROFILES_ACTIVE=prod`, `DDL_AUTO`, `--env-file .env` — `.env` is not auto-loaded, and `Dockerfile.prod` doesn't set the profile).
 
 ## Branch
 `devG`
@@ -12,18 +12,22 @@
 - Modules: Auth, RBAC, Case Management, Invoicing, Super Admin, Customer, Firm, Tenant, Scraper
 
 ## Recent Work (this session)
-- **Bug 1: GetAllFirms isTrial** — new `FirmListResponse` DTO + `GET /api/v1/super-admin/firms` endpoint
-- **Bug 2: Custom perms in grouped** — `upsert()` now creates `ModulePermission` junction rows for custom perms
-- **Bug 3: NOTIFICATION_MANAGEMENT seed** — added to DataInitializer moduleDefs + role matrix
-- **Bug 4: Default role delete block** — Firm Admin blocked from deleting ADVOCATE/PARALEGAL/CLIENT cloned roles
-- **Bug 5: departmentId** — confirmed not in backend, frontend-only
-- **Bug 6: Firm Admin MFA reset** — new endpoint `POST /api/v1/modules/users/{userId}/reset-mfa`
-- **SA password reset** — new endpoint `POST /api/v1/super-admin/users/{userId}/reset-password`
-- **Client password reset** — already existed via `POST /api/v1/modules/users/{userId}/reset-password`
-- **Tests** — 16 new tests (FirmServiceGetAll, FirmRoleDeleteDefault, UserManagementReset, SuperAdminPasswordReset)
-- **Postman** — added sections 8-11 for all new endpoints
+- **Sub-module module access** — `ModuleAccessResolver` makes a sub-module inherit its parent's enable flag (nearest row wins, explicit child row overrides, expiry respected); `PermissionEvaluator.hasModuleAccess`, `/me`'s sidebar and `isModuleEnabled` all use it, and `enableModuleForFirm` cascades to the sub-tree. Root cause: the sidebar marked sub-modules enabled via the parent while the API guard looked only for the sub-module's own `firm_modules` row → menu visible, every call 403
+- **Two-table split** — `system_config` is GLOBAL-only (scope/firm_id columns dropped), new `firm_configs` + `FirmConfig`/`FirmConfigRepository`/`FirmConfigService` hold per-firm values with `firm_id` NOT NULL + FK cascade; `ConfigKeyRegistry` declares both key sets; migration `V2026_09_19_2` copies FIRM rows and drops the columns
+- **Read resilience** — `Collectors.toMap` threw on duplicate keys and on null (undecryptable) values, taking out every config read incl. all email; replaced with `toValueMap()` (newest `updated_at` wins, bad rows skipped with a warning)
+- **Scope allowlist** — `setValue` refuses keys the registry doesn't declare for that scope; closes a real phish vector (`PUT /firm/config {"LOGIN_URL": ...}` repointed real password-reset emails)
+- **`getFirmSettings`** — now falls back to registry defaults so a new firm's settings screen isn't empty (FIRM keys are `seed=false`)
+- **`APP_PRODUCTION`** — `TotpUtil` reads DB-first with yml fallback; seed default derived from `app.production` so a prod DB can't ship with the `123456` MFA bypass on
+- **Trial fix** — `isTrial` + null `trialDays` created a trial with no expiry that the scheduler skipped forever; now falls back to `TRIAL_DEFAULT_DAYS`
+- **Settings → DB** — `security.max-login-attempts` removed from all profiles (→ `LOGIN_MAX_ATTEMPTS` + `LOGIN_LOCK_MINUTES`); new `TRIAL_DEFAULT_DAYS`, `TRIAL_WARNING_DAYS`, `NOTIFICATION_MAX_ATTEMPTS`, `LOGIN_URL`, `CLIENT_PORTAL_URL`
+- **Migration** — `V2026_09_19_1__system_config_scope_uniqueness.sql` (partial unique indexes; Postgres NULLs are distinct so the old constraint never protected GLOBAL rows) — run manually
+- **Tests** — `SystemConfigServiceTest` 13→27; full suite 360→374 green
+- **Left in yml on purpose** — `jwt.*`, `config.encryption.key`, DB/mail/hikari, `cors.allowed-origins`, `permissions.cache.ttl-ms`; later candidate: `scraper.*`
+- **CONFIGURATION module** — parent module (SettingsIcon, `/settings`) with GLOBAL_CONFIG + FIRM_CONFIG sub-modules; permissions seeded + role matrix assigned; controllers wired to permission checks
+- **docs/config-setup.md** — full backend + frontend reference for the config system
 
 ## Deep History Index
+- `memory/2026-09-19.md` — system config hardening, two-table split, CONFIGURATION module + docs, sub-module permissions fix
 - `memory/2026-09-13.md` — Bug fix batch: GetAllFirms isTrial, custom perms grouped, NOTIFICATION_MANAGEMENT seed, default role delete block, MFA reset for Firm Admin, client password reset confirmed
 - `memory/2026-09-12.md` — RBAC simplification, trial period feature, dashboard fixes, enable-module simplification (344 tests)
 - `memory/2026-09-09.md` — notification module design (v1 scope locked), preview endpoint GET→POST fix

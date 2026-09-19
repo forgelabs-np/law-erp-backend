@@ -51,8 +51,9 @@ config:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:}
 
-security:
-  max-login-attempts: 5
+# Login lockout (LOGIN_MAX_ATTEMPTS / LOGIN_LOCK_MINUTES), MFA policy
+# (MFA_ENABLED / MFA_REQUIRED_ROLES) and production mode (APP_PRODUCTION) are
+# DB-driven — see the GLOBAL settings registry in SystemConfigService.
 
 permissions:
   cache:

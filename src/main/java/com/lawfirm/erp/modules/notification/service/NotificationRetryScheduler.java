@@ -6,6 +6,7 @@ import com.lawfirm.erp.modules.notification.entity.NotificationDelivery;
 import com.lawfirm.erp.modules.notification.enums.DeliveryStatus;
 import com.lawfirm.erp.modules.notification.repository.NotificationDeliveryRepository;
 import com.lawfirm.erp.modules.notification.repository.NotificationRepository;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -19,25 +20,29 @@ import java.util.stream.Collectors;
 /**
  * Every minute: picks up PENDING/RETRYING deliveries that are due and
  * hands each to its channel's dispatcher. SENT is terminal; FAILED gets
- * exponential backoff (1m → 5m → 30m) until the attempt cap (3), then
+ * exponential backoff (1m → 5m → 30m) until the DB-driven attempt cap, then
  * DEAD. One row's failure never stops the sweep.
  */
 @Component
 @Slf4j
 public class NotificationRetryScheduler {
 
-    static final int MAX_ATTEMPTS = 3;
+    /** Fallback, also the registry seed default. */
+    static final int DEFAULT_MAX_ATTEMPTS = 3;
     private static final long[] BACKOFF_MINUTES = {1, 5, 30};
 
     private final NotificationDeliveryRepository deliveryRepository;
     private final NotificationRepository notificationRepository;
+    private final SystemConfigService systemConfigService;
     private final Map<com.lawfirm.erp.modules.notification.enums.DeliveryChannel, NotificationDispatcher> dispatchers;
 
     public NotificationRetryScheduler(NotificationDeliveryRepository deliveryRepository,
                                       NotificationRepository notificationRepository,
+                                      SystemConfigService systemConfigService,
                                       List<NotificationDispatcher> dispatcherList) {
         this.deliveryRepository = deliveryRepository;
         this.notificationRepository = notificationRepository;
+        this.systemConfigService = systemConfigService;
         this.dispatchers = dispatcherList.stream()
                 .collect(Collectors.toUnmodifiableMap(NotificationDispatcher::channel, Function.identity()));
     }
@@ -104,7 +109,7 @@ public class NotificationRetryScheduler {
             delivery.setNextAttemptAt(null);
             return;
         }
-        if (delivery.getAttempts() >= MAX_ATTEMPTS) {
+        if (delivery.getAttempts() >= systemConfigService.notificationMaxAttempts()) {
             delivery.setStatus(DeliveryStatus.DEAD);
             delivery.setNextAttemptAt(null);
             return;

@@ -20,7 +20,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -35,6 +38,12 @@ public class FirmModuleServiceImpl implements FirmModuleService {
     private final CurrentUserResolver currentUserResolver;
     private final AuditService auditService;
 
+    /**
+     * Enabling or disabling a module applies to its whole sub-tree, so a firm can never
+     * end up with a sub-module of a disabled parent — and granting TESTCONFIG grants
+     * TESTCONFIG 1 / TESTCONFIG 2 without a second call. A sub-module granted this way can
+     * still be switched off on its own afterwards, because its own row wins.
+     */
     @Transactional
     public FirmModuleResponse enableModuleForFirm(UUID firmId, EnableModuleRequest request) {
         Firm firm = firmRepository.findById(firmId)
@@ -43,48 +52,59 @@ public class FirmModuleServiceImpl implements FirmModuleService {
         Module module = moduleRepository.findById(request.getModuleId())
                 .orElseThrow(() -> new ResourceNotFoundException("Module not found"));
 
-        FirmModule firmModule = firmModuleRepository
-                .findByFirmIdAndModuleId(firmId, module.getId())
-                .orElse(null);
+        boolean enabled = Boolean.TRUE.equals(request.getIsEnabled());
+        List<Module> subtree = new ArrayList<>();
+        collectSubtree(module, subtree);
 
-        if (firmModule != null) {
-            firmModule.setIsEnabled(request.getIsEnabled());
-            if (request.getIsEnabled()) {
-                firmModule.setEnabledAt(LocalDateTime.now());
+        FirmModule target = null;
+        for (Module node : subtree) {
+            FirmModule firmModule = firmModuleRepository
+                    .findByFirmIdAndModuleId(firmId, node.getId())
+                    .orElse(null);
+
+            if (firmModule == null) {
+                firmModule = FirmModule.builder()
+                        .firm(firm)
+                        .module(node)
+                        .isEnabled(enabled)
+                        .enabledAt(enabled ? LocalDateTime.now() : null)
+                        .build();
+            } else {
+                firmModule.setIsEnabled(enabled);
+                if (enabled) {
+                    firmModule.setEnabledAt(LocalDateTime.now());
+                }
             }
 
-            firmModule = firmModuleRepository.save(firmModule);
-
-            auditService.log(
-                    AuditAction.FIRM_MODULE_CONFIGURED,
-                    AuditEntity.FIRM_MODULE,
-                    firmModule.getId(),
-                    "Module " + module.getCode() + " configured for firm " + firm.getLawFirmCode() +
-                            " (enabled: " + request.getIsEnabled() + ")"
-            );
-        } else {
-            firmModule = FirmModule.builder()
-                    .firm(firm)
-                    .module(module)
-                    .isEnabled(request.getIsEnabled())
-                    .enabledAt(request.getIsEnabled() ? LocalDateTime.now() : null)
-                    .build();
-
-            firmModule = firmModuleRepository.save(firmModule);
+            FirmModule saved = firmModuleRepository.save(firmModule);
+            if (node.getId().equals(module.getId())) {
+                target = saved;
+            }
         }
 
-        log.info("Module {} {} for firm {}", module.getCode(),
-                request.getIsEnabled() ? "enabled" : "disabled", firm.getLawFirmCode());
+        int subModuleCount = subtree.size() - 1;
+        log.info("Module {} {} for firm {} ({} sub-module(s) followed)",
+                module.getCode(), enabled ? "enabled" : "disabled", firm.getLawFirmCode(), subModuleCount);
 
         auditService.log(
-                request.getIsEnabled() ? AuditAction.FIRM_MODULE_ENABLED : AuditAction.FIRM_MODULE_DISABLED,
+                enabled ? AuditAction.FIRM_MODULE_ENABLED : AuditAction.FIRM_MODULE_DISABLED,
                 AuditEntity.FIRM_MODULE,
-                firmModule.getId(),
-                (request.getIsEnabled() ? "Enabled" : "Disabled") + " module: " + module.getCode() +
-                        " for firm: " + firm.getLawFirmCode()
+                target.getId(),
+                (enabled ? "Enabled" : "Disabled") + " module: " + module.getCode() +
+                        " for firm: " + firm.getLawFirmCode() +
+                        (subModuleCount > 0 ? " (+ " + subModuleCount + " sub-modules)" : "")
         );
 
-        return toResponse(firmModule);
+        return toResponse(target);
+    }
+
+    private void collectSubtree(Module module, List<Module> collected) {
+        collected.add(module);
+        if (module.getSubModules() != null) {
+            for (Module child : module.getSubModules()) {
+                collectSubtree(child, collected);
+            }
+        }
     }
 
     public FirmModuleResponse getModuleConfig(UUID firmId, UUID moduleId) {
@@ -110,7 +130,29 @@ public class FirmModuleServiceImpl implements FirmModuleService {
     }
 
     public boolean isModuleEnabled(UUID firmId, String moduleCode) {
-        return firmModuleRepository.existsByFirmIdAndModuleCodeAndIsEnabledTrue(firmId, moduleCode);
+        if (firmId == null || moduleCode == null) {
+            return false;
+        }
+        Module module = moduleRepository.findByCode(moduleCode).orElse(null);
+        if (module == null) {
+            return false;
+        }
+        return ModuleAccessResolver.isEnabled(module,
+                ModuleAccessResolver.indexByModuleId(firmModuleRepository.findByFirmId(firmId)));
+    }
+
+    public Map<String, Boolean> resolveEnabledModules(UUID firmId) {
+        if (firmId == null) {
+            return Map.of();
+        }
+        Map<UUID, FirmModule> rowsByModuleId =
+                ModuleAccessResolver.indexByModuleId(firmModuleRepository.findByFirmId(firmId));
+
+        Map<String, Boolean> resolved = new LinkedHashMap<>();
+        for (Module module : moduleRepository.findAllWithParentOrderByDisplayOrder()) {
+            resolved.put(module.getCode(), ModuleAccessResolver.isEnabled(module, rowsByModuleId));
+        }
+        return resolved;
     }
 
     private UUID getCurrentFirmId() {

@@ -14,16 +14,16 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,7 +45,6 @@ class SystemConfigServiceTest {
 
     private SystemConfig row(String key, String value) {
         return SystemConfig.builder()
-                .scope(SystemConfig.ConfigScope.GLOBAL)
                 .configKey(key)
                 .configValue(value)
                 .active(true)
@@ -61,8 +60,7 @@ class SystemConfigServiceTest {
         @Test
         @DisplayName("MFA enabled defaults to true when the key is absent (safe default)")
         void mfaEnabled_defaultsTrue_whenKeyAbsent() {
-            when(systemConfigRepository.findByScopeAndFirmIdAndConfigKey(
-                    SystemConfig.ConfigScope.GLOBAL, null, SystemConfigService.KEY_MFA_ENABLED))
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_MFA_ENABLED))
                     .thenReturn(Optional.empty());
 
             assertTrue(systemConfigService.isMfaEnabled());
@@ -71,13 +69,11 @@ class SystemConfigServiceTest {
         @Test
         @DisplayName("MFA enabled parses Y and N values")
         void mfaEnabled_parsesYAndN() {
-            when(systemConfigRepository.findByScopeAndFirmIdAndConfigKey(
-                    SystemConfig.ConfigScope.GLOBAL, null, SystemConfigService.KEY_MFA_ENABLED))
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_MFA_ENABLED))
                     .thenReturn(Optional.of(row(SystemConfigService.KEY_MFA_ENABLED, "N")));
             assertFalse(systemConfigService.isMfaEnabled());
 
-            when(systemConfigRepository.findByScopeAndFirmIdAndConfigKey(
-                    SystemConfig.ConfigScope.GLOBAL, null, SystemConfigService.KEY_MFA_ENABLED))
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_MFA_ENABLED))
                     .thenReturn(Optional.of(row(SystemConfigService.KEY_MFA_ENABLED, "Y")));
             assertTrue(systemConfigService.isMfaEnabled());
         }
@@ -85,8 +81,7 @@ class SystemConfigServiceTest {
         @Test
         @DisplayName("Required roles default to SUPER_ADMIN,FIRM_ADMIN when absent")
         void requiredRoles_defaults_whenKeyAbsent() {
-            when(systemConfigRepository.findByScopeAndFirmIdAndConfigKey(
-                    SystemConfig.ConfigScope.GLOBAL, null, SystemConfigService.KEY_MFA_REQUIRED_ROLES))
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_MFA_REQUIRED_ROLES))
                     .thenReturn(Optional.empty());
 
             Set<String> roles = systemConfigService.mfaRequiredRoleCodes();
@@ -97,8 +92,7 @@ class SystemConfigServiceTest {
         @Test
         @DisplayName("Required roles parses CSV and trims whitespace")
         void requiredRoles_parsesCsv() {
-            when(systemConfigRepository.findByScopeAndFirmIdAndConfigKey(
-                    SystemConfig.ConfigScope.GLOBAL, null, SystemConfigService.KEY_MFA_REQUIRED_ROLES))
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_MFA_REQUIRED_ROLES))
                     .thenReturn(Optional.of(row(SystemConfigService.KEY_MFA_REQUIRED_ROLES, " ADVOCATE, SUPER_ADMIN ")));
 
             Set<String> roles = systemConfigService.mfaRequiredRoleCodes();
@@ -114,8 +108,7 @@ class SystemConfigServiceTest {
         @Test
         @DisplayName("Rejects a RADIO value outside its allowed values")
         void setGlobal_rejectsRadioValueOutsideAllowed() {
-            when(systemConfigRepository.findByScopeAndFirmIdAndConfigKey(
-                    SystemConfig.ConfigScope.GLOBAL, null, SystemConfigService.KEY_MFA_ENABLED))
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_MFA_ENABLED))
                     .thenReturn(Optional.empty());
 
             assertThrows(BusinessRuleException.class,
@@ -126,8 +119,7 @@ class SystemConfigServiceTest {
         @Test
         @DisplayName("Rejects a NUMBER value that does not parse")
         void setGlobal_rejectsInvalidNumber() {
-            when(systemConfigRepository.findByScopeAndFirmIdAndConfigKey(
-                    SystemConfig.ConfigScope.GLOBAL, null, SystemConfigService.KEY_SMTP_PORT))
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_SMTP_PORT))
                     .thenReturn(Optional.empty());
 
             assertThrows(BusinessRuleException.class,
@@ -136,10 +128,20 @@ class SystemConfigServiceTest {
         }
 
         @Test
+        @DisplayName("Rejects a URL value that is not http(s)")
+        void setGlobal_rejectsNonHttpUrl() {
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_LOGIN_URL))
+                    .thenReturn(Optional.empty());
+
+            assertThrows(BusinessRuleException.class, () -> systemConfigService.setGlobal(
+                    SystemConfigService.KEY_LOGIN_URL, "javascript:alert(1)"));
+            verify(systemConfigRepository, never()).save(any());
+        }
+
+        @Test
         @DisplayName("Accepts a valid RADIO value and stamps registry metadata on a new row")
         void setGlobal_stampsMetadataForKnownKey() {
-            when(systemConfigRepository.findByScopeAndFirmIdAndConfigKey(
-                    SystemConfig.ConfigScope.GLOBAL, null, SystemConfigService.KEY_MFA_ENABLED))
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_MFA_ENABLED))
                     .thenReturn(Optional.empty());
 
             systemConfigService.setGlobal(SystemConfigService.KEY_MFA_ENABLED, "N");
@@ -157,8 +159,7 @@ class SystemConfigServiceTest {
         @Test
         @DisplayName("Encrypts PASSWORD-type values at rest")
         void setGlobal_encryptsPasswordType() {
-            when(systemConfigRepository.findByScopeAndFirmIdAndConfigKey(
-                    SystemConfig.ConfigScope.GLOBAL, null, SystemConfigService.KEY_SMTP_PASSWORD))
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_SMTP_PASSWORD))
                     .thenReturn(Optional.empty());
 
             systemConfigService.setGlobal(SystemConfigService.KEY_SMTP_PASSWORD, "s3cret-pass");
@@ -183,23 +184,19 @@ class SystemConfigServiceTest {
             emptyRow.setInputType("PASSWORD");
             emptyRow.setAllowEdit(false);
 
-            when(systemConfigRepository.findByScopeAndFirmIdAndConfigKey(
-                    SystemConfig.ConfigScope.GLOBAL, null, SystemConfigService.KEY_REGISTRATION_SECRET))
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_REGISTRATION_SECRET))
                     .thenReturn(Optional.empty(), Optional.of(emptyRow));
 
-            // First set from empty → allowed
             systemConfigService.setGlobal(SystemConfigService.KEY_REGISTRATION_SECRET, "first-secret");
             verify(systemConfigRepository, times(1)).save(any());
 
-            // Second set → rejected
             SystemConfig storedRow = row(SystemConfigService.KEY_REGISTRATION_SECRET,
                     configEncryptionUtil.encrypt("first-secret"));
             storedRow.setInputType("PASSWORD");
             storedRow.setAllowEdit(false);
             storedRow.setEncrypted(true);
 
-            when(systemConfigRepository.findByScopeAndFirmIdAndConfigKey(
-                    SystemConfig.ConfigScope.GLOBAL, null, SystemConfigService.KEY_REGISTRATION_SECRET))
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_REGISTRATION_SECRET))
                     .thenReturn(Optional.of(storedRow));
 
             assertThrows(BusinessRuleException.class,
@@ -216,13 +213,68 @@ class SystemConfigServiceTest {
             storedRow.setAllowEdit(false);
             storedRow.setEncrypted(true);
 
-            when(systemConfigRepository.findByScopeAndFirmIdAndConfigKey(
-                    SystemConfig.ConfigScope.GLOBAL, null, SystemConfigService.KEY_REGISTRATION_SECRET))
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_REGISTRATION_SECRET))
                     .thenReturn(Optional.of(storedRow));
 
             assertThrows(BusinessRuleException.class,
                     () -> systemConfigService.deleteGlobal(SystemConfigService.KEY_REGISTRATION_SECRET));
-            verify(systemConfigRepository, never()).deleteByScopeAndFirmIdAndConfigKey(any(), any(), any());
+            verify(systemConfigRepository, never()).deleteByConfigKey(anyString());
+        }
+    }
+
+    @Nested
+    @DisplayName("Scope allowlist")
+    class ScopeAllowlist {
+
+        @Test
+        @DisplayName("Rejects an undeclared key")
+        void setGlobal_rejectsUnknownKey() {
+            assertThrows(BusinessRuleException.class,
+                    () -> systemConfigService.setGlobal("TOTALLY_MADE_UP", "x"));
+            verify(systemConfigRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("Rejects a FIRM-only key (branding belongs to FirmConfigService)")
+        void setGlobal_rejectsFirmOnlyKey() {
+            assertThrows(BusinessRuleException.class, () -> systemConfigService.setGlobal(
+                    FirmConfigService.KEY_BRAND_COLOR_PRIMARY, "#123456"));
+            verify(systemConfigRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("Read resilience")
+    class ReadResilience {
+
+        @Test
+        @DisplayName("Duplicate rows no longer break reads — most recently updated wins")
+        void getAllGlobal_toleratesDuplicateRows() {
+            SystemConfig older = row(SystemConfigService.KEY_APP_NAME, "Old");
+            older.setUpdatedAt(LocalDateTime.of(2026, 1, 1, 0, 0));
+            SystemConfig newer = row(SystemConfigService.KEY_APP_NAME, "New");
+            newer.setUpdatedAt(LocalDateTime.of(2026, 2, 1, 0, 0));
+
+            when(systemConfigRepository.findAll()).thenReturn(List.of(older, newer));
+
+            Map<String, String> values = systemConfigService.getAllGlobal();
+
+            assertEquals("New", values.get(SystemConfigService.KEY_APP_NAME));
+        }
+
+        @Test
+        @DisplayName("A value that cannot be decrypted is skipped, not fatal for every key")
+        void getAllGlobal_skipsUndecryptableRows() {
+            SystemConfig broken = row(SystemConfigService.KEY_SMTP_PASSWORD, "not-valid-base64!!!");
+            broken.setEncrypted(true);
+            SystemConfig good = row(SystemConfigService.KEY_APP_NAME, "NepalCRM");
+
+            when(systemConfigRepository.findAll()).thenReturn(List.of(broken, good));
+
+            Map<String, String> values = systemConfigService.getAllGlobal();
+
+            assertEquals("NepalCRM", values.get(SystemConfigService.KEY_APP_NAME));
+            assertFalse(values.containsKey(SystemConfigService.KEY_SMTP_PASSWORD));
         }
     }
 
@@ -240,8 +292,7 @@ class SystemConfigServiceTest {
             smtpPassword.setConfigGroup("EMAIL");
             smtpPassword.setDescription("SMTP password");
 
-            when(systemConfigRepository.findByScope(SystemConfig.ConfigScope.GLOBAL))
-                    .thenReturn(List.of(smtpPassword));
+            when(systemConfigRepository.findAll()).thenReturn(List.of(smtpPassword));
 
             List<SystemConfigSettingView> views = systemConfigService.getGlobalSettings();
 
@@ -264,8 +315,7 @@ class SystemConfigServiceTest {
             SystemConfig inactive = row("SOME_DISABLED_KEY", "x");
             inactive.setActive(false);
 
-            when(systemConfigRepository.findByScope(SystemConfig.ConfigScope.GLOBAL))
-                    .thenReturn(List.of(active, inactive));
+            when(systemConfigRepository.findAll()).thenReturn(List.of(active, inactive));
 
             List<SystemConfigSettingView> views = systemConfigService.getGlobalSettings();
 
@@ -283,17 +333,15 @@ class SystemConfigServiceTest {
         void seed_insertsOnlyMissing() {
             // Broad default stub first, then the key-specific stub — Mockito gives
             // precedence to the most recently declared matching stub.
-            when(systemConfigRepository.findByScopeAndFirmIdAndConfigKey(
-                    eq(SystemConfig.ConfigScope.GLOBAL), isNull(), anyString()))
-                    .thenReturn(Optional.empty());
-            when(systemConfigRepository.findByScopeAndFirmIdAndConfigKey(
-                    eq(SystemConfig.ConfigScope.GLOBAL), isNull(), eq(SystemConfigService.KEY_APP_NAME)))
+            when(systemConfigRepository.findByConfigKey(anyString())).thenReturn(Optional.empty());
+            when(systemConfigRepository.findByConfigKey(eq(SystemConfigService.KEY_APP_NAME)))
                     .thenReturn(Optional.of(row(SystemConfigService.KEY_APP_NAME, "Custom Name")));
 
             systemConfigService.seedGlobalDefaults();
 
             ArgumentCaptor<SystemConfig> captor = ArgumentCaptor.forClass(SystemConfig.class);
-            verify(systemConfigRepository, times(4)).save(captor.capture()); // APP_NAME exists → skipped
+            // 12 GLOBAL registry entries are seed=true; APP_NAME already exists → 11 inserts.
+            verify(systemConfigRepository, times(11)).save(captor.capture());
 
             List<SystemConfig> saved = captor.getAllValues();
             assertTrue(saved.stream().noneMatch(c -> SystemConfigService.KEY_APP_NAME.equals(c.getConfigKey())));
@@ -311,6 +359,65 @@ class SystemConfigServiceTest {
                     .findFirst().orElseThrow();
             assertEquals("PASSWORD", registrationSecret.getInputType());
             assertFalse(registrationSecret.isAllowEdit());
+        }
+
+        @Test
+        @DisplayName("APP_PRODUCTION seeds from the yml fallback, not a hardcoded N")
+        void seed_appProductionFollowsYmlFallback() {
+            when(systemConfigRepository.findByConfigKey(anyString())).thenReturn(Optional.empty());
+
+            systemConfigService.seedGlobalDefaults();
+
+            ArgumentCaptor<SystemConfig> captor = ArgumentCaptor.forClass(SystemConfig.class);
+            verify(systemConfigRepository, atLeastOnce()).save(captor.capture());
+            SystemConfig appProduction = captor.getAllValues().stream()
+                    .filter(c -> SystemConfigService.KEY_APP_PRODUCTION.equals(c.getConfigKey()))
+                    .findFirst().orElseThrow();
+            // Unit test never sets app.production → false → "N" (a prod deployment seeds "Y")
+            assertEquals("N", appProduction.getConfigValue());
+        }
+    }
+
+    @Nested
+    @DisplayName("Typed accessors")
+    class TypedAccessors {
+
+        @Test
+        @DisplayName("APP_PRODUCTION is empty when absent so callers can fall back to yml")
+        void productionFlag_emptyWhenAbsent() {
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_APP_PRODUCTION))
+                    .thenReturn(Optional.empty());
+
+            assertTrue(systemConfigService.productionFlag().isEmpty());
+        }
+
+        @Test
+        @DisplayName("APP_PRODUCTION parses Y/N")
+        void productionFlag_parsesYN() {
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_APP_PRODUCTION))
+                    .thenReturn(Optional.of(row(SystemConfigService.KEY_APP_PRODUCTION, "Y")));
+
+            assertEquals(Optional.of(true), systemConfigService.productionFlag());
+        }
+
+        @Test
+        @DisplayName("Numeric settings use their code default when absent or unparseable")
+        void numericSettings_fallBack() {
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_LOGIN_MAX_ATTEMPTS))
+                    .thenReturn(Optional.empty());
+            assertEquals(5, systemConfigService.loginMaxAttempts());
+
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_LOGIN_LOCK_MINUTES))
+                    .thenReturn(Optional.of(row(SystemConfigService.KEY_LOGIN_LOCK_MINUTES, "abc")));
+            assertEquals(30, systemConfigService.loginLockMinutes());
+        }
+
+        @Test
+        @DisplayName("Email links fall back to the code defaults when unset")
+        void emailLinks_fallBackToDefaults() {
+            assertEquals(SystemConfigService.DEFAULT_LOGIN_URL, systemConfigService.loginUrl());
+            assertEquals(SystemConfigService.DEFAULT_CLIENT_PORTAL_URL,
+                    systemConfigService.clientPortalUrl());
         }
     }
 }

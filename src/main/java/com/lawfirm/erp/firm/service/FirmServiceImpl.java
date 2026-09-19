@@ -77,10 +77,15 @@ public class FirmServiceImpl implements FirmService {
                 .isTrial(isTrial)
                 .build();
 
-        if (isTrial && request.getTrialDays() != null && request.getTrialDays() > 0) {
-            firm.setTrialDays(request.getTrialDays());
+        if (isTrial) {
+            // Without a fallback a trial firm could be created with no expiry, and
+            // TrialExpiryScheduler skips null expiry — so the trial would never end.
+            int trialDays = request.getTrialDays() != null && request.getTrialDays() > 0
+                    ? request.getTrialDays()
+                    : systemConfigService.trialDefaultDays();
+            firm.setTrialDays(trialDays);
             firm.setTrialStartedAt(LocalDateTime.now());
-            firm.setTrialExpiresAt(LocalDateTime.now().plusDays(request.getTrialDays()));
+            firm.setTrialExpiresAt(LocalDateTime.now().plusDays(trialDays));
         }
         firm = firmRepository.save(firm);
         log.info("Firm created: {}", firm.getLawFirmCode());

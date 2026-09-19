@@ -8,6 +8,7 @@ import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.LoginStatus;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.common.service.UserLoginHistoryService;
 import com.lawfirm.erp.dto.auth.request.ChangePasswordRequest;
 import com.lawfirm.erp.dto.auth.request.LoginRequest;
@@ -20,7 +21,6 @@ import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -46,9 +46,16 @@ public class AuthServiceImpl implements AuthService {
     private final UserLoginHistoryService loginHistoryService;
     private final AuditService auditService;
     private final AuthMapper authMapper;
+    private final SystemConfigService systemConfigService;
 
-    @Value("${security.max-login-attempts:5}")
-    private int maxLoginAttempts;
+    /** DB-driven (GLOBAL/SECURITY). */
+    private int maxLoginAttempts() {
+        return systemConfigService.loginMaxAttempts();
+    }
+
+    private int lockMinutes() {
+        return systemConfigService.loginLockMinutes();
+    }
 
     @Override
     @Transactional
@@ -220,19 +227,19 @@ public class AuthServiceImpl implements AuthService {
             loginHistoryService.saveRecord(user, LoginStatus.ACCOUNT_LOCKED, "Account blocked");
             throw new BadCredentialsException("Your account has been blocked. Contact support.");
         }
-        if (user.getLoginAttempts() >= maxLoginAttempts
+        if (user.getLoginAttempts() >= maxLoginAttempts()
                 && user.getLockedUntil() != null
                 && user.getLockedUntil().isAfter(LocalDateTime.now())) {
             loginHistoryService.saveRecord(user, LoginStatus.ACCOUNT_LOCKED, "Too many attempts");
-            throw new BadCredentialsException("Account locked. Try again in 30 minutes.");
+            throw new BadCredentialsException("Account locked. Try again in " + lockMinutes() + " minutes.");
         }
     }
 
     private void handleFailedLogin(User user) {
         user.setLoginAttempts(user.getLoginAttempts() + 1);
-        if (user.getLoginAttempts() >= maxLoginAttempts) {
-            user.setLockedUntil(LocalDateTime.now().plusMinutes(30));
-            log.warn("User {} locked after {} failed attempts", user.getUsername(), maxLoginAttempts);
+        if (user.getLoginAttempts() >= maxLoginAttempts()) {
+            user.setLockedUntil(LocalDateTime.now().plusMinutes(lockMinutes()));
+            log.warn("User {} locked after {} failed attempts", user.getUsername(), maxLoginAttempts());
         }
         userRepository.save(user);
         loginHistoryService.saveRecord(user, LoginStatus.LOGIN_FAILED, "Invalid password");

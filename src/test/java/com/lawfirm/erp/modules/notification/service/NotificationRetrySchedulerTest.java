@@ -7,6 +7,7 @@ import com.lawfirm.erp.modules.notification.enums.DeliveryChannel;
 import com.lawfirm.erp.modules.notification.enums.DeliveryStatus;
 import com.lawfirm.erp.modules.notification.repository.NotificationDeliveryRepository;
 import com.lawfirm.erp.modules.notification.repository.NotificationRepository;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,7 @@ class NotificationRetrySchedulerTest {
     @Mock private NotificationDeliveryRepository deliveryRepository;
     @Mock private NotificationRepository notificationRepository;
     @Mock private NotificationDispatcher emailDispatcher;
+    @Mock private SystemConfigService systemConfigService;
 
     private NotificationRetryScheduler scheduler;
 
@@ -41,8 +43,10 @@ class NotificationRetrySchedulerTest {
     void setUp() {
         // Must be stubbed BEFORE construction: the scheduler maps dispatchers by channel().
         when(emailDispatcher.channel()).thenReturn(DeliveryChannel.EMAIL);
+        when(systemConfigService.notificationMaxAttempts())
+                .thenReturn(NotificationRetryScheduler.DEFAULT_MAX_ATTEMPTS);
         scheduler = new NotificationRetryScheduler(
-                deliveryRepository, notificationRepository, List.of(emailDispatcher));
+                deliveryRepository, notificationRepository, systemConfigService, List.of(emailDispatcher));
 
         delivery = NotificationDelivery.builder()
                 .firmId(UUID.randomUUID()).notificationId(UUID.randomUUID())

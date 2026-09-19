@@ -7,12 +7,13 @@ import org.hibernate.annotations.UuidGenerator;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/** DB-backed GLOBAL (platform) key/value store. Per-firm values live in {@link FirmConfig}. */
+/** Per-firm configuration values. One row per firm + key; sensitive values AES-256 encrypted. */
 @Entity
 @Table(
-        name = "system_config",
+        name = "firm_configs",
         uniqueConstraints = {
-                @UniqueConstraint(columnNames = {"config_key"}, name = "uq_system_config_key")
+                @UniqueConstraint(columnNames = {"firm_id", "config_key"},
+                        name = "uq_firm_configs_firm_key")
         }
 )
 @Getter
@@ -20,14 +21,18 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class SystemConfig {
+public class FirmConfig {
 
     @Id
     @UuidGenerator
     @Column(updatable = false, nullable = false)
     private UUID id;
 
-    /** Config key, e.g. SMTP_HOST or MFA_ENABLED. */
+    /** Owning firm. */
+    @Column(name = "firm_id", nullable = false)
+    private UUID firmId;
+
+    /** Config key, e.g. BRAND_COLOR_PRIMARY or TIMEZONE. */
     @Column(name = "config_key", nullable = false, length = 50)
     private String configKey;
 
@@ -40,7 +45,7 @@ public class SystemConfig {
     @Column(name = "encrypted", columnDefinition = "BOOLEAN DEFAULT FALSE")
     private boolean encrypted = false;
 
-    /** SETTINGS submodule grouping, e.g. APP, SECURITY, EMAIL. */
+    /** SETTINGS submodule grouping, e.g. BRAND. */
     @Column(name = "config_group", length = 50)
     private String configGroup;
 
@@ -81,11 +86,6 @@ public class SystemConfig {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
-    }
-
-    /** True when the stored value is AES-256 encrypted. */
-    public boolean isSensitive() {
-        return "PASSWORD".equals(inputType);
     }
 
     /** Null-safe active check (older rows default to active). */

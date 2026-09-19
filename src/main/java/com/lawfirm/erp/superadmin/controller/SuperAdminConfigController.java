@@ -1,12 +1,14 @@
 package com.lawfirm.erp.superadmin.controller;
 
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.constant.SuperAdminConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.dto.SystemConfigSettingView;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.exception.ResponseHandler;
+import com.lawfirm.erp.common.service.FirmConfigService;
 import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,9 +31,11 @@ import java.util.UUID;
 public class SuperAdminConfigController {
 
     private final SystemConfigService systemConfigService;
+    private final FirmConfigService firmConfigService;
     private final AuditService auditService;
     private final CurrentUserResolver currentUserResolver;
     private final ResponseHandler responseHandler;
+    private final PermissionEvaluator permissionEvaluator;
 
     // Global config
 
@@ -39,6 +43,7 @@ public class SuperAdminConfigController {
     @Operation(summary = SuperAdminConstants.GET_GLOBAL_CONFIG_SUMMARY,
             description = "Returns all active global settings with metadata (group, input type, allowed values) so a SETTINGS UI can render and validate each key. Values are decrypted for the admin.")
     public ResponseEntity<ApiResponse<List<SystemConfigSettingView>>> getGlobalConfig() {
+        permissionEvaluator.require("GLOBAL_CONFIG:VIEW");
         return responseHandler.ok(
                 systemConfigService.getGlobalSettings(),
                 "Global config fetched"
@@ -49,6 +54,7 @@ public class SuperAdminConfigController {
     @Operation(summary = SuperAdminConstants.UPDATE_GLOBAL_CONFIG_SUMMARY)
     public ResponseEntity<ApiResponse<Void>> updateGlobalConfig(
             @RequestBody Map<String, String> config) {
+        permissionEvaluator.require("GLOBAL_CONFIG:EDIT");
         systemConfigService.setGlobalBulk(config);
         auditService.log(
                 AuditAction.CONFIG_UPDATED,
@@ -63,6 +69,7 @@ public class SuperAdminConfigController {
     @Operation(summary = SuperAdminConstants.DELETE_GLOBAL_CONFIG_SUMMARY)
     public ResponseEntity<ApiResponse<Void>> deleteGlobalConfig(
             @PathVariable String key) {
+        permissionEvaluator.require("GLOBAL_CONFIG:DELETE");
         systemConfigService.deleteGlobal(key);
         auditService.log(
                 AuditAction.CONFIG_DELETED,
@@ -80,8 +87,9 @@ public class SuperAdminConfigController {
             description = "Returns all active settings for a firm with metadata (group, input type, allowed values). Values are decrypted for the admin.")
     public ResponseEntity<ApiResponse<List<SystemConfigSettingView>>> getFirmConfig(
             @PathVariable UUID firmId) {
+        permissionEvaluator.require("FIRM_CONFIG:VIEW");
         return responseHandler.ok(
-                systemConfigService.getFirmSettings(firmId),
+                firmConfigService.getSettings(firmId),
                 "Firm config fetched"
         );
     }
@@ -91,7 +99,8 @@ public class SuperAdminConfigController {
     public ResponseEntity<ApiResponse<Void>> updateFirmConfig(
             @PathVariable UUID firmId,
             @RequestBody Map<String, String> config) {
-        systemConfigService.setFirmBulk(firmId, config);
+        permissionEvaluator.require("FIRM_CONFIG:EDIT");
+        firmConfigService.setBulk(firmId, config);
         auditService.logExplicit(
                 firmId,
                 currentUserResolver.getCurrentUserId(),
