@@ -95,14 +95,15 @@ public class EmployeeDashboardServiceImpl implements EmployeeDashboardService {
                 .build();
     }
 
-    /** Filters pre-fetched events for today. No DB call. */
+    /** Filters pre-fetched events for today where this employee is the attending advocate. No DB call. */
     private List<EmployeeDashboardResponse.MyTodayEvent> buildTodayEvents(
             Map<UUID, List<CourtEvent>> eventsByCC, Map<UUID, CourtCase> ccMap,
-            Map<UUID, Matter> matterMap, LocalDate today) {
+            Map<UUID, Matter> matterMap, UUID userId, LocalDate today) {
 
         return eventsByCC.values().stream()
                 .flatMap(Collection::stream)
                 .filter(e -> today.equals(e.getScheduledDate()))
+                .filter(e -> userId.equals(e.getAttendingAdvocateId()))
                 .map(e -> {
                     CourtCase cc = ccMap.get(e.getCourtCaseId());
                     Matter m = cc != null ? matterMap.get(cc.getMatterId()) : null;

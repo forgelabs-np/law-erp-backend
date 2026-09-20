@@ -49,17 +49,20 @@ public class SuperAdminDashboardServiceImpl implements SuperAdminDashboardServic
                 .build();
     }
 
-    /** 3 COUNT queries, zero rows loaded. */
+    /** 5 COUNT queries, zero rows loaded. */
     private SuperAdminDashboardResponse.FirmStats buildFirmStats() {
         long total = firmRepository.countFirmsWithFirmAdmin();
         long active = firmRepository.countActiveFirmsWithFirmAdmin();
         long trial = firmRepository.countByIsTrialTrue();
+        long suspended = firmRepository.countByStatus(com.lawfirm.erp.common.enums.FirmStatus.SUSPENDED);
+        long expired = firmRepository.countByStatus(com.lawfirm.erp.common.enums.FirmStatus.EXPIRED);
 
         return SuperAdminDashboardResponse.FirmStats.builder()
                 .totalFirms(total)
                 .activeFirms(active)
-                .suspendedFirms(total - active)
+                .suspendedFirms(suspended)
                 .trialFirms(trial)
+                .expiredFirms(expired)
                 .build();
     }
 

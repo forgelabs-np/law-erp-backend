@@ -27,6 +27,7 @@ public class SuperAdminDashboardResponse {
         private long activeFirms;
         private long suspendedFirms;
         private long trialFirms;
+        private long expiredFirms;
     }
 
     @Data
