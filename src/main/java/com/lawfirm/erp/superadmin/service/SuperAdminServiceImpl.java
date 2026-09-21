@@ -216,6 +216,11 @@ public class SuperAdminServiceImpl implements SuperAdminService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        // Super-Admin-issued passwords are temporary: force a rotation on next login and
+        // clear any lockout so the user can actually get back in.
+        user.setMustChangePassword(true);
+        user.setLoginAttempts(0);
+        user.setLockedUntil(null);
         userRepository.save(user);
 
         userRepository.incrementPermissionVersion(userId);

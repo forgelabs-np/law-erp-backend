@@ -1,5 +1,6 @@
 package com.lawfirm.erp.modules.casemanagement.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Data;
 
@@ -27,6 +28,16 @@ public class MatterPartyResponse {
     private UUID clientId;
 
     private boolean isOurClient;
+
+    /**
+     * Compatibility alias: the field is serialized as {@code ourClient} (Jackson derives that
+     * name from Lombok's getter), while the API documentation and the v2 Postman collection
+     * use {@code isOurClient}. Both keys carry the same value until the contract is settled.
+     */
+    @JsonProperty("isOurClient")
+    public boolean isOurClientFlag() {
+        return isOurClient;
+    }
 
     private String notes;
 

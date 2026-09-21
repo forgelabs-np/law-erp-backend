@@ -4,8 +4,10 @@ import com.lawfirm.erp.modules.casemanagement.dto.response.CalendarEventResponse
 import com.lawfirm.erp.modules.casemanagement.entity.CourtCase;
 import com.lawfirm.erp.modules.casemanagement.entity.CourtEvent;
 import com.lawfirm.erp.modules.casemanagement.entity.Matter;
+import com.lawfirm.erp.auth.security.ReadScopeGuard;
 import com.lawfirm.erp.modules.casemanagement.repository.CourtCaseRepository;
 import com.lawfirm.erp.modules.casemanagement.repository.CourtEventRepository;
+import com.lawfirm.erp.modules.casemanagement.repository.MatterPartyRepository;
 import com.lawfirm.erp.modules.casemanagement.repository.MatterRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +32,8 @@ public class CalendarServiceImpl implements CalendarService {
     private final CourtEventRepository courtEventRepository;
     private final CourtCaseRepository courtCaseRepository;
     private final MatterRepository matterRepository;
+    private final MatterPartyRepository matterPartyRepository;
+    private final ReadScopeGuard readScopeGuard;
 
     public List<CalendarEventResponse> getCalendar(UUID firmId, LocalDate from, LocalDate to, UUID advocateId) {
         List<CourtEvent> events;
@@ -47,7 +51,7 @@ public class CalendarServiceImpl implements CalendarService {
                             firmId, from, to, Pageable.unpaged())
                     .getContent();
         }
-        return enrich(events);
+        return enrich(visibleToCaller(firmId, events));
     }
 
     public List<CalendarEventResponse> getTodayEvents(UUID firmId, UUID advocateId) {
@@ -64,7 +68,7 @@ public class CalendarServiceImpl implements CalendarService {
         } else {
             events = courtEventRepository.findByFirmIdAndScheduledDate(firmId, today);
         }
-        return enrich(events);
+        return enrich(visibleToCaller(firmId, events));
     }
 
     public List<CalendarEventResponse> getUpcomingEvents(UUID firmId, int days, UUID advocateId) {
@@ -82,7 +86,35 @@ public class CalendarServiceImpl implements CalendarService {
         } else {
             events = courtEventRepository.findByFirmIdAndScheduledDateBetween(firmId, from, to);
         }
-        return enrich(events);
+        return enrich(visibleToCaller(firmId, events));
+    }
+
+    /**
+     * A client-portal account may only see hearings belonging to its own matters.
+     * Staff are returned the full firm calendar unchanged.
+     */
+    private List<CourtEvent> visibleToCaller(UUID firmId, List<CourtEvent> events) {
+        if (!readScopeGuard.isClientScope() || events.isEmpty()) {
+            return events;
+        }
+        Set<UUID> allowedCaseIds = new java.util.HashSet<>(clientCourtCaseIds(firmId));
+        return events.stream()
+                .filter(e -> allowedCaseIds.contains(e.getCourtCaseId()))
+                .collect(Collectors.toList());
+    }
+
+    /** Court cases of every matter owned by the calling client — column link or marked party. */
+    private List<UUID> clientCourtCaseIds(UUID firmId) {
+        UUID clientId = readScopeGuard.currentUserId();
+        Set<UUID> matterIds = new java.util.HashSet<>(
+                matterRepository.findByClientUserIdAndFirmIdOrderByCreatedAtDesc(clientId, firmId)
+                        .stream().map(Matter::getId).collect(Collectors.toList()));
+        matterPartyRepository.findByClientIdAndFirmIdAndOurClientTrue(clientId, firmId)
+                .forEach(p -> matterIds.add(p.getMatterId()));
+        if (matterIds.isEmpty()) {
+            return List.of();
+        }
+        return courtCaseRepository.findIdsByMatterIdIn(List.copyOf(matterIds));
     }
 
     /**

@@ -43,6 +43,7 @@ class CourtCaseServiceTest {
     @Mock private MatterTimelineRepository matterTimelineRepository;
     @Mock private AppealDeadlineEngine appealDeadlineEngine;
     @Mock private AuditService auditService;
+    @Mock private MatterScopeGuard matterScopeGuard;
 
     @InjectMocks
     private CourtCaseServiceImpl courtCaseService;

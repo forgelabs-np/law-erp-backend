@@ -276,9 +276,53 @@ public class JwtUtil {
                 .compact();
     }
 
+    /**
+     * One-time self-service password reset token (15 min), e-mailed as a link.
+     * Same limited-scope treatment as the MFA / password-change tokens: it can only be
+     * redeemed at /auth/reset-password and is never a usable bearer token.
+     */
+    public String generatePasswordResetToken(User user) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", user.getId().toString());
+        claims.put("type", "pwd_reset");   // ← scope marker
+        // Bound to the account's current permissionVersion so the link is genuinely
+        // single-use: redeeming it bumps the version (as does an admin/role change),
+        // which retires the link. See AuthServiceImpl.resetPasswordWithToken.
+        claims.put("permVersion", user.getPermissionVersion() != null ? user.getPermissionVersion() : 0);
+
+        return Jwts.builder()
+                .claims(claims)
+                .subject(user.getUsername())
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 15 * 60 * 1000L)) // 15 min
+                .signWith(key, Jwts.SIG.HS512)
+                .compact();
+    }
+
     /** Extract userId from an mfa token — returns null if wrong type or expired */
     public UUID extractUserIdFromMfaToken(String token) {
         return extractUserIdFromScopedToken(token, "mfa");
+    }
+
+    /** Extract userId from a self-service password-reset token */
+    public UUID extractUserIdFromPasswordResetToken(String token) {
+        return extractUserIdFromScopedToken(token, "pwd_reset");
+    }
+
+    /**
+     * The permissionVersion a reset link was minted against, or null if the token is not a
+     * valid, unexpired reset token. Callers compare this with the account's current version to
+     * make the link single-use.
+     */
+    public Integer extractPasswordResetTokenVersion(String token) {
+        try {
+            if (!validateToken(token)) return null;
+            Claims claims = extractAllClaims(token);
+            if (!"pwd_reset".equals(claims.get("type", String.class))) return null;
+            return claims.get("permVersion", Integer.class);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** Extract userId from a password-change token — returns null if wrong type or expired */
@@ -299,12 +343,15 @@ public class JwtUtil {
         }
     }
 
-    /** Returns true if this is a limited-scope token (mfa or pwd_change), not a full access token */
+    /**
+     * Returns true if this is a limited-scope token (mfa, pwd_change or pwd_reset),
+     * not a full access token — the filter only lets it reach the auth endpoints.
+     */
     public boolean isLimitedScopeToken(String token) {
         try {
             Claims claims = extractAllClaims(token);
             String type = claims.get("type", String.class);
-            return "mfa".equals(type) || "pwd_change".equals(type);
+            return "mfa".equals(type) || "pwd_change".equals(type) || "pwd_reset".equals(type);
         } catch (Exception e) {
             return false;
         }

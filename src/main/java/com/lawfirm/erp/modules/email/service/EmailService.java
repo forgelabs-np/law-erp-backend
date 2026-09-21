@@ -13,6 +13,11 @@ public interface EmailService {
     void sendWelcomeFirmAdmin(UUID firmId, UUID triggeredByUserId, String toEmail, String fullName,
                               String username, String tempPassword, String firmName, String firmCode);
 
+    /**
+     * Notice that an administrator reset the account's password. The password itself is
+     * deliberately NOT transmitted — the admin hands it over out of band and the user
+     * rotates it on first login.
+     */
     void sendPasswordReset(UUID firmId, UUID triggeredByUserId, String toEmail, String fullName,
                            String tempPassword, String firmName);
 
@@ -21,6 +26,13 @@ public interface EmailService {
      * hearing_reminder_log row claimed before dispatch — flipped to FAILED if
      * the send fails, keeping the job idempotent and observable.
      */
+    /**
+     * Self-service recovery link (one-time token). This is the only place a reset secret
+     * travels, and it travels as a link that expires in {@code validMinutes}.
+     */
+    void sendPasswordResetLink(UUID firmId, UUID triggeredByUserId, String toEmail, String fullName,
+                               String resetToken, int validMinutes, String firmName);
+
     void sendHearingReminder(UUID firmId, UUID recipientUserId, String toEmail, String fullName,
                              com.lawfirm.erp.modules.email.dto.HearingReminderDetails details,
                              com.lawfirm.erp.modules.casemanagement.entity.HearingReminderLog.RecipientType recipientType,

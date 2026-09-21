@@ -1,7 +1,9 @@
 package com.lawfirm.erp.auth.security;
 
+import com.lawfirm.erp.common.enums.FirmStatus;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.auth.AuthenticatedDetail;
+import com.lawfirm.erp.firm.repository.FirmRepository;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -29,6 +31,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
+    private final FirmRepository firmRepository;
 
     @Override
         protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -59,7 +62,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             if (jwtUtil.isLimitedScopeToken(token)) {
                 String path = request.getRequestURI();
                 boolean allowedPath = path.startsWith("/api/v1/auth/mfa/")
-                        || path.startsWith("/api/v1/auth/change-password");
+                        || path.startsWith("/api/v1/auth/change-password")
+                        || path.startsWith("/api/v1/auth/reset-password");
 
                 if (!allowedPath) {
                     response.sendError(HttpStatus.UNAUTHORIZED.value(),
@@ -103,7 +107,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             // ── Firm context ──────────────────────────────────────────────
             if (firmId != null && !"SUPER_ADMIN".equals(userType)) {
-                FirmContextHolder.set(UUID.fromString(firmId), firmCode);
+                UUID firmUuid = UUID.fromString(firmId);
+                // Suspension must bite immediately. The SA console, the trial-expiry scheduler
+                // and direct edits all just flip Firm.status, so it is re-read per request
+                // rather than trusted from the token or checked only at login.
+                FirmStatus firmStatus = firmRepository.findStatusById(firmUuid);
+                if (firmStatus == FirmStatus.SUSPENDED || firmStatus == FirmStatus.EXPIRED) {
+                    response.sendError(HttpStatus.FORBIDDEN.value(),
+                            "Your firm account has been suspended. Please contact support.");
+                    return;
+                }
+                FirmContextHolder.set(firmUuid, firmCode);
             } else {
                 FirmContextHolder.clear();
             }

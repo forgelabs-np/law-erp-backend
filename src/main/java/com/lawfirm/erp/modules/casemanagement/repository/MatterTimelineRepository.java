@@ -32,11 +32,13 @@ public interface MatterTimelineRepository extends JpaRepository<MatterTimelineEv
            "WHERE e.firmId = :firmId " +
            "AND (:matterType IS NULL OR m.matterType = :matterType) " +
            "AND (:status IS NULL OR m.status = :status) " +
+           "AND (:clientUserId IS NULL OR m.clientUserId = :clientUserId) " +
            "AND e.createdAt >= :from " +
            "AND e.createdAt <= :to")
     Page<MatterTimelineEvent> findFirmEvents(@Param("firmId") UUID firmId,
                                              @Param("matterType") MatterType matterType,
                                              @Param("status") MatterStatus status,
+                                             @Param("clientUserId") UUID clientUserId,
                                              @Param("from") LocalDateTime from,
                                              @Param("to") LocalDateTime to,
                                              Pageable pageable);
