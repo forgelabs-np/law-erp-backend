@@ -1,6 +1,7 @@
 package com.lawfirm.erp.modules.casemanagement.controller;
 
 import com.lawfirm.erp.auth.security.PermissionEvaluator;
+import com.lawfirm.erp.common.annotation.RequiresModule;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -8,6 +9,7 @@ import com.lawfirm.erp.modules.casemanagement.dto.request.RecordJudgmentRequest;
 import com.lawfirm.erp.modules.casemanagement.dto.request.UpdateCourtCaseRequest;
 import com.lawfirm.erp.modules.casemanagement.dto.request.UpdateCourtCaseStageRequest;
 import com.lawfirm.erp.modules.casemanagement.dto.response.CourtCaseResponse;
+import com.lawfirm.erp.modules.casemanagement.dto.response.FirmCourtResponse;
 import com.lawfirm.erp.modules.casemanagement.dto.response.UpcomingAppealResponse;
 import com.lawfirm.erp.modules.casemanagement.enums.CourtCaseStage;
 import com.lawfirm.erp.modules.casemanagement.service.CourtCaseService;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
+@RequiresModule("CASE_MANAGEMENT")
 @RequestMapping("/api/v1/firm/court-cases")
 @RequiredArgsConstructor
 @Tag(name = "Court Cases", description = "One row per court instance the matter is registered in")
@@ -85,5 +88,13 @@ public class CourtCaseController {
         permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
         return responseHandler.ok(courtCaseService.getAllowedStages(ourCourtCaseRef),
                 "Allowed stages fetched successfully");
+    }
+
+    @GetMapping("/courts")
+    @Operation(summary = "Get firm courts", description = "Returns all courts where the firm has active cases with case counts. Used for scraper integration and court selection.")
+    public ResponseEntity<ApiResponse<List<FirmCourtResponse>>> getFirmCourts() {
+        permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
+        return responseHandler.ok(courtCaseService.getFirmCourts(),
+                "Firm courts fetched successfully");
     }
 }

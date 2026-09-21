@@ -6,18 +6,22 @@ import com.lawfirm.erp.auth.security.TotpUtil;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.LoginStatus;
+import com.lawfirm.erp.common.enums.FirmStatus;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.common.service.UserLoginHistoryService;
 import com.lawfirm.erp.dto.auth.request.ChangePasswordRequest;
+import com.lawfirm.erp.dto.auth.request.ForgotPasswordRequest;
 import com.lawfirm.erp.dto.auth.request.LoginRequest;
 import com.lawfirm.erp.dto.auth.request.MfaSetupConfirmRequest;
 import com.lawfirm.erp.dto.auth.request.MfaValidateRequest;
+import com.lawfirm.erp.dto.auth.request.PasswordResetRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
+import com.lawfirm.erp.modules.email.service.EmailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,6 +50,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserLoginHistoryService loginHistoryService;
     private final AuditService auditService;
     private final AuthMapper authMapper;
+    private final EmailService emailService;
 
     @Value("${security.max-login-attempts:5}")
     private int maxLoginAttempts;
@@ -70,6 +75,14 @@ public class AuthServiceImpl implements AuthService {
         Firm firm = firmRepository.findByLawFirmCode(request.getLawFirmCode().trim().toUpperCase())
                 .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
 
+        // A suspended (or expired) firm is cut off entirely — otherwise billing enforcement is
+        // cosmetic. This blocks new logins; live sessions are stopped by the same check in
+        // JwtAuthFilter, which also catches suspensions applied by the trial-expiry scheduler.
+        if (firm.getStatus() == FirmStatus.SUSPENDED || firm.getStatus() == FirmStatus.EXPIRED) {
+            throw new BadCredentialsException(
+                    "Your firm account has been suspended. Please contact support.");
+        }
+
         User user = isClient
                 ? userRepository.findByMobileNoAndFirmId(request.getUsername(), firm.getId())
                 .orElseThrow(() -> new BadCredentialsException("Invalid credentials"))
@@ -81,6 +94,20 @@ public class AuthServiceImpl implements AuthService {
         }
         if (!isClient && user.getUserType() == UserType.SUPER_ADMIN) {
             throw new BadCredentialsException("Super admin must use /super-admin/login");
+        }
+        // A client account must not be able to slip in through the internal login and
+        // bypass the portal-access switch below.
+        if (!isClient && user.getUserType() == UserType.CLIENT) {
+            throw new BadCredentialsException("Clients must sign in through the client portal");
+        }
+        // Portal access is a firm admin decision: switch it off and the client cannot
+        // sign in at all (live sessions are revoked when the switch flips).
+        if (isClient && !Boolean.TRUE.equals(user.getPortalAccessEnabled())) {
+            loginHistoryService.saveRecord(user, LoginStatus.ACCOUNT_LOCKED, "Portal access disabled");
+            auditService.log(AuditAction.LOGIN_FAILED, AuditEntity.AUTH, user.getId(),
+                    "Client portal access disabled: " + user.getUsername());
+            throw new BadCredentialsException(
+                    "Client portal access is disabled for your account. Please contact your firm.");
         }
 
         validateAccountStatus(user);
@@ -209,6 +236,88 @@ public class AuthServiceImpl implements AuthService {
             return buildMfaResponse(user);
         }
         return issueFullTokens(user);
+    }
+
+    @Override
+    public void forgotPassword(ForgotPasswordRequest request) {
+        Firm firm = firmRepository.findByLawFirmCode(request.getLawFirmCode().trim().toUpperCase()).orElse(null);
+        if (firm == null) {
+            // Same outcome as a known firm with an unknown user — no enumeration signal.
+            log.info("Password recovery requested for unknown firm code");
+            return;
+        }
+
+        String identifier = request.getUsername().trim();
+        User user = userRepository.findByUsernameAndFirmId(identifier, firm.getId())
+                .or(() -> userRepository.findByEmailAndFirmId(identifier, firm.getId()))
+                .orElse(null);
+
+        if (user == null || !user.isActive() || Boolean.TRUE.equals(user.getIsBlocked())) {
+            log.info("Password recovery requested for an ineligible account in firm {}", firm.getLawFirmCode());
+            return;
+        }
+        // A client account only recovers through the portal it can actually use.
+        if (user.getUserType() == UserType.CLIENT && !Boolean.TRUE.equals(user.getPortalAccessEnabled())) {
+            log.info("Password recovery refused: client portal access disabled for {}", user.getUsername());
+            return;
+        }
+
+        int validMinutes = 15;
+        String token = jwtUtil.generatePasswordResetToken(user);
+        emailService.sendPasswordResetLink(firm.getId(), null, user.getEmail(), user.getFullName(),
+                token, validMinutes, firm.getName());
+
+        auditService.log(AuditAction.PASSWORD_RESET_REQUESTED, AuditEntity.AUTH, user.getId(),
+                "Self-service password reset link issued for: " + user.getUsername());
+        log.info("Password reset link issued for: {}", user.getUsername());
+    }
+
+    @Override
+    @Transactional
+    public void resetPasswordWithToken(PasswordResetRequest request) {
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new BadCredentialsException("Passwords do not match");
+        }
+
+        UUID userId = jwtUtil.extractUserIdFromPasswordResetToken(request.getToken());
+        if (userId == null) {
+            throw new BadCredentialsException("This reset link is invalid or has expired. Please request a new one.");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadCredentialsException("Invalid reset link"));
+
+        // The link is single-use: it is minted against the account's permissionVersion, and a
+        // successful redemption bumps that version — so replaying an already-redeemed link
+        // (or one superseded by an admin reset / role change) is refused.
+        Integer linkVersion = jwtUtil.extractPasswordResetTokenVersion(request.getToken());
+        // Read the version straight from the row, as JwtAuthFilter does: incrementPermissionVersion
+        // is a bulk update that bypasses the persistence context, so the loaded entity can be stale.
+        Integer dbVersion = userRepository.findPermissionVersionById(userId);
+        int currentVersion = dbVersion != null ? dbVersion : 0;
+        if (linkVersion == null || linkVersion != currentVersion) {
+            throw new BadCredentialsException(
+                    "This reset link has already been used. Please request a new one.");
+        }
+
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
+            throw new BadCredentialsException("Please choose a password you have not used before");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setMustChangePassword(false);
+        // Recovering also clears a brute-force lockout — otherwise a locked-out user
+        // could never get back in without an administrator.
+        user.setLoginAttempts(0);
+        user.setLockedUntil(null);
+        userRepository.save(user);
+
+        // Kill any live session: same mechanism an admin reset uses.
+        userRepository.incrementPermissionVersion(userId);
+
+        auditService.log(AuditAction.PASSWORD_RESET, AuditEntity.AUTH, user.getId(),
+                "Password reset via self-service link: " + user.getUsername());
+        log.info("Self-service password reset completed for: {}", user.getUsername());
     }
 
     private void validateAccountStatus(User user) {

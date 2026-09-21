@@ -43,6 +43,15 @@ public class FirmAdminController {
         );
     }
 
+    @GetMapping
+    @Operation(summary = "List all firms", description = "Every firm on the platform with trial/status flags")
+    public ResponseEntity<ApiResponse<List<FirmListResponse>>> getAllFirms() {
+        return responseHandler.ok(
+                firmService.getAllFirms(),
+                "Firms fetched successfully"
+        );
+    }
+
     @GetMapping("/admins")
     @Operation(summary = FirmConstants.GET_ALL_FIRM_ADMINS_SUMMARY)
     public ResponseEntity<ApiResponse<List<FirmAdminResponse>>> getAllFirmAdmins() {

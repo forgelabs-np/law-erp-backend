@@ -1,6 +1,7 @@
 package com.lawfirm.erp.modules.casemanagement.service;
 
 import com.lawfirm.erp.auth.security.FirmContextHolder;
+import com.lawfirm.erp.auth.security.ReadScopeGuard;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.modules.casemanagement.dto.request.AddCourtCaseRequest;
@@ -41,6 +42,8 @@ class MatterServiceTest {
     @Mock private MatterNumberGenerator matterNumberGenerator;
     @Mock private CourtCaseRefGenerator courtCaseRefGenerator;
     @Mock private AuditService auditService;
+    @Mock private MatterScopeGuard matterScopeGuard;
+    @Mock private ReadScopeGuard readScopeGuard;
 
     @InjectMocks
     private MatterServiceImpl matterService;

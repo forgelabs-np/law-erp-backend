@@ -1,11 +1,14 @@
 package com.lawfirm.erp.modules.casemanagement.service;
 
 import com.lawfirm.erp.auth.security.FirmContextHolder;
+import com.lawfirm.erp.auth.security.ReadScopeGuard;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
+import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.modules.casemanagement.dto.request.*;
 import com.lawfirm.erp.modules.casemanagement.dto.response.*;
@@ -39,6 +42,9 @@ public class MatterServiceImpl implements MatterService {
     private final MatterNumberGenerator matterNumberGenerator;
     private final CourtCaseRefGenerator courtCaseRefGenerator;
     private final AuditService auditService;
+    private final UserRepository userRepository;
+    private final ReadScopeGuard readScopeGuard;
+    private final MatterScopeGuard matterScopeGuard;
 
     @Transactional
     public MatterResponse createMatter(CreateMatterRequest request) {
@@ -57,6 +63,7 @@ public class MatterServiceImpl implements MatterService {
         matter.setOriginatingCourtLevel(request.getOriginatingCourtLevel());
         matter.setAssignedPartnerId(request.getAssignedPartnerId());
         matter.setDescription(request.getDescription());
+        applyClient(matter, firmId, request.getClientUserId(), request.getClientName());
         matter = matterRepository.save(matter);
 
         // ORIGINAL court case at the originating level
@@ -102,13 +109,25 @@ public class MatterServiceImpl implements MatterService {
     }
 
     public Page<MatterResponse> listMatters(MatterType matterType, MatterStatus status,
-                                            String search, int page, int size) {
+                                            UUID clientUserId, String search, int page, int size) {
         UUID firmId = getRequiredFirmId();
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
+        // A client account only ever sees its own matters, whatever it asks for.
+        UUID effectiveClientId = clientUserId;
+        if (readScopeGuard.isClientScope()) {
+            UUID me = readScopeGuard.currentUserId();
+            if (clientUserId != null && !clientUserId.equals(me)) {
+                throw new ForbiddenException("You do not have access to another client's matters");
+            }
+            effectiveClientId = me;
+        }
+
         Page<Matter> matters;
-        if (matterType != null || status != null || search != null) {
-            matters = matterRepository.findByFilters(firmId, matterType, status, search, pageable);
+        if (effectiveClientId != null) {
+            matters = matterRepository.findByFilters(firmId, matterType, status, effectiveClientId, search, pageable);
+        } else if (matterType != null || status != null || search != null) {
+            matters = matterRepository.findByFilters(firmId, matterType, status, null, search, pageable);
         } else {
             matters = matterRepository.findByFirmId(firmId, pageable);
         }
@@ -118,6 +137,21 @@ public class MatterServiceImpl implements MatterService {
     public MatterResponse getMatter(String matterNumber) {
         Matter matter = findMatter(matterNumber);
         return toMatterResponse(matter, true);
+    }
+
+    /** Validate + denormalize the matter's client link. */
+    private void applyClient(Matter matter, UUID firmId, UUID clientUserId, String clientName) {
+        if (clientUserId == null) {
+            return;
+        }
+        User client = userRepository.findById(clientUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Client not found: " + clientUserId));
+        if (client.getFirm() == null || !client.getFirm().getId().equals(firmId)) {
+            throw new ForbiddenException("Client does not belong to this firm");
+        }
+        matter.setClientUserId(clientUserId);
+        matter.setClientName(clientName != null && !clientName.isBlank()
+                ? clientName : client.getFullName());
     }
 
     public List<TimelineEventResponse> getTimeline(String matterNumber) {
@@ -159,6 +193,7 @@ public class MatterServiceImpl implements MatterService {
                                                        int page, int size) {
         UUID firmId = getRequiredFirmId();
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        UUID clientScopeId = readScopeGuard.isClientScope() ? readScopeGuard.currentUserId() : null;
 
         // Null-safe window: sentinel bounds far outside any real data, so the
         // query never binds null LocalDateTime params (Hibernate 7 + Postgres
@@ -167,7 +202,7 @@ public class MatterServiceImpl implements MatterService {
         LocalDateTime toDt = to != null ? to.plusDays(1).atStartOfDay() : LocalDateTime.of(2999, 12, 31, 23, 59, 59);
 
         Page<MatterTimelineEvent> events =
-                matterTimelineRepository.findFirmEvents(firmId, matterType, status, fromDt, toDt, pageable);
+                matterTimelineRepository.findFirmEvents(firmId, matterType, status, clientScopeId, fromDt, toDt, pageable);
 
         Set<UUID> matterIds = events.getContent().stream()
                 .map(MatterTimelineEvent::getMatterId).collect(Collectors.toSet());
@@ -205,7 +240,10 @@ public class MatterServiceImpl implements MatterService {
     public Page<StaleMatterResponse> getStaleMatters(int days, int page, int size) {
         UUID firmId = getRequiredFirmId();
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Matter> matters = matterRepository.findByFirmId(firmId, pageable);
+        Page<Matter> matters = readScopeGuard.isClientScope()
+                ? matterRepository.findByClientUserIdAndFirmId(
+                        readScopeGuard.currentUserId(), firmId, pageable)
+                : matterRepository.findByFirmId(firmId, pageable);
 
         List<UUID> leafIds = matters.getContent().stream()
                 .map(Matter::getCurrentCourtCaseId)
@@ -254,6 +292,9 @@ public class MatterServiceImpl implements MatterService {
         if (request.getDescription() != null) matter.setDescription(request.getDescription());
         if (request.getAssignedPartnerId() != null) matter.setAssignedPartnerId(request.getAssignedPartnerId());
         if (request.getStatus() != null) matter.setStatus(request.getStatus());
+        if (request.getClientUserId() != null) {
+            applyClient(matter, matter.getFirmId(), request.getClientUserId(), request.getClientName());
+        }
 
         matter = matterRepository.save(matter);
         recordTimeline(matter, null, TimelineEventType.MATTER_NOTE_ADDED, "Matter details updated", null);
@@ -390,8 +431,10 @@ public class MatterServiceImpl implements MatterService {
     }
 
     private Matter findMatter(String matterNumber) {
-        return matterRepository.findByMatterNumberAndFirmId(matterNumber, getRequiredFirmId())
+        Matter matter = matterRepository.findByMatterNumberAndFirmId(matterNumber, getRequiredFirmId())
                 .orElseThrow(() -> new ResourceNotFoundException("Matter not found: " + matterNumber));
+        matterScopeGuard.requireVisible(matter);
+        return matter;
     }
 
     private MatterParty buildParty(Matter matter, PartyEntryRequest entry) {
@@ -491,6 +534,8 @@ public class MatterServiceImpl implements MatterService {
                 .currentCourtCaseId(matter.getCurrentCourtCaseId())
                 .assignedPartnerId(matter.getAssignedPartnerId())
                 .originatingCourtLevel(matter.getOriginatingCourtLevel())
+                .clientUserId(matter.getClientUserId())
+                .clientName(matter.getClientName())
                 .description(matter.getDescription())
                 .courtCases(courtCases)
                 .parties(parties)

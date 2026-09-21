@@ -49,6 +49,7 @@ public class CourtEventServiceImpl implements CourtEventService {
     private final MatterTimelineRepository matterTimelineRepository;
     private final AuditService auditService;
     private final CourtCaseService courtCaseService;
+    private final MatterScopeGuard matterScopeGuard;
 
     @Transactional
     public CourtEventResponse scheduleEvent(String ourCourtCaseRef, ScheduleCourtEventRequest request) {
@@ -270,8 +271,16 @@ public class CourtEventServiceImpl implements CourtEventService {
     }
 
     private CourtEvent findEvent(UUID eventId, UUID firmId) {
-        return courtEventRepository.findByIdAndFirmId(eventId, firmId)
+        CourtEvent event = courtEventRepository.findByIdAndFirmId(eventId, firmId)
                 .orElseThrow(() -> new ResourceNotFoundException("Court event not found: " + eventId));
+        if (matterScopeGuard.isClientScope()) {
+            CourtCase cc = courtCaseRepository.findById(event.getCourtCaseId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Court case not found for hearing"));
+            Matter matter = matterRepository.findById(cc.getMatterId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Matter not found for hearing"));
+            matterScopeGuard.requireVisible(matter);
+        }
+        return event;
     }
 
     private List<CourtEvent> findConflicts(UUID firmId, UUID advocateId, LocalDate date,

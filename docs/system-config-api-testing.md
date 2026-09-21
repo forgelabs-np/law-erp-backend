@@ -12,10 +12,12 @@
 
 | Piece | Where | Role |
 |---|---|---|
-| `system_config` table | DB | Key-value store, GLOBAL or FIRM scope |
+| `system_config` table | DB | GLOBAL (platform) settings — one row per key |
+| `firm_configs` table | DB | FIRM settings — one row per firm + key, `firm_id` NOT NULL with a real FK |
+| `ConfigKeyRegistry` | Backend | Declares every key and which table owns it (`GLOBAL` / `FIRM` lists) |
 | Metadata columns | `config_group`, `input_type`, `allowed_values`, `active`, `allow_edit`, `description` | Tell the SETTINGS UI how to render each key and let the server validate PUTs |
 | `SystemConfigService` | Backend | Reads a key **every time** it is needed (`getGlobal`), so a DB change is live immediately |
-| Registry (`REGISTRY`) | `SystemConfigService` | One place defining every known key: group, input type, allowed values, default |
+| `SystemConfigService` (GLOBAL) / `FirmConfigService` (FIRM) | Backend | Read their own table every time a key is needed; `FirmConfigService.getEffectiveConfig(firmId)` overlays the firm's values on the platform defaults |
 | Boot seed | `DataInitializer` | Inserts defaults **only if missing** — never overwrites an admin's edit |
 | Enforcement points | `FirmServiceImpl`, `SuperAdminServiceImpl`, `DataInitializer` | Ask the DB whether MFA is required instead of using hardcoded rules |
 
@@ -24,14 +26,33 @@ The boot-seeded registry (GLOBAL, insert-if-missing):
 | Key | Group | Type | Default |
 |---|---|---|---|
 | `APP_NAME` | APP | TEXT | `NepalCRM` |
-| `APP_PRODUCTION` | APP | RADIO `Y,N` | `N` |
+| `APP_PRODUCTION` | APP | RADIO `Y,N` | from `app.production` (see below) |
+| `LOGIN_URL` | APP | URL | `https://app.nepalcrm.com/login` |
+| `CLIENT_PORTAL_URL` | APP | URL | `https://app.nepalcrm.com/portal` |
 | `MFA_ENABLED` | SECURITY | RADIO `Y,N` | `Y` |
 | `MFA_REQUIRED_ROLES` | SECURITY | TEXT | `SUPER_ADMIN,FIRM_ADMIN` |
 | `REGISTRATION_SECRET` | SECURITY | PASSWORD (locked after first set) | empty |
+| `LOGIN_MAX_ATTEMPTS` | SECURITY | NUMBER | `5` |
+| `LOGIN_LOCK_MINUTES` | SECURITY | NUMBER | `30` |
+| `TRIAL_DEFAULT_DAYS` | TRIAL | NUMBER | `14` |
+| `TRIAL_WARNING_DAYS` | TRIAL | NUMBER | `3` |
+| `NOTIFICATION_MAX_ATTEMPTS` | NOTIFICATION | NUMBER | `3` |
 
 `SMTP_*` (EMAIL group) and firm `BRAND_*` (BRAND group) keys are **not** seeded —
 they are created when an admin first PUTs them, and they keep their metadata from the
 registry (that is why `SMTP_PASSWORD` is stored encrypted even on first creation).
+
+**Production mode:** `APP_PRODUCTION` is seeded from `app.production` in the active
+profile, not from a hardcoded `N` — so a production database never ships with the
+`TotpUtil` `123456` MFA bypass switched on. After the row exists, the DB value is the
+single source of truth and `app.production` is only the fallback for an unseeded DB.
+
+**Scope allowlist:** each service refuses any key the registry does not declare for its
+table. A firm admin therefore cannot write platform keys — previously
+`PUT /api/v1/firm/config {"LOGIN_URL": ...}` would have repointed their firm's
+password-reset emails at an arbitrary URL. Registry keys with no row yet are returned by
+`GET /api/v1/firm/config` with their default value, so a new firm's settings screen is
+never empty.
 
 ---
 

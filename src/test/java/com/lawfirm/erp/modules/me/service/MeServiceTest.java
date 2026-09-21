@@ -6,6 +6,7 @@ import com.lawfirm.erp.common.enums.FirmStatus;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.common.service.FirmConfigService;
 import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
@@ -45,6 +46,7 @@ class MeServiceTest {
     @Mock private ModuleRepository moduleRepository;
     @Mock private CurrentUserResolver currentUserResolver;
     @Mock private SystemConfigService systemConfigService;
+    @Mock private FirmConfigService firmConfigService;
     @Mock private MeMapper meMapper;
 
     @InjectMocks
@@ -115,8 +117,8 @@ class MeServiceTest {
         when(currentUserResolver.getCurrentUserId()).thenReturn(USER_ID);
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
         when(systemConfigService.getGlobal(any())).thenReturn(Optional.of("NepalCRM"));
-        // Lenient: only firm users with a firm hit getFirm (branding lookup)
-        lenient().when(systemConfigService.getFirm(any(), any())).thenReturn(Optional.empty());
+        // Lenient: only firm users with a firm hit the branding lookup
+        lenient().when(firmConfigService.get(any(), any())).thenReturn(Optional.empty());
     }
 
     // ── Tests ──────────────────────────────────────────────────────────────

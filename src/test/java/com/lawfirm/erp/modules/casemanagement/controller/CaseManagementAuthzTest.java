@@ -115,7 +115,7 @@ class CaseManagementAuthzTest {
     void matterEndpointsRequirePermissions() {
         org.mockito.Mockito.when(currentUserResolver.getCurrentFirmId())
                 .thenReturn(UUID.randomUUID());
-        matterController.listMatters(null, null, null, 0, 20);
+        matterController.listMatters(null, null, null, null, 0, 20);
         matterController.getMatter(MATTER_NO);
         matterController.updateMatter(MATTER_NO, wrap(new UpdateMatterRequest()));
         matterController.addCourtCase(MATTER_NO, wrap(new AddCourtCaseRequest()));

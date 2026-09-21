@@ -89,4 +89,25 @@ public class AuthController {
                 "Password changed"
         );
     }
+
+    @PostMapping("/forgot-password")
+    @Operation(summary = "Start self-service password recovery",
+            description = "Emails a one-time reset link. Always reports success so the endpoint "
+                    + "cannot be used to discover which accounts exist.")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(
+            @Valid @RequestBody ApiRequest<ForgotPasswordRequest> request) {
+        authService.forgotPassword(request.getData());
+        return responseHandler.ok(null, Message.SUCCESS,
+                "If the account exists, a password reset link has been sent to its e-mail address");
+    }
+
+    @PostMapping("/reset-password")
+    @Operation(summary = "Complete password recovery with the one-time link token",
+            description = "Sets the new password, clears any lockout and revokes existing sessions")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(
+            @Valid @RequestBody ApiRequest<PasswordResetRequest> request) {
+        authService.resetPasswordWithToken(request.getData());
+        return responseHandler.ok(null, Message.SUCCESS,
+                "Password updated. Please sign in with your new password.");
+    }
 }

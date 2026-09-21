@@ -1,7 +1,9 @@
 package com.lawfirm.erp.auth.security;
 
+import com.lawfirm.erp.common.enums.FirmStatus;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.auth.AuthenticatedDetail;
+import com.lawfirm.erp.firm.repository.FirmRepository;
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -26,7 +28,8 @@ class JwtAuthFilterTest {
 
     private final JwtUtil jwtUtil = mock(JwtUtil.class);
     private final UserRepository userRepository = mock(UserRepository.class);
-    private final JwtAuthFilter filter = new JwtAuthFilter(jwtUtil, userRepository);
+    private final FirmRepository firmRepository = mock(FirmRepository.class);
+    private final JwtAuthFilter filter = new JwtAuthFilter(jwtUtil, userRepository, firmRepository);
 
     @AfterEach
     void tearDown() {
@@ -79,5 +82,33 @@ class JwtAuthFilterTest {
         assertNotNull(user.getRoles(), "roles must be populated from the JWT roleCode claim");
         assertTrue(user.getRoles().contains("FIRM_ADMIN"), "FIRM_ADMIN role must be present");
         assertEquals(firmId, user.getFirmId());
+    }
+
+    @Test
+    void suspendedFirmIsRejected() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID firmId = UUID.randomUUID();
+
+        Claims claims = mock(Claims.class);
+        when(claims.get("userId", String.class)).thenReturn(userId.toString());
+        when(claims.get("firmId", String.class)).thenReturn(firmId.toString());
+        when(claims.get("firmCode", String.class)).thenReturn("APEX-LAW");
+        when(claims.get("userType", String.class)).thenReturn("FIRM_USER");
+        when(claims.get("permVersion", Integer.class)).thenReturn(0);
+
+        when(jwtUtil.validateToken(anyString())).thenReturn(true);
+        when(jwtUtil.isTokenExpired(anyString())).thenReturn(false);
+        when(jwtUtil.isLimitedScopeToken(anyString())).thenReturn(false);
+        when(jwtUtil.extractAllClaims(anyString())).thenReturn(claims);
+        when(userRepository.findPermissionVersionById(userId)).thenReturn(0);
+        when(firmRepository.findStatusById(firmId)).thenReturn(FirmStatus.SUSPENDED);
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer abc.def.ghi");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertEquals(403, response.getStatus(), "A suspended firm's session must be refused");
     }
 }

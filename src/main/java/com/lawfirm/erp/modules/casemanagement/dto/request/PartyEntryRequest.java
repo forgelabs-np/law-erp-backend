@@ -1,5 +1,7 @@
 package com.lawfirm.erp.modules.casemanagement.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.lawfirm.erp.modules.casemanagement.enums.PartyRepresentation;
 import com.lawfirm.erp.modules.casemanagement.enums.PartyType;
 import jakarta.validation.constraints.NotBlank;
@@ -22,6 +24,13 @@ public class PartyEntryRequest {
 
     private UUID clientId;
 
+    /**
+     * Whether the firm represents this party. Jackson would otherwise name this property
+     * {@code ourClient} (Lombok's {@code isOurClient()} getter), silently ignoring the
+     * documented {@code isOurClient} key — so both spellings are accepted explicitly.
+     */
+    @JsonProperty("isOurClient")
+    @JsonAlias("ourClient")
     private boolean isOurClient;
 
     @NotNull(message = "Party role type is required")

@@ -3,10 +3,12 @@ package com.lawfirm.erp.modules.scraper.controller;
 import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.constant.ScraperConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
+import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.modules.scraper.converter.NepaliDateUtil;
 import com.lawfirm.erp.modules.scraper.dto.ScrapeRunResult;
 import com.lawfirm.erp.modules.scraper.entity.Court;
+import com.lawfirm.erp.modules.scraper.entity.ClientCase;
 import com.lawfirm.erp.modules.scraper.service.HearingExportService;
 import com.lawfirm.erp.modules.scraper.service.ScraperService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -16,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,6 +26,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RestController
@@ -83,6 +88,59 @@ public class ScraperAdminController {
         permissionEvaluator.require("SCRAPER_MANAGEMENT:EXPORT");
         Path file = exportService.exportLastWeek();
         return responseHandler.ok(file.toAbsolutePath().toString(), "Weekly export written");
+    }
+
+    @PostMapping("/link-court-case")
+    @Operation(summary = "Link court case to scraper",
+            description = "Links a case management court case to the scraper for hearing tracking. Creates or updates the client case with the court's official number.")
+    public ResponseEntity<ApiResponse<ClientCase>> linkCourtCase(
+            @RequestBody Map<String, Object> request) {
+        permissionEvaluator.require("SCRAPER_MANAGEMENT:CREATE");
+        
+        Object courtIdObj = request.get("courtId");
+        Object courtCaseNumberObj = request.get("courtCaseNumber");
+        Object caseNoInternalObj = request.get("caseNoInternal");
+        Object clientIdObj = request.get("clientId");
+        
+        if (courtIdObj == null || courtCaseNumberObj == null || caseNoInternalObj == null || clientIdObj == null) {
+            throw new BusinessRuleException("Missing required fields: courtId, courtCaseNumber, caseNoInternal, clientId");
+        }
+        
+        Integer courtId;
+        try {
+            courtId = (courtIdObj instanceof Integer) ? (Integer) courtIdObj : Integer.valueOf(courtIdObj.toString());
+        } catch (NumberFormatException e) {
+            throw new BusinessRuleException("courtId must be a valid integer");
+        }
+        
+        String courtCaseNumber = courtCaseNumberObj.toString().trim();
+        String caseNoInternal = caseNoInternalObj.toString().trim();
+        
+        if (courtCaseNumber.isBlank() || caseNoInternal.isBlank()) {
+            throw new BusinessRuleException("courtCaseNumber and caseNoInternal must not be empty");
+        }
+        
+        UUID clientId;
+        try {
+            clientId = UUID.fromString(clientIdObj.toString());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessRuleException("clientId must be a valid UUID");
+        }
+        
+        ClientCase clientCase = scraperService.linkCourtCaseToScraper(
+                courtId, courtCaseNumber, caseNoInternal, clientId);
+        
+        return responseHandler.ok(clientCase, "Court case linked to scraper successfully");
+    }
+
+    @GetMapping("/client-cases/{clientId}")
+    @Operation(summary = "Get client cases",
+            description = "Returns all tracked cases for a specific client.")
+    public ResponseEntity<ApiResponse<List<ClientCase>>> getClientCases(
+            @PathVariable UUID clientId) {
+        permissionEvaluator.require("SCRAPER_MANAGEMENT:VIEW");
+        List<ClientCase> cases = scraperService.getClientCases(clientId);
+        return responseHandler.ok(cases, "Client cases fetched successfully");
     }
 
     private CourtDto toDto(Court c) {

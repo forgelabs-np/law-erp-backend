@@ -138,40 +138,7 @@ public class FirmRoleServiceImpl implements FirmRoleService {
 
         Role role = getValidatedFirmRole(roleId, firmId);
 
-        List<Permission> permissions = permissionRepository.findAllById(request.getPermissionIds());
-        if (permissions.size() != request.getPermissionIds().size()) {
-            throw new ResourceNotFoundException("One or more permission IDs are invalid");
-        }
-
-        // Ceiling check
-        List<Permission> ceiling = computeCeiling(role, firmId);
-        Set<UUID> ceilingPermIds = ceiling.stream().map(Permission::getId).collect(Collectors.toSet());
-
-        for (Permission p : permissions) {
-            if (!ceilingPermIds.contains(p.getId()) || p.getScope() == PermissionScope.GLOBAL) {
-                throw new ForbiddenException(
-                        "Permission '" + p.getCode() + "' (scope: " + p.getScope()
-                        + ") exceeds the ceiling for role '" + role.getRoleCode() + "'."
-                );
-            }
-        }
-
-        // Replace permissions
-        rolePermissionRepository.deleteByRoleId(role.getId());
-
-        List<RolePermission> newRolePermissions = permissions.stream()
-                .map(p -> {
-                    RolePermission rp = RolePermission.builder()
-                            .role(role)
-                            .permission(p)
-                            .build();
-                    rp.setCreatedBy(adminId);
-                    rp.setCreatedAt(LocalDateTime.now());
-                    return rp;
-                })
-                .collect(Collectors.toList());
-
-        rolePermissionRepository.saveAll(newRolePermissions);
+        List<Permission> permissions = applyPermissions(role, firmId, request.getPermissionIds(), adminId);
 
         // Invalidate all users holding this role
         List<UUID> affectedUsers = userRepository.findUserIdsByRoleId(role.getId());
@@ -225,6 +192,55 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                 .stream()
                 .filter(p -> p.getScope() != PermissionScope.GLOBAL)
                 .toList();
+    }
+
+    /**
+     * Grants {@code permissionIds} to {@code role}, enforcing the caller's ceiling, and
+     * returns the granted permissions. Shared by role creation and permission updates so
+     * the two paths cannot drift apart.
+     *
+     * <p>Ceiling: a Super Admin may grant any active non-GLOBAL permission (they own the
+     * template); a firm admin is limited to what the firm's FIRM_ADMIN role holds.
+     * GLOBAL-scope permissions are never grantable outside the SA template.
+     */
+    private List<Permission> applyPermissions(Role role, UUID firmId, List<UUID> permissionIds, UUID adminId) {
+        List<Permission> permissions = permissionRepository.findAllById(permissionIds);
+        if (permissions.size() != permissionIds.size()) {
+            throw new ResourceNotFoundException("One or more permission IDs are invalid");
+        }
+
+        List<Permission> ceiling = currentUserResolver.isSuperAdmin()
+                ? permissionRepository.findAll().stream()
+                        .filter(p -> p.getScope() != PermissionScope.GLOBAL && Boolean.TRUE.equals(p.isActive()))
+                        .toList()
+                : computeCeiling(role, firmId);
+        Set<UUID> ceilingPermIds = ceiling.stream().map(Permission::getId).collect(Collectors.toSet());
+
+        for (Permission p : permissions) {
+            if (!ceilingPermIds.contains(p.getId()) || p.getScope() == PermissionScope.GLOBAL) {
+                throw new ForbiddenException(
+                        "Permission '" + p.getCode() + "' (scope: " + p.getScope()
+                        + ") exceeds the ceiling for role '" + role.getRoleCode() + "'."
+                );
+            }
+        }
+
+        rolePermissionRepository.deleteByRoleId(role.getId());
+
+        List<RolePermission> newRolePermissions = permissions.stream()
+                .map(p -> {
+                    RolePermission rp = RolePermission.builder()
+                            .role(role)
+                            .permission(p)
+                            .build();
+                    rp.setCreatedBy(adminId);
+                    rp.setCreatedAt(LocalDateTime.now());
+                    return rp;
+                })
+                .collect(Collectors.toList());
+
+        rolePermissionRepository.saveAll(newRolePermissions);
+        return permissions;
     }
 
     private boolean isFirmAdminRole(Role role) {
@@ -286,6 +302,14 @@ public class FirmRoleServiceImpl implements FirmRoleService {
             throw new ResourceNotFoundException("Firm not found: " + firmId);
         }
 
+        // SUPER_ADMIN is platform-level — the per-firm role clone deliberately skips it. A
+        // firm-scoped role with this code would hand ROLE_SUPER_ADMIN to a tenant user, because
+        // JwtUtil derives the granted authority from the role code alone.
+        if (RoleCode.SUPER_ADMIN.equalsIgnoreCase(request.getCode())) {
+            throw new BusinessRuleException(
+                    "Role code SUPER_ADMIN is reserved for platform administrators");
+        }
+
         roleRepository.findByFirmIdAndRoleCode(firmId, request.getCode().toUpperCase()).ifPresent(r -> {
             throw new DuplicateResourceException(
                     String.format("Role code already exists in your firm: %s", request.getCode())
@@ -304,6 +328,12 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         role.setCreatedBy(adminId);
         role.setCreatedAt(LocalDateTime.now());
         role = roleRepository.save(role);
+
+        // Apply permissions in the same call. Before this, permissionIds sent on create were
+        // silently dropped and the caller had to issue a second PUT to make the role usable.
+        if (request.getPermissionIds() != null && !request.getPermissionIds().isEmpty()) {
+            applyPermissions(role, firmId, request.getPermissionIds(), adminId);
+        }
 
         auditService.log(
                 AuditAction.ROLE_CREATED,

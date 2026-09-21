@@ -92,17 +92,17 @@ public class UserManagementController {
     @Operation(summary = UserManagementConstants.GET_ACTIVITY_SUMMARY, description = UserManagementConstants.GET_ACTIVITY_DESCRIPTION)
     public ResponseEntity<ApiResponse<List<UserProfileResponse.ActivityEntry>>> getUserActivity(
             @PathVariable UUID userId,
-            // permissionEvaluator.require("USER_MANAGEMENT:VIEW") — already checked at list/search level
+            // NOTE: the list/search checks do not cover this route — a caller reaching it
+            // directly (URL/deep-link) would otherwise read any user's activity by UUID.
             @RequestParam(required = false)
                 @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false)
                 @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "0") int page,            @RequestParam(defaultValue = "20") int size) {
+        permissionEvaluator.require("USER_MANAGEMENT:VIEW");
         return responseHandler.ok(
                 userManagementService.getUserActivity(userId, from, to, page, size),
-                "User activity fetched"
-        );
+                "User activity fetched");
     }
 
     @PostMapping("/{userId}/reset-password")

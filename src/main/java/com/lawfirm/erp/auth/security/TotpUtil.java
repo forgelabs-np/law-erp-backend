@@ -1,5 +1,6 @@
 package com.lawfirm.erp.auth.security;
 
+import com.lawfirm.erp.common.service.SystemConfigService;
 import org.apache.commons.codec.binary.Base32;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -25,7 +26,10 @@ import java.time.Instant;
  *
  * ADD TO application.properties:
  *   app.name=NepalCRM
- *   app.production=false    ← flip to true in prod
+ *   app.production=false    ← boot fallback only
+ *
+ * Production mode is DB-driven via the GLOBAL APP_PRODUCTION key; application.yml is
+ * only the fallback for an unseeded database.
  */
 @Component
 public class TotpUtil {
@@ -36,11 +40,17 @@ public class TotpUtil {
     private static final String HMAC_ALGORITHM = "HmacSHA1";
     private static final String DEV_BYPASS_CODE = "123456";
 
-    @Value("${app.name:NepalCRM}")
-    private String appName;
+    private final SystemConfigService systemConfigService;
+    private final String appName;
+    private final boolean ymlProduction;
 
-    @Value("${app.production:false}")
-    private boolean isProduction;
+    public TotpUtil(SystemConfigService systemConfigService,
+                    @Value("${app.name:NepalCRM}") String appName,
+                    @Value("${app.production:false}") boolean ymlProduction) {
+        this.systemConfigService = systemConfigService;
+        this.appName = appName;
+        this.ymlProduction = ymlProduction;
+    }
 
     /**
      * Generate a new random TOTP secret.
@@ -86,7 +96,7 @@ public class TotpUtil {
     /**
      * Verify a TOTP code against a stored secret.
      *
-     * DEV mode (app.production=false): "123456" always passes.
+     * DEV mode (APP_PRODUCTION / app.production off): "123456" always passes.
      * PROD mode: validates RFC 6238 TOTP with ±30s clock drift tolerance.
      *
      * @param secret the Base32 secret from User.mfaSecret
@@ -96,7 +106,7 @@ public class TotpUtil {
         if (code == null || code.isBlank()) return false;
 
         // Dev bypass — never in production
-        if (!isProduction && DEV_BYPASS_CODE.equals(code.trim())) {
+        if (!isProduction() && DEV_BYPASS_CODE.equals(code.trim())) {
             return true;
         }
 
@@ -115,8 +125,13 @@ public class TotpUtil {
         return false;
     }
 
+    /** GLOBAL APP_PRODUCTION (Y/N) from the DB, with application.yml as fallback. */
+    public boolean isProduction() {
+        return systemConfigService.productionFlag().orElse(ymlProduction);
+    }
+
     public boolean isProductionMode() {
-        return isProduction;
+        return isProduction();
     }
 
     // ── Private ───────────────────────────────────────────────────────────

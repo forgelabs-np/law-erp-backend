@@ -95,6 +95,7 @@ public class DataInitializer implements CommandLineRunner {
         }
         createSystemRoles();
         createModulesAndPermissions();
+        seedConfigurationSubModules();
         assignPermissionsToRoles();
         seedDefaultRenewalTypes();
         seedModulesForSystemFirm(systemFirm);
@@ -229,6 +230,8 @@ public class DataInitializer implements CommandLineRunner {
                 {"DASHBOARD_MANAGEMENT", "Dashboard", "View dashboards and aggregated stats", 16, 160, "LayoutDashboardIcon", "/dashboard",
                         new PermissionAction[]{}},
                 {"NOTIFICATION_MANAGEMENT", "Notifications", "Manage notification settings and templates", 17, 170, "BellIcon", "/notifications",
+                        new PermissionAction[]{}},
+                {"CONFIGURATION", "Configuration", "Platform and firm settings management", 18, 180, "SettingsIcon", "/settings",
                         new PermissionAction[]{}}
         };
 
@@ -323,6 +326,9 @@ public class DataInitializer implements CommandLineRunner {
                 {"USER_MANAGEMENT",        FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
                 {"DASHBOARD_MANAGEMENT",   FULL, FULL, READ_ONLY, READ_ONLY, NO_ACCESS},
                 {"NOTIFICATION_MANAGEMENT", FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+                {"CONFIGURATION", FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+                {"GLOBAL_CONFIG", FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+                {"FIRM_CONFIG", FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
         };
 
         String[] roleCodes = {RoleCode.SUPER_ADMIN, RoleCode.FIRM_ADMIN, RoleCode.ADVOCATE, RoleCode.PARALEGAL, RoleCode.CLIENT};
@@ -404,6 +410,85 @@ public class DataInitializer implements CommandLineRunner {
                         .build();
                 firmModuleRepository.save(fm);
                 log.info("  + FirmModule (SYSTEM): {} enabled", module.getCode());
+            }
+        }
+    }
+
+    // ========================================================================
+    // CONFIGURATION sub-modules (GLOBAL_CONFIG, FIRM_CONFIG)
+    // ========================================================================
+    private void seedConfigurationSubModules() {
+        Module configParent = moduleRepository.findByCode("CONFIGURATION")
+                .orElseThrow(() -> new IllegalStateException("CONFIGURATION module not found"));
+
+        // Sub-module definitions: { code, name, description, sortOrder, icon, path, extraActions[] }
+        Object[][] subModuleDefs = {
+                {"GLOBAL_CONFIG", "Global Configuration", "Platform-wide settings (SMTP, MFA, trial, app)", 1, "GlobeIcon", "/settings/global",
+                        new PermissionAction[]{}},
+                {"FIRM_CONFIG", "Firm Configuration", "Per-firm brand, email footer, timezone settings", 2, "BuildingIcon", "/settings/firm",
+                        new PermissionAction[]{}}
+        };
+
+        PermissionAction[] configActions = {
+                PermissionAction.ACCESS,
+                PermissionAction.VIEW,
+                PermissionAction.EDIT,
+                PermissionAction.DELETE
+        };
+
+        for (Object[] def : subModuleDefs) {
+            String moduleCode = (String) def[0];
+
+            Module subModule = moduleRepository.findByCode(moduleCode).orElseGet(() -> {
+                Module m = new Module();
+                m.setCode(moduleCode);
+                m.setName((String) def[1]);
+                m.setDescription((String) def[2]);
+                m.setDisplayOrder(configParent.getDisplayOrder());
+                m.setSortOrder(configParent.getSortOrder() + (Integer) def[3]);
+                m.setIcon((String) def[4]);
+                m.setPath((String) def[5]);
+                m.setParent(configParent);
+                m.setLevel(1);
+                m.setIsSystem(true);
+                m.setActive(true);
+                Module saved = moduleRepository.save(m);
+                log.info("  + Sub-module: {} (parent: CONFIGURATION)", moduleCode);
+                return saved;
+            });
+
+            for (PermissionAction action : configActions) {
+                String permCode = moduleCode + ":" + action.name();
+
+                Permission perm = permissionRepository.findByCode(permCode).orElseGet(() -> {
+                    try {
+                        Permission p = new Permission();
+                        p.setCode(permCode);
+                        p.setAction(action);
+                        p.setScope(PermissionScope.TENANT);
+                        p.setModuleCode(moduleCode);
+                        p.setDescription((String) def[1] + " - " + action.name());
+                        p.setActive(true);
+                        Permission saved = permissionRepository.save(p);
+                        log.info("    + Permission: {}", permCode);
+                        return saved;
+                    } catch (Exception e) {
+                        log.warn("    ! Could not create permission {} (run DB migration first): {}", permCode, e.getMessage());
+                        return null;
+                    }
+                });
+
+                if (perm != null) {
+                    List<Permission> existingForModule = modulePermissionRepository.findPermissionsByModuleId(subModule.getId());
+                    boolean alreadyLinked = existingForModule.stream().anyMatch(p -> p.getId().equals(perm.getId()));
+                    if (!alreadyLinked) {
+                        ModulePermission mp = ModulePermission.builder()
+                                .module(subModule)
+                                .permission(perm)
+                                .build();
+                        modulePermissionRepository.save(mp);
+                    }
+                }
             }
         }
     }

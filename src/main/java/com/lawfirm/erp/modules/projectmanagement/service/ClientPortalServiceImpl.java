@@ -2,8 +2,11 @@ package com.lawfirm.erp.modules.projectmanagement.service;
 
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import com.lawfirm.erp.common.constant.ProjectManagementConstants;
+import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
+import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.modules.projectmanagement.dto.response.ClientProjectResponse;
 import com.lawfirm.erp.modules.projectmanagement.dto.response.RenewalInstanceResponse;
 import com.lawfirm.erp.modules.projectmanagement.entity.Project;
@@ -31,9 +34,26 @@ public class ClientPortalServiceImpl implements ClientPortalService {
     private final RenewalInstanceRepository instanceRepository;
     private final CurrentUserResolver currentUserResolver;
     private final ProjectMapper projectMapper;
+    private final UserRepository userRepository;
+
+    /**
+     * The portal is only reachable by an enabled client account. The login path
+     * already enforces this; re-checking here means a live session that outlived
+     * a portal-access revocation is still refused on its very next call.
+     */
+    private UUID requirePortalAccess() {
+        UUID clientId = currentUserResolver.getCurrentUserId();
+        User user = clientId == null ? null : userRepository.findById(clientId).orElse(null);
+        if (user == null || user.getUserType() != UserType.CLIENT
+                || !Boolean.TRUE.equals(user.getPortalAccessEnabled())) {
+            throw new ForbiddenException(
+                    "Client portal access is disabled for your account. Please contact your firm.");
+        }
+        return clientId;
+    }
 
     public List<ClientProjectResponse> listMyProjects() {
-        UUID clientId = currentUserResolver.getCurrentUserId();
+        UUID clientId = requirePortalAccess();
         List<Project> projects = projectRepository.findByClientUserIdAndActive(clientId, true);
 
         return projects.stream()
@@ -45,14 +65,14 @@ public class ClientPortalServiceImpl implements ClientPortalService {
     }
 
     public ClientProjectResponse getProject(String projectCode) {
-        UUID clientId = currentUserResolver.getCurrentUserId();
+        UUID clientId = requirePortalAccess();
         Project project = findByClientAndCode(clientId, projectCode);
         List<RenewalInstance> upcoming = getUpcomingInstances(project.getId());
         return projectMapper.toClientProjectResponse(project, upcoming);
     }
 
     public List<RenewalInstanceResponse> listMyRenewals(String projectCode) {
-        UUID clientId = currentUserResolver.getCurrentUserId();
+        UUID clientId = requirePortalAccess();
         Project project = findByClientAndCode(clientId, projectCode);
 
         List<Renewal> renewals = renewalRepository.findByProjectIdAndActive(project.getId(), true);

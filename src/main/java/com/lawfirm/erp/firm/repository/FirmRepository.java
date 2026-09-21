@@ -21,6 +21,23 @@ public interface FirmRepository extends JpaRepository<Firm, UUID> {
     /** Find all trial firms. */
     List<Firm> findByIsTrialTrue();
 
+    /** Count firms on trial. */
+    @Query("SELECT COUNT(f) FROM Firm f WHERE f.isTrial = true")
+    long countByIsTrialTrue();
+
+    /** Count trial firms whose expiry window overlaps [from, to). */
+    @Query("SELECT COUNT(f) FROM Firm f WHERE f.isTrial = true " +
+           "AND f.trialExpiresAt >= :from AND f.trialExpiresAt < :to")
+    long countTrialExpiringBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /** Count trial firms that expired before the given instant. */
+    @Query("SELECT COUNT(f) FROM Firm f WHERE f.isTrial = true AND f.trialExpiresAt < :before")
+    long countTrialExpiredBefore(@Param("before") LocalDateTime before);
+
+    /** Just the lifecycle status — read per request to enforce firm suspension without loading the firm. */
+    @Query("SELECT f.status FROM Firm f WHERE f.id = :id")
+    com.lawfirm.erp.common.enums.FirmStatus findStatusById(@Param("id") UUID id);
+
     /** Count firms that have at least one FIRM_ADMIN user — only these should be counted as 'real' firms. */
     @Query("SELECT COUNT(DISTINCT u.firm.id) FROM User u WHERE u.userType = 'FIRM' AND u.firm IS NOT NULL")
     long countFirmsWithFirmAdmin();

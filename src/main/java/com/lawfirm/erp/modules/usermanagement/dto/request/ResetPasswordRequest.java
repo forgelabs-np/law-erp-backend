@@ -7,6 +7,6 @@ import lombok.Data;
 @Data
 public class ResetPasswordRequest {
     @NotBlank(message = "New password is required")
-    @Size(min = 6, max = 50, message = "Password must be 6-50 characters")
+    @Size(min = 8, max = 50, message = "Password must be 8-50 characters")
     private String newPassword;
 }

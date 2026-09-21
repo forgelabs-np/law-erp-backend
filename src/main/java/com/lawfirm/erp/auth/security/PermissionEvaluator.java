@@ -4,6 +4,9 @@ import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.repository.FirmModuleRepository;
+import com.lawfirm.erp.firm.service.ModuleAccessResolver;
+import com.lawfirm.erp.rbac.entity.Module;
+import com.lawfirm.erp.rbac.repository.ModuleRepository;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +42,7 @@ public class PermissionEvaluator {
     private final UserRepository userRepository;
     private final RolePermissionRepository rolePermissionRepository;
     private final FirmModuleRepository firmModuleRepository;
+    private final ModuleRepository moduleRepository;
     private final CurrentUserResolver currentUserResolver;
 
     /** Cache entry holding permissions and the timestamp when they were loaded. */
@@ -133,8 +137,21 @@ public class PermissionEvaluator {
         return null;
     }
 
+    /**
+     * Module access, with sub-modules inheriting their parent's toggle — the same rule
+     * /me and the enable endpoint use. Without it a sub-module shows up in the sidebar
+     * but every API call behind it 403s unless the firm enabled it separately.
+     */
     public boolean hasModuleAccess(UUID firmId, String moduleCode) {
-        return firmModuleRepository.existsByFirmIdAndModuleCodeAndIsEnabledTrue(firmId, moduleCode);
+        if (firmId == null || moduleCode == null) {
+            return false;
+        }
+        Module module = moduleRepository.findByCode(moduleCode).orElse(null);
+        if (module == null) {
+            return false;
+        }
+        return ModuleAccessResolver.isEnabled(module,
+                ModuleAccessResolver.indexByModuleId(firmModuleRepository.findByFirmId(firmId)));
     }
 
     public void requireModuleAccess(String moduleCode) {

@@ -1,5 +1,6 @@
 package com.lawfirm.erp.firm.controller;
 
+import com.lawfirm.erp.common.annotation.RequiresModule;
 import com.lawfirm.erp.common.constant.FirmConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
+@RequiresModule("CLIENT_MANAGEMENT")
 @RequestMapping("/api/v1/firm/clients")
 @RequiredArgsConstructor
 @Tag(name = "Client Management", description = "Firm client management APIs")

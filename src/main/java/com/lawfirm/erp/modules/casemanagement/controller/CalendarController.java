@@ -1,6 +1,7 @@
 package com.lawfirm.erp.modules.casemanagement.controller;
 
 import com.lawfirm.erp.auth.security.PermissionEvaluator;
+import com.lawfirm.erp.common.annotation.RequiresModule;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ForbiddenException;
@@ -24,6 +25,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
+@RequiresModule("CALENDAR")
 @RequestMapping("/api/v1/firm/calendar")
 @RequiredArgsConstructor
 @Tag(name = "Calendar", description = "Court calendar — CourtEvents (Tarik/Peshi) as the source of truth")

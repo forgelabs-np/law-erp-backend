@@ -7,13 +7,12 @@ import org.hibernate.annotations.UuidGenerator;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/** DB-backed key-value store. GLOBAL or FIRM scoped. Sensitive values AES-256 encrypted. */
+/** DB-backed GLOBAL (platform) key/value store. Per-firm values live in {@link FirmConfig}. */
 @Entity
 @Table(
         name = "system_config",
         uniqueConstraints = {
-                @UniqueConstraint(columnNames = {"scope", "firm_id", "config_key"},
-                        name = "uq_system_config_scope_firm_key")
+                @UniqueConstraint(columnNames = {"config_key"}, name = "uq_system_config_key")
         }
 )
 @Getter
@@ -28,20 +27,11 @@ public class SystemConfig {
     @Column(updatable = false, nullable = false)
     private UUID id;
 
-    /** GLOBAL or FIRM. GLOBAL values have firmId = null. */
-    @Enumerated(EnumType.STRING)
-    @Column(name = "scope", nullable = false, length = 10)
-    private ConfigScope scope;
-
-    /** Null for GLOBAL scope. Set to firm's UUID for FIRM scope. */
-    @Column(name = "firm_id")
-    private UUID firmId;
-
     /** Config key, e.g. SMTP_HOST or MFA_ENABLED. */
     @Column(name = "config_key", nullable = false, length = 50)
     private String configKey;
 
-    /** Plaintext or AES-256 encrypted depending on encrypted flag. */
+    /** Plaintext or AES-256 encrypted depending on the encrypted flag. */
     @Column(name = "config_value", columnDefinition = "TEXT")
     private String configValue;
 
@@ -50,7 +40,7 @@ public class SystemConfig {
     @Column(name = "encrypted", columnDefinition = "BOOLEAN DEFAULT FALSE")
     private boolean encrypted = false;
 
-    /** SETTINGS submodule grouping, e.g. APP, SECURITY, EMAIL, BRAND. */
+    /** SETTINGS submodule grouping, e.g. APP, SECURITY, EMAIL. */
     @Column(name = "config_group", length = 50)
     private String configGroup;
 
@@ -106,10 +96,5 @@ public class SystemConfig {
     /** Null-safe allowEdit check. */
     public boolean isAllowEdit() {
         return !Boolean.FALSE.equals(allowEdit);
-    }
-
-    public enum ConfigScope {
-        GLOBAL,
-        FIRM
     }
 }

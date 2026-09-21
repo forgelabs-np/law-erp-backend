@@ -1,6 +1,7 @@
 package com.lawfirm.erp.modules.email.service;
 
 import com.lawfirm.erp.common.entity.SystemConfig;
+import com.lawfirm.erp.common.service.FirmConfigService;
 import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.firm.entity.FirmEmailConfig;
 import com.lawfirm.erp.firm.service.FirmEmailConfigService;
@@ -36,6 +37,7 @@ import java.util.UUID;
 public class EmailServiceImpl implements EmailService {
 
     private final SystemConfigService systemConfigService;
+    private final FirmConfigService firmConfigService;
     private final FirmEmailConfigService firmEmailConfigService;
     private final AuditService auditService;
     private final TemplateEngine templateEngine;
@@ -46,10 +48,10 @@ public class EmailServiceImpl implements EmailService {
     @Async
     public void sendWelcomeEmployee(UUID firmId, UUID triggeredByUserId, String toEmail, String fullName,
                                     String username, String tempPassword, String firmName, String firmCode) {
-        Map<String, String> cfg = systemConfigService.getEffectiveConfig(firmId);
-        String primaryColor = cfg.getOrDefault(SystemConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
-        String footer = cfg.getOrDefault(SystemConfigService.KEY_EMAIL_FOOTER_TEXT, "");
-        String loginUrl = cfg.getOrDefault("LOGIN_URL", "https://app.nepalcrm.com/login");
+        Map<String, String> cfg = firmConfigService.getEffectiveConfig(firmId);
+        String primaryColor = cfg.getOrDefault(FirmConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
+        String footer = cfg.getOrDefault(FirmConfigService.KEY_EMAIL_FOOTER_TEXT, "");
+        String loginUrl = systemConfigService.loginUrl();
         String appName = cfg.getOrDefault(SystemConfigService.KEY_APP_NAME, "NepalCRM");
 
         String subject = "Your account at " + firmName + " has been created";
@@ -73,10 +75,10 @@ public class EmailServiceImpl implements EmailService {
     @Async
     public void sendWelcomeClient(UUID firmId, UUID triggeredByUserId, String toEmail, String fullName,
                                   String username, String tempPassword, String firmName) {
-        Map<String, String> cfg = systemConfigService.getEffectiveConfig(firmId);
-        String primaryColor = cfg.getOrDefault(SystemConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
-        String footer = cfg.getOrDefault(SystemConfigService.KEY_EMAIL_FOOTER_TEXT, "");
-        String loginUrl = cfg.getOrDefault("CLIENT_PORTAL_URL", "https://app.nepalcrm.com/portal");
+        Map<String, String> cfg = firmConfigService.getEffectiveConfig(firmId);
+        String primaryColor = cfg.getOrDefault(FirmConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
+        String footer = cfg.getOrDefault(FirmConfigService.KEY_EMAIL_FOOTER_TEXT, "");
+        String loginUrl = systemConfigService.clientPortalUrl();
 
         String subject = "Welcome to " + firmName + " Client Portal";
 
@@ -97,7 +99,7 @@ public class EmailServiceImpl implements EmailService {
     @Async
     public void sendWelcomeFirmAdmin(UUID firmId, UUID triggeredByUserId, String toEmail, String fullName,
                                      String username, String tempPassword, String firmName, String firmCode) {
-        String loginUrl = "https://app.nepalcrm.com/login";
+        String loginUrl = systemConfigService.loginUrl();
 
         Context ctx = new Context();
         ctx.setVariable("firmName", firmName);
@@ -115,22 +117,49 @@ public class EmailServiceImpl implements EmailService {
     @Async
     public void sendPasswordReset(UUID firmId, UUID triggeredByUserId, String toEmail, String fullName,
                                   String tempPassword, String firmName) {
-        Map<String, String> cfg = systemConfigService.getEffectiveConfig(firmId);
-        String primaryColor = cfg.getOrDefault(SystemConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
-        String footer = cfg.getOrDefault(SystemConfigService.KEY_EMAIL_FOOTER_TEXT, "");
-        String loginUrl = cfg.getOrDefault("LOGIN_URL", "https://app.nepalcrm.com/login");
+        Map<String, String> cfg = firmConfigService.getEffectiveConfig(firmId);
+        String primaryColor = cfg.getOrDefault(FirmConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
+        String footer = cfg.getOrDefault(FirmConfigService.KEY_EMAIL_FOOTER_TEXT, "");
+        String loginUrl = systemConfigService.loginUrl();
 
         String subject = "Password reset for " + firmName;
 
+        // The temporary password is NOT put in the e-mail: the admin who set it passes it
+        // on out of band, and the user is forced to rotate it on first login. Everything
+        // the recipient needs here is the login link.
         Context ctx = new Context();
         ctx.setVariable("firmName", firmName);
         ctx.setVariable("fullName", fullName);
-        ctx.setVariable("tempPassword", tempPassword);
         ctx.setVariable("loginUrl", loginUrl);
         ctx.setVariable("primaryColor", primaryColor);
         ctx.setVariable("emailFooter", footer);
 
-        sendHtmlEmail(firmId, triggeredByUserId, toEmail, subject, "email/password-reset", ctx,
+        sendHtmlEmail(firmId, triggeredByUserId, toEmail, subject, "email/password-reset-notice", ctx,
+                fullName, AuditEntity.USER);
+    }
+
+    @Override
+    @Async
+    public void sendPasswordResetLink(UUID firmId, UUID triggeredByUserId, String toEmail, String fullName,
+                                      String resetToken, int validMinutes, String firmName) {
+        Map<String, String> cfg = firmConfigService.getEffectiveConfig(firmId);
+        String primaryColor = cfg.getOrDefault(FirmConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
+        String footer = cfg.getOrDefault(FirmConfigService.KEY_EMAIL_FOOTER_TEXT, "");
+        String resetBase = cfg.getOrDefault("PASSWORD_RESET_URL",
+                cfg.getOrDefault("LOGIN_URL", "https://app.nepalcrm.com") + "/reset-password");
+        String resetUrl = resetBase + (resetBase.contains("?") ? "&" : "?") + "token=" + resetToken;
+
+        String subject = "Reset your " + firmName + " password";
+
+        Context ctx = new Context();
+        ctx.setVariable("firmName", firmName);
+        ctx.setVariable("fullName", fullName);
+        ctx.setVariable("resetUrl", resetUrl);
+        ctx.setVariable("validMinutes", validMinutes);
+        ctx.setVariable("primaryColor", primaryColor);
+        ctx.setVariable("emailFooter", footer);
+
+        sendHtmlEmail(firmId, triggeredByUserId, toEmail, subject, "email/password-reset-link", ctx,
                 fullName, AuditEntity.USER);
     }
 
@@ -140,11 +169,12 @@ public class EmailServiceImpl implements EmailService {
                                     HearingReminderDetails details,
                                     HearingReminderLog.RecipientType recipientType,
                                     UUID reminderLogId) {
-        Map<String, String> cfg = systemConfigService.getEffectiveConfig(firmId);
-        String primaryColor = cfg.getOrDefault(SystemConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
-        String footer = cfg.getOrDefault(SystemConfigService.KEY_EMAIL_FOOTER_TEXT, "");
-        String portalUrl = cfg.getOrDefault("CLIENT_PORTAL_URL", "https://app.nepalcrm.com/portal");
-        String loginUrl = cfg.getOrDefault("LOGIN_URL", "https://app.nepalcrm.com/login");
+        Map<String, String> cfg = firmConfigService.getEffectiveConfig(firmId);
+        String primaryColor = cfg.getOrDefault(FirmConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
+        String footer = cfg.getOrDefault(FirmConfigService.KEY_EMAIL_FOOTER_TEXT, "");
+        // GLOBAL-only read — a firm row must not be able to repoint these links.
+        String portalUrl = systemConfigService.clientPortalUrl();
+        String loginUrl = systemConfigService.loginUrl();
 
         String dateText = details.scheduledDate()
                 .format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy"));
@@ -223,10 +253,11 @@ public class EmailServiceImpl implements EmailService {
                     "Invoice email sent to " + toEmail + ": " + invoiceNumber, null);
 
         } catch (Exception e) {
-            log.error("INVOICE_EMAIL_FAILED: to={}, invoice={}, error={}", toEmail, invoiceNumber, e.getMessage());
+            log.error("INVOICE_EMAIL_FAILED: to={}, invoice={}, error={}",
+                    toEmail, invoiceNumber, rootCause(e), e);
             auditService.logExplicit(firmId, recipientUserId, "S",
                     AuditAction.EMAIL_FAILED, AuditEntity.INVOICE, null,
-                    "Invoice email failed to " + toEmail + ": " + e.getMessage(), null);
+                    "Invoice email failed to " + toEmail + ": " + rootCause(e), null);
         }
     }
 
@@ -234,10 +265,10 @@ public class EmailServiceImpl implements EmailService {
     public boolean sendNotificationEmail(UUID firmId, UUID recipientUserId, String toEmail,
                                          String subject,
                                          com.lawfirm.erp.modules.notification.entity.Notification notification) {
-        Map<String, String> cfg = systemConfigService.getEffectiveConfig(firmId);
-        String primaryColor = cfg.getOrDefault(SystemConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
-        String footer = cfg.getOrDefault(SystemConfigService.KEY_EMAIL_FOOTER_TEXT, "");
-        String loginUrl = cfg.getOrDefault("LOGIN_URL", "https://app.nepalcrm.com/login");
+        Map<String, String> cfg = firmConfigService.getEffectiveConfig(firmId);
+        String primaryColor = cfg.getOrDefault(FirmConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
+        String footer = cfg.getOrDefault(FirmConfigService.KEY_EMAIL_FOOTER_TEXT, "");
+        String loginUrl = systemConfigService.loginUrl();
 
         Context ctx = new Context();
         ctx.setVariable("title", notification.getTitle());
@@ -279,10 +310,10 @@ public class EmailServiceImpl implements EmailService {
 
         } catch (Exception e) {
             log.error("EMAIL_FAILED: to={}, subject={}, firmId={}, error={}",
-                    toEmail, subject, firmId, e.getMessage());
+                    toEmail, subject, firmId, rootCause(e), e);
             auditService.logExplicit(firmId, triggeredByUserId, "S",
                     AuditAction.EMAIL_FAILED, auditEntity, null,
-                    "Email failed to " + toEmail + ": " + e.getMessage(), null);
+                    "Email failed to " + toEmail + ": " + rootCause(e), null);
             return false;
         }
     }
@@ -343,6 +374,19 @@ public class EmailServiceImpl implements EmailService {
             return dbName.get();
         }
         return "NepalCRM Platform";
+    }
+
+    /**
+     * Deepest cause's message. JavaMail wraps the useful detail (e.g. "535-5.7.8 Username
+     * and Password not accepted") under a generic MailAuthenticationException message.
+     */
+    private static String rootCause(Throwable e) {
+        Throwable cause = e;
+        while (cause.getCause() != null && cause.getCause() != cause) {
+            cause = cause.getCause();
+        }
+        String message = cause.getMessage();
+        return message != null ? message : cause.getClass().getSimpleName();
     }
 
     private JavaMailSenderImpl createMailSender(String host, int port, String username,

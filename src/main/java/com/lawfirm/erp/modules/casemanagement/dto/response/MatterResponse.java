@@ -29,6 +29,12 @@ public class MatterResponse {
 
     private UUID assignedPartnerId;
 
+    /** The client this matter belongs to — null when the matter is not client-linked. */
+    private UUID clientUserId;
+
+    /** Denormalized client name for list rendering (survives client deletion). */
+    private String clientName;
+
     private CourtLevel originatingCourtLevel;
 
     private String description;

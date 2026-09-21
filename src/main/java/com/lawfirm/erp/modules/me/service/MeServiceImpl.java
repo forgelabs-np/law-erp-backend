@@ -6,10 +6,12 @@ import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.exception.UnauthorizedException;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.common.service.FirmConfigService;
 import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.FirmModule;
 import com.lawfirm.erp.firm.repository.FirmModuleRepository;
+import com.lawfirm.erp.firm.service.ModuleAccessResolver;
 import com.lawfirm.erp.modules.me.dto.MeResponse;
 import com.lawfirm.erp.modules.me.mapper.MeMapper;
 import com.lawfirm.erp.rbac.entity.Module;
@@ -35,6 +37,7 @@ public class MeServiceImpl implements MeService {
     private final ModuleRepository moduleRepository;
     private final CurrentUserResolver currentUserResolver;
     private final SystemConfigService systemConfigService;
+    private final FirmConfigService firmConfigService;
     private final MeMapper meMapper;
 
     @Override
@@ -124,13 +127,10 @@ public class MeServiceImpl implements MeService {
             }
         } while (promoted);
 
-        Set<String> enabledModuleCodes = new HashSet<>();
+        Map<UUID, FirmModule> firmModuleRows = Map.of();
         if (!superAdmin && user.getFirm() != null) {
-            enabledModuleCodes = firmModuleRepository.findByFirmIdWithModule(user.getFirm().getId()).stream()
-                    .filter(fm -> Boolean.TRUE.equals(fm.getIsEnabled()))
-                    .filter(fm -> fm.getExpiresAt() == null || fm.getExpiresAt().isAfter(LocalDateTime.now()))
-                    .map(fm -> fm.getModule().getCode())
-                    .collect(Collectors.toSet());
+            firmModuleRows = ModuleAccessResolver.indexByModuleId(
+                    firmModuleRepository.findByFirmIdWithModule(user.getFirm().getId()));
         }
 
         Map<String, MeResponse.ModuleAccess> accessByCode = new LinkedHashMap<>();
@@ -141,7 +141,7 @@ public class MeServiceImpl implements MeService {
                     .moduleName(m.getName())
                     .icon(m.getIcon())
                     .path(m.getPath())
-                    .enabled(superAdmin || enabledModuleCodes.contains(m.getCode()))
+                    .enabled(superAdmin || ModuleAccessResolver.isEnabled(m, firmModuleRows))
                     .actions(permsByModule.getOrDefault(m.getCode(), List.of()))
                     .subModules(new ArrayList<>())
                     .build());
@@ -156,9 +156,6 @@ public class MeServiceImpl implements MeService {
             MeResponse.ModuleAccess parentAccess = parent != null ? accessByCode.get(parent.getCode()) : null;
 
             if (parentAccess != null) {
-                if (parentAccess.isEnabled()) {
-                    access.setEnabled(true);
-                }
                 parentAccess.getSubModules().add(access);
             } else {
                 roots.add(access);
@@ -172,16 +169,16 @@ public class MeServiceImpl implements MeService {
         if (user.isSuperAdmin() || user.getFirm() == null) {
             return "#1A237E";
         }
-        return systemConfigService.getFirm(user.getFirm().getId(),
-                SystemConfigService.KEY_BRAND_COLOR_PRIMARY).orElse("#1A237E");
+        return firmConfigService.get(user.getFirm().getId(),
+                FirmConfigService.KEY_BRAND_COLOR_PRIMARY).orElse("#1A237E");
     }
 
     private String resolveBrandSecondary(User user) {
         if (user.isSuperAdmin() || user.getFirm() == null) {
             return "#E3F2FD";
         }
-        return systemConfigService.getFirm(user.getFirm().getId(),
-                SystemConfigService.KEY_BRAND_COLOR_SECONDARY).orElse("#E3F2FD");
+        return firmConfigService.get(user.getFirm().getId(),
+                FirmConfigService.KEY_BRAND_COLOR_SECONDARY).orElse("#E3F2FD");
     }
 
     private String resolveAppName() {

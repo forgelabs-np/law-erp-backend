@@ -1,6 +1,7 @@
 package com.lawfirm.erp.modules.notification.scheduler;
 
 import com.lawfirm.erp.common.enums.FirmStatus;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.notification.enums.NotificationType;
@@ -26,6 +27,7 @@ class TrialExpirySchedulerTest {
 
     @Mock FirmRepository firmRepository;
     @Mock NotificationOrchestrator notificationOrchestrator;
+    @Mock SystemConfigService systemConfigService;
     @InjectMocks TrialExpiryScheduler scheduler;
 
     private Firm trialFirm(UUID id, LocalDateTime expiresAt, FirmStatus status) {
@@ -44,6 +46,7 @@ class TrialExpirySchedulerTest {
         UUID id = UUID.randomUUID();
         Firm f = trialFirm(id, LocalDateTime.now().plusDays(3), FirmStatus.TRIAL);
         when(firmRepository.findByIsTrialTrue()).thenReturn(List.of(f));
+        when(systemConfigService.trialWarningDays()).thenReturn(3);
 
         scheduler.checkTrialExpiries();
 

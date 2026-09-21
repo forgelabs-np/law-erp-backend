@@ -1,6 +1,7 @@
 package com.lawfirm.erp.modules.casemanagement.controller;
 
 import com.lawfirm.erp.auth.security.PermissionEvaluator;
+import com.lawfirm.erp.common.annotation.RequiresModule;
 import com.lawfirm.erp.common.constant.CaseManagementConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
+@RequiresModule("CASE_MANAGEMENT")
 @RequestMapping("/api/v1/firm/matters")
 @RequiredArgsConstructor
 @Tag(name = "Matters", description = "The dispute as the firm tracks it — owns a chain of CourtCases")
@@ -55,12 +57,13 @@ public class MatterController {
     public ResponseEntity<ApiResponse<Page<MatterResponse>>> listMatters(
             @RequestParam(required = false) MatterType matterType,
             @RequestParam(required = false) MatterStatus status,
+            @RequestParam(required = false) UUID clientUserId,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
         return responseHandler.ok(
-                matterService.listMatters(matterType, status, search, page, size),
+                matterService.listMatters(matterType, status, clientUserId, search, page, size),
                 "Matters fetched successfully");
     }
 

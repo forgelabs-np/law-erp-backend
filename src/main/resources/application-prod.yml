@@ -40,12 +40,11 @@ jwt:
   refresh-expiry: 604800000
   token-expiry: 86400000
 
-security:
-  max-login-attempts: 5
-
 super-admin:
   registration-secret: ${SUPER_ADMIN_REGISTRATION_SECRET}
 
+# Boot fallback only — the GLOBAL APP_PRODUCTION config key wins once the DB is seeded.
+# Keep this true so the MFA bypass stays off even on a database that was never seeded.
 app:
   name: ${APP_NAME:Tarikh}
   production: true

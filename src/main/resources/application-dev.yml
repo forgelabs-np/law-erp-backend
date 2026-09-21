@@ -29,8 +29,8 @@ spring:
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
-    username: ${MAIL_USER:noreply@nepalcrm.com}
-    password: ${MAIL_PASS:}
+    username: ${MAIL_USER:tryaac1ss@gmail.com} to d
+    password: ${MAIL_PASS:acxf frwi bjfo ibas}
     properties:
       mail:
         smtp:
@@ -44,12 +44,11 @@ jwt:
   refresh-expiry: 604800000
   token-expiry: 86400000
 
-security:
-  max-login-attempts: 5
-
 super-admin:
   registration-secret: "cdae9adca9e7cb0ab2afb82e2a2a74b7"
 
+# Boot fallback only — the GLOBAL APP_PRODUCTION config key wins once the DB is seeded.
+# Letting this yml value win in dev would re-enable the TotpUtil "123456" MFA bypass.
 app:
   name: Tarikh
   production: false

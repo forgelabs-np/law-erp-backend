@@ -13,6 +13,7 @@ import com.lawfirm.erp.dto.firm.request.CreateClientRequest;
 import com.lawfirm.erp.dto.firm.response.ClientResponse;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
 import com.lawfirm.erp.modules.email.service.EmailService;
@@ -43,6 +44,7 @@ public class ClientServiceImpl implements ClientService {
     private final UserRepository userRepository;
     private final FirmRepository firmRepository;
     private final RoleRepository roleRepository;
+    private final PermissionEvaluator permissionEvaluator;
     private final UserRoleRepository userRoleRepository;
     private final PasswordEncoder passwordEncoder;
     private final CurrentUserResolver currentUserResolver;
@@ -150,6 +152,14 @@ public class ClientServiceImpl implements ClientService {
         boolean oldValue = user.getPortalAccessEnabled() != null && user.getPortalAccessEnabled();
         user.setPortalAccessEnabled(portalAccessEnabled);
         user = userRepository.save(user);
+
+        // Revoke the client's live sessions: the JWT filter rejects a token whose
+        // permissionVersion no longer matches the row, so turning the portal off
+        // (or back on) takes effect immediately instead of after token expiry.
+        if (oldValue != Boolean.TRUE.equals(portalAccessEnabled)) {
+            userRepository.incrementPermissionVersion(user.getId());
+            permissionEvaluator.clearUserCache(user.getId());
+        }
 
         auditService.log(
                 portalAccessEnabled ? AuditAction.CLIENT_PORTAL_ENABLED : AuditAction.CLIENT_PORTAL_DISABLED,

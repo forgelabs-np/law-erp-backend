@@ -1,5 +1,7 @@
 package com.lawfirm.erp.common.service;
 
+import com.lawfirm.erp.common.config.ConfigKeyRegistry;
+import com.lawfirm.erp.common.config.ConfigKeyRegistry.SettingDef;
 import com.lawfirm.erp.common.dto.SystemConfigSettingView;
 import com.lawfirm.erp.common.entity.SystemConfig;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
@@ -7,20 +9,28 @@ import com.lawfirm.erp.common.repository.SystemConfigRepository;
 import com.lawfirm.erp.common.util.ConfigEncryptionUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.*;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Manages the system_config key-value store. GLOBAL or FIRM scope.
+ * GLOBAL (platform-wide) settings. Values live in {@code system_config} and are read from
+ * the DB every time they are needed, so a Super Admin change takes effect on the next
+ * request without a rebuild. Per-firm values live in {@link FirmConfigService}.
  *
- * Rows carry settings metadata (config group, input type, allowed values, active,
- * allow-edit) so the admin SETTINGS UI can render and validate each key, and so
- * runtime behavior (MFA policy, SMTP, branding) can be changed from the DB without
- * a rebuild. Sensitive (PASSWORD-type) values are AES-256 encrypted at rest and
- * decrypted for admins on read.
+ * Sensitive (PASSWORD-type) values are AES-256 encrypted at rest and decrypted for admins.
  */
 @Service
 @RequiredArgsConstructor
@@ -30,9 +40,9 @@ public class SystemConfigService {
     private final SystemConfigRepository systemConfigRepository;
     private final ConfigEncryptionUtil configEncryptionUtil;
 
-    // ========================================================================
-    // Known keys
-    // ========================================================================
+    /** application.yml app.production — seed default for APP_PRODUCTION only. */
+    @Value("${app.production:false}")
+    private boolean appProductionFallback;
 
     // GLOBAL scope keys
     public static final String KEY_SMTP_HOST = "SMTP_HOST";
@@ -43,151 +53,43 @@ public class SystemConfigService {
     public static final String KEY_SMTP_FROM_ADDRESS = "SMTP_FROM_ADDRESS";
     public static final String KEY_APP_PRODUCTION = "APP_PRODUCTION";
     public static final String KEY_APP_NAME = "APP_NAME";
-
-    // SECURITY group keys
+    public static final String KEY_LOGIN_URL = "LOGIN_URL";
+    public static final String KEY_CLIENT_PORTAL_URL = "CLIENT_PORTAL_URL";
     public static final String KEY_MFA_ENABLED = "MFA_ENABLED";
     public static final String KEY_MFA_REQUIRED_ROLES = "MFA_REQUIRED_ROLES";
     public static final String KEY_REGISTRATION_SECRET = "REGISTRATION_SECRET";
+    public static final String KEY_LOGIN_MAX_ATTEMPTS = "LOGIN_MAX_ATTEMPTS";
+    public static final String KEY_LOGIN_LOCK_MINUTES = "LOGIN_LOCK_MINUTES";
+    public static final String KEY_TRIAL_DEFAULT_DAYS = "TRIAL_DEFAULT_DAYS";
+    public static final String KEY_TRIAL_WARNING_DAYS = "TRIAL_WARNING_DAYS";
+    public static final String KEY_NOTIFICATION_MAX_ATTEMPTS = "NOTIFICATION_MAX_ATTEMPTS";
 
-    // FIRM scope keys
-    public static final String KEY_BRAND_COLOR_PRIMARY = "BRAND_COLOR_PRIMARY";
-    public static final String KEY_BRAND_COLOR_SECONDARY = "BRAND_COLOR_SECONDARY";
-    public static final String KEY_EMAIL_FOOTER_TEXT = "EMAIL_FOOTER_TEXT";
-    public static final String KEY_EMAIL_SIGNATURE = "EMAIL_SIGNATURE";
-    public static final String KEY_TIMEZONE = "TIMEZONE";
-
-    // ========================================================================
-    // Settings registry — one place defining every known key: its group, input
-    // type, allowed values, whether the platform seeds a default on boot, and
-    // whether the value is locked after first set.
-    // ========================================================================
-
-    private static final String GROUP_APP = "APP";
-    private static final String GROUP_SECURITY = "SECURITY";
-    private static final String GROUP_EMAIL = "EMAIL";
-    private static final String GROUP_BRAND = "BRAND";
-
-    private static final List<SettingDef> REGISTRY = List.of(
-            // ── APP (GLOBAL) ────────────────────────────────────────────────
-            SettingDef.def(SystemConfig.ConfigScope.GLOBAL, KEY_APP_NAME, GROUP_APP, "TEXT", null,
-                    "NepalCRM", true, "Platform display name", true),
-            SettingDef.def(SystemConfig.ConfigScope.GLOBAL, KEY_APP_PRODUCTION, GROUP_APP, "RADIO", "Y,N",
-                    "N", true, "Production mode (Y/N)", true),
-
-            // ── SECURITY (GLOBAL) ───────────────────────────────────────────
-            SettingDef.def(SystemConfig.ConfigScope.GLOBAL, KEY_MFA_ENABLED, GROUP_SECURITY, "RADIO", "Y,N",
-                    "Y", true, "Enable or disable MFA enforcement for required roles", true),
-            SettingDef.def(SystemConfig.ConfigScope.GLOBAL, KEY_MFA_REQUIRED_ROLES, GROUP_SECURITY, "TEXT", null,
-                    "SUPER_ADMIN,FIRM_ADMIN", true,
-                    "Comma-separated roles that must have MFA enabled", true),
-            SettingDef.def(SystemConfig.ConfigScope.GLOBAL, KEY_REGISTRATION_SECRET, GROUP_SECURITY, "PASSWORD", null,
-                    "", false, "Secret required to register the first super admin. Leave empty to keep registration disabled.", true),
-
-            // ── EMAIL (GLOBAL, metadata only — no boot seed so empty SMTP keys never shadow yml fallback)
-            SettingDef.def(SystemConfig.ConfigScope.GLOBAL, KEY_SMTP_HOST, GROUP_EMAIL, "TEXT", null,
-                    null, true, "SMTP host", false),
-            SettingDef.def(SystemConfig.ConfigScope.GLOBAL, KEY_SMTP_PORT, GROUP_EMAIL, "NUMBER", null,
-                    null, true, "SMTP port", false),
-            SettingDef.def(SystemConfig.ConfigScope.GLOBAL, KEY_SMTP_USERNAME, GROUP_EMAIL, "TEXT", null,
-                    null, true, "SMTP username", false),
-            SettingDef.def(SystemConfig.ConfigScope.GLOBAL, KEY_SMTP_PASSWORD, GROUP_EMAIL, "PASSWORD", null,
-                    null, true, "SMTP password", false),
-            SettingDef.def(SystemConfig.ConfigScope.GLOBAL, KEY_SMTP_FROM_NAME, GROUP_EMAIL, "TEXT", null,
-                    null, true, "From name used on outgoing email", false),
-            SettingDef.def(SystemConfig.ConfigScope.GLOBAL, KEY_SMTP_FROM_ADDRESS, GROUP_EMAIL, "TEXT", null,
-                    null, true, "From address used on outgoing email", false),
-
-            // ── BRAND (FIRM scope, metadata only — firms brand themselves)
-            SettingDef.def(SystemConfig.ConfigScope.FIRM, KEY_BRAND_COLOR_PRIMARY, GROUP_BRAND, "TEXT", null,
-                    null, true, "Primary brand color (hex)", false),
-            SettingDef.def(SystemConfig.ConfigScope.FIRM, KEY_BRAND_COLOR_SECONDARY, GROUP_BRAND, "TEXT", null,
-                    null, true, "Secondary brand color (hex)", false),
-            SettingDef.def(SystemConfig.ConfigScope.FIRM, KEY_EMAIL_FOOTER_TEXT, GROUP_BRAND, "TEXT", null,
-                    null, true, "Email footer text", false),
-            SettingDef.def(SystemConfig.ConfigScope.FIRM, KEY_EMAIL_SIGNATURE, GROUP_BRAND, "TEXT", null,
-                    null, true, "Email signature", false),
-            SettingDef.def(SystemConfig.ConfigScope.FIRM, KEY_TIMEZONE, GROUP_BRAND, "TEXT", null,
-                    null, true, "Firm timezone", false)
-    );
+    /** Fallbacks, mirrored as registry defaults. */
+    public static final String DEFAULT_LOGIN_URL = "https://app.nepalcrm.com/login";
+    public static final String DEFAULT_CLIENT_PORTAL_URL = "https://app.nepalcrm.com/portal";
 
     // ========================================================================
-    // GLOBAL scope operations
+    // Reads
     // ========================================================================
 
     public Optional<String> getGlobal(String key) {
-        return getDecrypted(SystemConfig.ConfigScope.GLOBAL, null, key);
-    }
-
-    public Optional<String> getGlobalRaw(String key) {
-        return systemConfigRepository.findByScopeAndConfigKey(SystemConfig.ConfigScope.GLOBAL, key)
-                .map(SystemConfig::getConfigValue);
+        return systemConfigRepository.findByConfigKey(key)
+                .filter(SystemConfig::isActive)
+                .map(this::decryptIfNeeded);
     }
 
     public Map<String, String> getAllGlobal() {
-        return systemConfigRepository.findByScope(SystemConfig.ConfigScope.GLOBAL)
-                .stream()
-                .filter(SystemConfig::isActive)
-                .collect(Collectors.toMap(
-                        SystemConfig::getConfigKey,
-                        this::decryptIfNeeded
-                ));
+        return toValueMap(systemConfigRepository.findAll());
     }
 
-    @Transactional
-    public SystemConfig setGlobal(String key, String value, String description) {
-        return setValue(SystemConfig.ConfigScope.GLOBAL, null, key, value, description);
-    }
-
-    @Transactional
-    public void deleteGlobal(String key) {
-        checkNotLocked(SystemConfig.ConfigScope.GLOBAL, null, key);
-        systemConfigRepository.deleteByScopeAndFirmIdAndConfigKey(
-                SystemConfig.ConfigScope.GLOBAL, null, key);
-        log.info("Deleted global config: {}", key);
+    /** All active GLOBAL settings with their metadata, sorted by group then key. */
+    public List<SystemConfigSettingView> getGlobalSettings() {
+        return toViews(systemConfigRepository.findAll());
     }
 
     // ========================================================================
-    // FIRM scope operations
+    // Writes
     // ========================================================================
-
-    public Optional<String> getFirm(UUID firmId, String key) {
-        return getDecrypted(SystemConfig.ConfigScope.FIRM, firmId, key);
-    }
-
-    public Map<String, String> getAllFirm(UUID firmId) {
-        return systemConfigRepository.findByScopeAndFirmId(SystemConfig.ConfigScope.FIRM, firmId)
-                .stream()
-                .filter(SystemConfig::isActive)
-                .collect(Collectors.toMap(
-                        SystemConfig::getConfigKey,
-                        this::decryptIfNeeded
-                ));
-    }
-
-    /** Merges FIRM-scoped values on top of GLOBAL defaults. */
-    public Map<String, String> getEffectiveConfig(UUID firmId) {
-        Map<String, String> effective = new HashMap<>(getAllGlobal());
-        effective.putAll(getAllFirm(firmId));
-        return effective;
-    }
-
-    @Transactional
-    public SystemConfig setFirm(UUID firmId, String key, String value, String description) {
-        return setValue(SystemConfig.ConfigScope.FIRM, firmId, key, value, description);
-    }
-
-    @Transactional
-    public void deleteFirm(UUID firmId, String key) {
-        checkNotLocked(SystemConfig.ConfigScope.FIRM, firmId, key);
-        systemConfigRepository.deleteByScopeAndFirmIdAndConfigKey(
-                SystemConfig.ConfigScope.FIRM, firmId, key);
-        log.info("Deleted firm config: firmId={}, key={}", firmId, key);
-    }
-
-    @Transactional
-    public SystemConfig setFirm(UUID firmId, String key, String value) {
-        return setFirm(firmId, key, value, null);
-    }
 
     @Transactional
     public SystemConfig setGlobal(String key, String value) {
@@ -195,32 +97,72 @@ public class SystemConfigService {
     }
 
     @Transactional
-    public List<SystemConfig> setFirmBulk(UUID firmId, Map<String, String> values) {
-        List<SystemConfig> saved = new ArrayList<>();
-        for (Map.Entry<String, String> entry : values.entrySet()) {
-            saved.add(setValue(SystemConfig.ConfigScope.FIRM, firmId, entry.getKey(), entry.getValue(), null));
-        }
-        return saved;
+    public SystemConfig setGlobal(String key, String value, String description) {
+        return setValue(key, value, description);
     }
 
     @Transactional
     public List<SystemConfig> setGlobalBulk(Map<String, String> values) {
         List<SystemConfig> saved = new ArrayList<>();
         for (Map.Entry<String, String> entry : values.entrySet()) {
-            saved.add(setValue(SystemConfig.ConfigScope.GLOBAL, null, entry.getKey(), entry.getValue(), null));
+            saved.add(setValue(entry.getKey(), entry.getValue(), null));
         }
         return saved;
+    }
+
+    @Transactional
+    public void deleteGlobal(String key) {
+        checkNotLocked(key);
+        systemConfigRepository.deleteByConfigKey(key);
+        log.info("Deleted global config: {}", key);
+    }
+
+    /**
+     * Inserts default rows for every registry entry marked seed. Insert-if-missing only:
+     * a value an admin has edited is never touched on restart.
+     */
+    @Transactional
+    public void seedGlobalDefaults() {
+        int inserted = 0;
+        for (SettingDef def : ConfigKeyRegistry.GLOBAL) {
+            if (!def.seed) {
+                continue;
+            }
+            if (systemConfigRepository.findByConfigKey(def.key).isPresent()) {
+                continue;
+            }
+
+            String storedValue = seedValueFor(def);
+            boolean encrypted = false;
+            if (ConfigKeyRegistry.isSensitiveType(def.inputType) && storedValue != null && !storedValue.isBlank()) {
+                storedValue = configEncryptionUtil.encrypt(storedValue);
+                encrypted = true;
+            }
+
+            systemConfigRepository.save(SystemConfig.builder()
+                    .configKey(def.key)
+                    .configValue(storedValue)
+                    .encrypted(encrypted)
+                    .configGroup(def.group)
+                    .inputType(def.inputType)
+                    .allowedValues(def.allowedValues)
+                    .active(true)
+                    .allowEdit(def.allowEdit)
+                    .description(def.description)
+                    .build());
+            inserted++;
+            log.info("  + SystemConfig default seeded: {} = {}", def.key, def.defaultValue);
+        }
+        if (inserted > 0) {
+            log.info("Seeded {} default system config entries", inserted);
+        }
     }
 
     // ========================================================================
     // Runtime policy helpers (DB-driven, code defaults when key absent)
     // ========================================================================
 
-    /**
-     * Whether MFA enforcement is on. Reads the SECURITY/MFA_ENABLED value (Y/N)
-     * from the DB every call — a super admin flipping this takes effect without
-     * a rebuild. Defaults to true (enforced) when the key is absent.
-     */
+    /** MFA enforcement on/off. Defaults to true (fail closed) when the key is absent. */
     public boolean isMfaEnabled() {
         Optional<String> raw = getGlobal(KEY_MFA_ENABLED);
         if (raw.isEmpty()) {
@@ -237,11 +179,7 @@ public class SystemConfigService {
         return true;
     }
 
-    /**
-     * Role codes that must have MFA enabled. Reads SECURITY/MFA_REQUIRED_ROLES
-     * (comma-separated) from the DB every call. Defaults to SUPER_ADMIN,FIRM_ADMIN
-     * when the key is absent (matches pre-config behavior).
-     */
+    /** Role codes that must have MFA enabled. Defaults to SUPER_ADMIN,FIRM_ADMIN when absent. */
     public Set<String> mfaRequiredRoleCodes() {
         Optional<String> raw = getGlobal(KEY_MFA_REQUIRED_ROLES);
         if (raw.isEmpty()) {
@@ -254,74 +192,60 @@ public class SystemConfigService {
         return roles.isEmpty() ? Set.of() : roles;
     }
 
-    // ========================================================================
-    // Admin settings views (grouped, typed, decrypted plaintext for admins)
-    // ========================================================================
-
-    /** All active GLOBAL settings with their metadata, sorted by group then key. */
-    public List<SystemConfigSettingView> getGlobalSettings() {
-        return toViews(systemConfigRepository.findByScope(SystemConfig.ConfigScope.GLOBAL));
+    /** Failed logins before lockout. Default 5. */
+    public int loginMaxAttempts() {
+        return intValue(KEY_LOGIN_MAX_ATTEMPTS, 5);
     }
 
-    /** All active FIRM settings for a firm with their metadata, sorted by group then key. */
-    public List<SystemConfigSettingView> getFirmSettings(UUID firmId) {
-        return toViews(systemConfigRepository.findByScopeAndFirmId(SystemConfig.ConfigScope.FIRM, firmId));
+    /** Lockout duration in minutes. Default 30. */
+    public int loginLockMinutes() {
+        return intValue(KEY_LOGIN_LOCK_MINUTES, 30);
     }
 
-    // ========================================================================
-    // Boot seed — inserts registry defaults once, never overwrites edits
-    // ========================================================================
+    /** Trial days when a firm is created without one. Default 14. */
+    public int trialDefaultDays() {
+        return intValue(KEY_TRIAL_DEFAULT_DAYS, 14);
+    }
 
-    /**
-     * Inserts default rows for every registry entry marked {@code seed=true}.
-     * Insert-if-missing only: values edited by an admin are never touched on
-     * restart. Called by DataInitializer on boot.
-     */
-    @Transactional
-    public void seedGlobalDefaults() {
-        int inserted = 0;
-        for (SettingDef def : REGISTRY) {
-            if (!def.seed || def.scope != SystemConfig.ConfigScope.GLOBAL) {
-                continue;
-            }
-            boolean exists = systemConfigRepository
-                    .findByScopeAndFirmIdAndConfigKey(SystemConfig.ConfigScope.GLOBAL, null, def.key)
-                    .isPresent();
-            if (exists) {
-                continue;
-            }
+    /** Days before trial expiry to warn. Default 3. */
+    public int trialWarningDays() {
+        return intValue(KEY_TRIAL_WARNING_DAYS, 3);
+    }
 
-            String storedValue = def.defaultValue;
-            boolean encrypted = false;
-            if (isSensitiveType(def.inputType) && storedValue != null && !storedValue.isBlank()) {
-                storedValue = configEncryptionUtil.encrypt(storedValue);
-                encrypted = true;
-            }
+    /** Attempts before a notification is marked DEAD. Default 3. */
+    public int notificationMaxAttempts() {
+        return intValue(KEY_NOTIFICATION_MAX_ATTEMPTS, 3);
+    }
 
-            SystemConfig config = SystemConfig.builder()
-                    .scope(SystemConfig.ConfigScope.GLOBAL)
-                    .configKey(def.key)
-                    .configValue(storedValue)
-                    .encrypted(encrypted)
-                    .configGroup(def.group)
-                    .inputType(def.inputType)
-                    .allowedValues(def.allowedValues)
-                    .active(true)
-                    .allowEdit(def.allowEdit)
-                    .description(def.description)
-                    .build();
-            systemConfigRepository.save(config);
-            inserted++;
-            log.info("  + SystemConfig default seeded: {} = {}", def.key, def.defaultValue);
-        }
-        if (inserted > 0) {
-            log.info("Seeded {} default system config entries", inserted);
-        }
+    /** APP_PRODUCTION (Y/N); empty when unset so callers can fall back to application.yml. */
+    public Optional<Boolean> productionFlag() {
+        return getGlobal(KEY_APP_PRODUCTION)
+                .filter(value -> !value.isBlank())
+                .map(this::parseYesNo);
+    }
+
+    /** Login link for email. GLOBAL-only, so a firm cannot repoint it. */
+    public String loginUrl() {
+        return getGlobal(KEY_LOGIN_URL).filter(value -> !value.isBlank()).orElse(DEFAULT_LOGIN_URL);
+    }
+
+    /** Client portal link for email. GLOBAL-only. */
+    public String clientPortalUrl() {
+        return getGlobal(KEY_CLIENT_PORTAL_URL).filter(value -> !value.isBlank())
+                .orElse(DEFAULT_CLIENT_PORTAL_URL);
     }
 
     // ========================================================================
     // Private helpers
     // ========================================================================
+
+    /** Registry default, except APP_PRODUCTION which follows application.yml. */
+    private String seedValueFor(SettingDef def) {
+        if (KEY_APP_PRODUCTION.equals(def.key)) {
+            return appProductionFallback ? "Y" : "N";
+        }
+        return def.defaultValue;
+    }
 
     private List<SystemConfigSettingView> toViews(List<SystemConfig> rows) {
         return rows.stream()
@@ -335,7 +259,7 @@ public class SystemConfigService {
                         .description(row.getDescription())
                         .active(row.isActive())
                         .allowEdit(row.isAllowEdit())
-                        .sensitive(isSensitiveType(row.getInputType()))
+                        .sensitive(ConfigKeyRegistry.isSensitiveType(row.getInputType()))
                         .build())
                 .sorted(Comparator.comparing(SystemConfigSettingView::getConfigGroup,
                                 Comparator.nullsLast(String::compareTo))
@@ -343,10 +267,41 @@ public class SystemConfigService {
                 .collect(Collectors.toList());
     }
 
-    private Optional<String> getDecrypted(SystemConfig.ConfigScope scope, UUID firmId, String key) {
-        return systemConfigRepository.findByScopeAndFirmIdAndConfigKey(scope, firmId, key)
-                .filter(SystemConfig::isActive)
-                .map(this::decryptIfNeeded);
+    /**
+     * Key→value map that survives duplicate rows (Postgres does not enforce uniqueness
+     * when firm_id is NULL) and values that fail to decrypt (a changed encryption key).
+     * Both used to throw from Collectors.toMap and break every read. Newest row wins.
+     */
+    private Map<String, String> toValueMap(List<SystemConfig> rows) {
+        Map<String, String> values = new LinkedHashMap<>();
+        Map<String, LocalDateTime> stamps = new HashMap<>();
+
+        for (SystemConfig row : rows) {
+            if (!row.isActive()) continue;
+
+            String value = decryptIfNeeded(row);
+            if (value == null) {
+                log.warn("Config '{}' could not be decrypted and was skipped — check that "
+                        + "config.encryption.key matches the key it was written with", row.getConfigKey());
+                continue;
+            }
+
+            String key = row.getConfigKey();
+            if (!values.containsKey(key)) {
+                values.put(key, value);
+                stamps.put(key, row.getUpdatedAt());
+                continue;
+            }
+
+            log.warn("Duplicate GLOBAL config row for key '{}' — using the most recently updated value", key);
+            LocalDateTime existing = stamps.get(key);
+            if (row.getUpdatedAt() != null
+                    && (existing == null || row.getUpdatedAt().isAfter(existing))) {
+                values.put(key, value);
+                stamps.put(key, row.getUpdatedAt());
+            }
+        }
+        return values;
     }
 
     private String decryptIfNeeded(SystemConfig config) {
@@ -361,13 +316,32 @@ public class SystemConfigService {
         return config.getConfigValue();
     }
 
-    private boolean isSensitiveType(String inputType) {
-        return "PASSWORD".equals(inputType);
+    /** GLOBAL numeric setting; code default when absent or invalid. */
+    private int intValue(String key, int fallback) {
+        Optional<String> raw = getGlobal(key);
+        if (raw.isEmpty() || raw.get().isBlank()) {
+            return fallback;
+        }
+        try {
+            return Integer.parseInt(raw.get().trim());
+        } catch (NumberFormatException e) {
+            log.warn("Config '{}' has non-numeric value '{}' — using default {}", key, raw.get(), fallback);
+            return fallback;
+        }
+    }
+
+    /** Y/N or TRUE/FALSE → boolean; unrecognized values are treated as N. */
+    private boolean parseYesNo(String value) {
+        String trimmed = value.trim();
+        if (trimmed.equalsIgnoreCase("Y") || trimmed.equalsIgnoreCase("TRUE")) return true;
+        if (trimmed.equalsIgnoreCase("N") || trimmed.equalsIgnoreCase("FALSE")) return false;
+        log.warn("Config value '{}' is not Y/N — treating as N", value);
+        return false;
     }
 
     /** Blocks delete of rows whose value is locked (allowEdit=false, already set). */
-    private void checkNotLocked(SystemConfig.ConfigScope scope, UUID firmId, String key) {
-        systemConfigRepository.findByScopeAndFirmIdAndConfigKey(scope, firmId, key)
+    private void checkNotLocked(String key) {
+        systemConfigRepository.findByConfigKey(key)
                 .ifPresent(row -> {
                     if (!row.isAllowEdit() && hasValue(row)) {
                         throw new BusinessRuleException(
@@ -392,80 +366,44 @@ public class SystemConfigService {
         }
     }
 
-    private SystemConfig setValue(SystemConfig.ConfigScope scope, UUID firmId, String key,
-                                  String value, String description) {
+    private SystemConfig setValue(String key, String value, String description) {
         if (value == null) {
-            // Null value = delete
-            if (firmId != null) {
-                deleteFirm(firmId, key);
-            } else {
-                deleteGlobal(key);
-            }
+            deleteGlobal(key);
             return null;
         }
 
-        SettingDef def = findDef(scope, key);
-        SystemConfig config = systemConfigRepository
-                .findByScopeAndFirmIdAndConfigKey(scope, firmId, key)
-                .orElse(null);
+        // Only registry-declared GLOBAL keys are writable — a FIRM key set here would be
+        // invisible to the firm that owns it.
+        SettingDef def = ConfigKeyRegistry.requireGlobal(key);
+        SystemConfig config = systemConfigRepository.findByConfigKey(key).orElse(null);
 
-        // ── Effective metadata: existing row wins, else registry def, else defaults
         String inputType = config != null && config.getInputType() != null
-                ? config.getInputType() : (def != null ? def.inputType : "TEXT");
-        String allowedValues = config != null ? config.getAllowedValues()
-                : (def != null ? def.allowedValues : null);
-        boolean allowEdit = config != null ? config.isAllowEdit()
-                : (def == null || def.allowEdit);
+                ? config.getInputType() : def.inputType;
+        String allowedValues = config != null ? config.getAllowedValues() : def.allowedValues;
+        boolean allowEdit = config != null ? config.isAllowEdit() : def.allowEdit;
 
-        // ── Locked key: only settable from empty, never changed afterwards
         if (!allowEdit && config != null && hasValue(config)) {
             throw new BusinessRuleException(
                     "Config key '" + key + "' is locked after its initial set and cannot be changed via the API");
         }
 
-        // ── Validate against metadata (registry constraints hold even on insert)
-        String trimmed = value.trim();
-        if (("RADIO".equals(inputType) || "DROPDOWN".equals(inputType))
-                && allowedValues != null && !allowedValues.isBlank()) {
-            boolean allowed = Arrays.stream(allowedValues.split(","))
-                    .map(String::trim)
-                    .anyMatch(option -> option.equalsIgnoreCase(trimmed));
-            if (!allowed) {
-                throw new BusinessRuleException(
-                        "Invalid value '" + value + "' for '" + key + "'. Allowed values: " + allowedValues);
-            }
-        }
-        if ("NUMBER".equals(inputType)) {
-            try {
-                Long.parseLong(trimmed);
-            } catch (NumberFormatException e) {
-                throw new BusinessRuleException(
-                        "Invalid value '" + value + "' for '" + key + "'. Expected a number.");
-            }
-        }
+        ConfigKeyRegistry.validate(def, key, value);
 
-        // ── Encrypt PASSWORD-type values (and anything already encrypted)
-        boolean sensitive = isSensitiveType(inputType) || (config != null && config.isEncrypted());
+        boolean sensitive = ConfigKeyRegistry.isSensitiveType(inputType) || (config != null && config.isEncrypted());
         String storedValue = sensitive ? configEncryptionUtil.encrypt(value) : value;
 
         if (config == null) {
             config = SystemConfig.builder()
-                    .scope(scope)
-                    .firmId(firmId)
                     .configKey(key)
+                    .configGroup(def.group)
                     .build();
-            if (def != null) {
-                config.setConfigGroup(def.group);
-            }
         }
         config.setConfigValue(storedValue);
         config.setEncrypted(sensitive);
         config.setInputType(inputType);
         config.setAllowedValues(allowedValues);
-        if (def != null) {
-            config.setConfigGroup(def.group);
-            config.setAllowEdit(def.allowEdit);
-        }
+        config.setConfigGroup(def.group);
+        config.setAllowEdit(def.allowEdit);
         if (config.getDescription() == null || description != null) {
             config.setDescription(description != null ? description : "");
         }
@@ -474,48 +412,7 @@ public class SystemConfigService {
         }
 
         SystemConfig saved = systemConfigRepository.save(config);
-        log.debug("Set config: scope={}, firmId={}, key={}, encrypted={}", scope, firmId, key, sensitive);
+        log.debug("Set global config: key={}, encrypted={}", key, sensitive);
         return saved;
-    }
-
-    private static SettingDef findDef(SystemConfig.ConfigScope scope, String key) {
-        return REGISTRY.stream()
-                .filter(def -> def.scope == scope && def.key.equals(key))
-                .findFirst()
-                .orElse(null);
-    }
-
-    /** Immutable definition of one known config key. */
-    private static final class SettingDef {
-        final SystemConfig.ConfigScope scope;
-        final String key;
-        final String group;
-        final String inputType;
-        final String allowedValues;
-        final String defaultValue;
-        final boolean allowEdit;
-        final String description;
-        final boolean seed;
-
-        private SettingDef(SystemConfig.ConfigScope scope, String key, String group, String inputType,
-                           String allowedValues, String defaultValue, boolean allowEdit,
-                           String description, boolean seed) {
-            this.scope = scope;
-            this.key = key;
-            this.group = group;
-            this.inputType = inputType;
-            this.allowedValues = allowedValues;
-            this.defaultValue = defaultValue;
-            this.allowEdit = allowEdit;
-            this.description = description;
-            this.seed = seed;
-        }
-
-        static SettingDef def(SystemConfig.ConfigScope scope, String key, String group, String inputType,
-                              String allowedValues, String defaultValue, boolean allowEdit,
-                              String description, boolean seed) {
-            return new SettingDef(scope, key, group, inputType, allowedValues,
-                    defaultValue, allowEdit, description, seed);
-        }
     }
 }

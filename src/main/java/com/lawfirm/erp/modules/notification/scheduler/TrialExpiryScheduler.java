@@ -2,6 +2,7 @@ package com.lawfirm.erp.modules.notification.scheduler;
 
 import com.lawfirm.erp.common.constant.RoleCode;
 import com.lawfirm.erp.common.enums.FirmStatus;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.notification.enums.NotificationType;
@@ -19,7 +20,7 @@ import java.util.Map;
 
 /**
  * Runs daily at 09:00 to check trial firms:
- * - Sends TRIAL_EXPIRING (3 days before expiry) to firm admins
+ * - Sends TRIAL_EXPIRING (TRIAL_WARNING_DAYS before expiry, default 3) to firm admins
  * - Sends TRIAL_EXPIRED (on expiry day) to firm admins
  * - Sets expired firms to SUSPENDED status
  */
@@ -30,6 +31,7 @@ public class TrialExpiryScheduler {
 
     private final FirmRepository firmRepository;
     private final NotificationOrchestrator notificationOrchestrator;
+    private final SystemConfigService systemConfigService;
 
     @Scheduled(cron = "0 0 9 * * *") // daily at 09:00
     public void checkTrialExpiries() {
@@ -44,7 +46,7 @@ public class TrialExpiryScheduler {
             if (daysRemaining < 0) {
                 // Trial has expired — suspend firm
                 handleExpiredTrial(firm);
-            } else if (daysRemaining <= 3) {
+            } else if (daysRemaining <= systemConfigService.trialWarningDays()) {
                 // Trial expiring soon — send warning
                 handleExpiringTrial(firm, (int) daysRemaining);
             }
