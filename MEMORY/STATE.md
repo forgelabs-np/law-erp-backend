@@ -1,34 +1,49 @@
 # Project State
 
 ## Current Focus
-**Dashboard redesign + CONFIGURATION module** — 4 clean dashboard endpoints (super-admin, firm, employee, client) with typed responses and shared DashboardScope; CONFIGURATION module with GLOBAL_CONFIG/FIRM_CONFIG sub-modules, RBAC, and full docs. Next: point the prod profile at the new production database (needs `SPRING_PROFILES_ACTIVE=prod`, `DDL_AUTO`, `--env-file .env` — `.env` is not auto-loaded, and `Dockerfile.prod` doesn't set the profile).
+**QA findings F-1..F-5, F-7, F-8 fixed — plus F-15 found in review** — **423 tests green**.
+Changes are uncommitted in the working tree (matter↔client binding + OWN scope, suspended-firm
+enforcement at login **and** per-request, `GET /super-admin/firms` restored, guarded user-activity
+endpoint, create-role applies `permissionIds`, self-service password reset made genuinely single-use).
+A same-day adversarial review reproduced and fixed **F-15 (High)**: a firm admin could mint a
+`SUPER_ADMIN`-coded firm role and reach `/super-admin/**`. Full report + gap table updated in
+`docs/qa-report-2026-09-21.md` / `docs/ui-test-checklist.md`.
+Remaining: F-6 (module/plan gating is dead code) and F-9–F-14 (medium/low).
+**Owed before release:** the two F-15 follow-ups (defence-in-depth in the authority builder + a
+cleanup for existing firm rows carrying a `SUPER_ADMIN` role), a Postgres (not H2) pass for the
+native `date(...)` aggregates, and the manual UI checklist sign-off.
 
 ## Branch
-`devG`
+`production` (last merge: PR #29 from `devG`) — fix batch is uncommitted on top of it.
 
 ## Tech Stack
 - Spring Boot (Java), PostgreSQL (Supabase), Hibernate `ddl-auto: update` — no Flyway
 - Multi-tenant ERP system
 - Modules: Auth, RBAC, Case Management, Invoicing, Super Admin, Customer, Firm, Tenant, Scraper
 
-## Recent Work (this session)
-- **Sub-module module access** — `ModuleAccessResolver` makes a sub-module inherit its parent's enable flag (nearest row wins, explicit child row overrides, expiry respected); `PermissionEvaluator.hasModuleAccess`, `/me`'s sidebar and `isModuleEnabled` all use it, and `enableModuleForFirm` cascades to the sub-tree. Root cause: the sidebar marked sub-modules enabled via the parent while the API guard looked only for the sub-module's own `firm_modules` row → menu visible, every call 403
-- **Two-table split** — `system_config` is GLOBAL-only (scope/firm_id columns dropped), new `firm_configs` + `FirmConfig`/`FirmConfigRepository`/`FirmConfigService` hold per-firm values with `firm_id` NOT NULL + FK cascade; `ConfigKeyRegistry` declares both key sets; migration `V2026_09_19_2` copies FIRM rows and drops the columns
-- **Read resilience** — `Collectors.toMap` threw on duplicate keys and on null (undecryptable) values, taking out every config read incl. all email; replaced with `toValueMap()` (newest `updated_at` wins, bad rows skipped with a warning)
-- **Scope allowlist** — `setValue` refuses keys the registry doesn't declare for that scope; closes a real phish vector (`PUT /firm/config {"LOGIN_URL": ...}` repointed real password-reset emails)
-- **`getFirmSettings`** — now falls back to registry defaults so a new firm's settings screen isn't empty (FIRM keys are `seed=false`)
-- **`APP_PRODUCTION`** — `TotpUtil` reads DB-first with yml fallback; seed default derived from `app.production` so a prod DB can't ship with the `123456` MFA bypass on
-- **Trial fix** — `isTrial` + null `trialDays` created a trial with no expiry that the scheduler skipped forever; now falls back to `TRIAL_DEFAULT_DAYS`
-- **Settings → DB** — `security.max-login-attempts` removed from all profiles (→ `LOGIN_MAX_ATTEMPTS` + `LOGIN_LOCK_MINUTES`); new `TRIAL_DEFAULT_DAYS`, `TRIAL_WARNING_DAYS`, `NOTIFICATION_MAX_ATTEMPTS`, `LOGIN_URL`, `CLIENT_PORTAL_URL`
-- **Migration** — `V2026_09_19_1__system_config_scope_uniqueness.sql` (partial unique indexes; Postgres NULLs are distinct so the old constraint never protected GLOBAL rows) — run manually
-- **Tests** — `SystemConfigServiceTest` 13→27; full suite 360→374 green
-- **Left in yml on purpose** — `jwt.*`, `config.encryption.key`, DB/mail/hikari, `cors.allowed-origins`, `permissions.cache.ttl-ms`; later candidate: `scraper.*`
-- **CONFIGURATION module** — parent module (SettingsIcon, `/settings`) with GLOBAL_CONFIG + FIRM_CONFIG sub-modules; permissions seeded + role matrix assigned; controllers wired to permission checks
-- **docs/config-setup.md** — full backend + frontend reference for the config system
-- **Dashboard redesign** — 4 typed endpoints under `usermanagement/dashboard/`: SuperAdmin (platform aggregates), FirmAdmin (firm-scoped), Employee (personal assigned), Client (personal matters); shared `DashboardScope` + `DashboardScopeFactory`; spec revised from dynamic engine to clean endpoints
+## Recent Work (2026-09-21 QA session)
+- **Fix batch** — F-1..F-5, F-7, F-8 implemented and their QA tests flipped to assert the fixed
+  behaviour; 421 green. See the daily log for the per-finding "why" (esp. F-1 per-request vs
+  login-only, and F-7's caller-aware ceiling).
+- **56 new QA tests** across 5 suites (SuperAdmin flow, role matrix, case mgmt, project mgmt, auth/security) + `QaBaseTest` harness
+- **Findings F-1..F-14** — 5 High: suspended firm not blocked, portal-access revocation ignored, no matter↔client binding + OWN scope unenforced, `GET /super-admin/firms` missing, user-activity endpoint unguarded
+- **Verified strong** — cross-firm isolation, permission gating, credential encryption, session revocation on password reset, lockout, MFA, no injection/5xx/leak
+- **Client binding** — projects bound (`clientUserId` + portal), matters NOT bound; recommendation + schema sketch in the report
+- **Docs** — `docs/qa-report-2026-09-21.md`, `docs/ui-test-checklist.md`
+
+## Recent Work (previous session)
+- **Bug 1: GetAllFirms isTrial** — `FirmListResponse` DTO + `FirmService.getAllFirms()` exist and are unit-tested, but the `GET /api/v1/super-admin/firms` **controller mapping is missing** (regression, see finding F-4)
+- **Bug 2: Custom perms in grouped** — `upsert()` now creates `ModulePermission` junction rows for custom perms
+- **Bug 3: NOTIFICATION_MANAGEMENT seed** — added to DataInitializer moduleDefs + role matrix
+- **Bug 4: Default role delete block** — Firm Admin blocked from deleting ADVOCATE/PARALEGAL/CLIENT cloned roles (verified: 400 business rule)
+- **Bug 5: departmentId** — confirmed not in backend, frontend-only
+- **Bug 6: Firm Admin MFA reset** — `POST /api/v1/modules/users/{userId}/reset-mfa` (verified)
+- **SA password reset** — `POST /api/v1/super-admin/users/{userId}/reset-password` (verified)
+- **Postman** — sections 8-11 for all new endpoints
 
 ## Deep History Index
-- `memory/2026-09-19.md` — system config hardening, two-table split, CONFIGURATION module + docs, sub-module permissions fix, dashboard redesign
+- `memory/2026-09-21.md` — Full API QA + security pass (56 new tests, 416 green), findings F-1..F-14, case/project client-binding verdict, UI test checklist, test-harness gotchas
+- `docs/qa-report-2026-09-21.md` / `docs/ui-test-checklist.md` — QA deliverables
 - `memory/2026-09-13.md` — Bug fix batch: GetAllFirms isTrial, custom perms grouped, NOTIFICATION_MANAGEMENT seed, default role delete block, MFA reset for Firm Admin, client password reset confirmed
 - `memory/2026-09-12.md` — RBAC simplification, trial period feature, dashboard fixes, enable-module simplification (344 tests)
 - `memory/2026-09-09.md` — notification module design (v1 scope locked), preview endpoint GET→POST fix

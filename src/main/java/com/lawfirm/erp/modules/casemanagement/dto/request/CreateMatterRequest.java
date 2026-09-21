@@ -34,6 +34,15 @@ public class CreateMatterRequest {
 
     private UUID assignedPartnerId;
 
+    /**
+     * The client this matter is for. Optional — but once set it is what the client
+     * portal shows as "my case" and what OWN-scope filtering keys on.
+     */
+    private UUID clientUserId;
+
+    /** Optional override for the denormalized client name; defaults to the client's full name. */
+    private String clientName;
+
     private UUID advocateId;
 
     private String description;

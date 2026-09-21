@@ -124,15 +124,42 @@ public class EmailServiceImpl implements EmailService {
 
         String subject = "Password reset for " + firmName;
 
+        // The temporary password is NOT put in the e-mail: the admin who set it passes it
+        // on out of band, and the user is forced to rotate it on first login. Everything
+        // the recipient needs here is the login link.
         Context ctx = new Context();
         ctx.setVariable("firmName", firmName);
         ctx.setVariable("fullName", fullName);
-        ctx.setVariable("tempPassword", tempPassword);
         ctx.setVariable("loginUrl", loginUrl);
         ctx.setVariable("primaryColor", primaryColor);
         ctx.setVariable("emailFooter", footer);
 
-        sendHtmlEmail(firmId, triggeredByUserId, toEmail, subject, "email/password-reset", ctx,
+        sendHtmlEmail(firmId, triggeredByUserId, toEmail, subject, "email/password-reset-notice", ctx,
+                fullName, AuditEntity.USER);
+    }
+
+    @Override
+    @Async
+    public void sendPasswordResetLink(UUID firmId, UUID triggeredByUserId, String toEmail, String fullName,
+                                      String resetToken, int validMinutes, String firmName) {
+        Map<String, String> cfg = systemConfigService.getEffectiveConfig(firmId);
+        String primaryColor = cfg.getOrDefault(SystemConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
+        String footer = cfg.getOrDefault(SystemConfigService.KEY_EMAIL_FOOTER_TEXT, "");
+        String resetBase = cfg.getOrDefault("PASSWORD_RESET_URL",
+                cfg.getOrDefault("LOGIN_URL", "https://app.nepalcrm.com") + "/reset-password");
+        String resetUrl = resetBase + (resetBase.contains("?") ? "&" : "?") + "token=" + resetToken;
+
+        String subject = "Reset your " + firmName + " password";
+
+        Context ctx = new Context();
+        ctx.setVariable("firmName", firmName);
+        ctx.setVariable("fullName", fullName);
+        ctx.setVariable("resetUrl", resetUrl);
+        ctx.setVariable("validMinutes", validMinutes);
+        ctx.setVariable("primaryColor", primaryColor);
+        ctx.setVariable("emailFooter", footer);
+
+        sendHtmlEmail(firmId, triggeredByUserId, toEmail, subject, "email/password-reset-link", ctx,
                 fullName, AuditEntity.USER);
     }
 

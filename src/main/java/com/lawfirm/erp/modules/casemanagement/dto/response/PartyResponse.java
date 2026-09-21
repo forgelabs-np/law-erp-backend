@@ -1,5 +1,6 @@
 package com.lawfirm.erp.modules.casemanagement.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.lawfirm.erp.modules.casemanagement.enums.PartyRepresentation;
 import com.lawfirm.erp.modules.casemanagement.enums.PartyType;
 import lombok.Builder;
@@ -22,6 +23,13 @@ public class PartyResponse {
     private String address;
     private UUID clientId;
     private boolean isOurClient;
+
+    /** Compatibility alias — see {@link MatterPartyResponse#isOurClientFlag()}. */
+    @JsonProperty("isOurClient")
+    public boolean isOurClientFlag() {
+        return isOurClient;
+    }
+
     private UUID advocateId;
     private String notes;
 }

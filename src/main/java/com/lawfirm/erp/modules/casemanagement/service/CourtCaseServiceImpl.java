@@ -50,6 +50,7 @@ public class CourtCaseServiceImpl implements CourtCaseService {
     private final MatterTimelineRepository matterTimelineRepository;
     private final AppealDeadlineEngine appealDeadlineEngine;
     private final AuditService auditService;
+    private final MatterScopeGuard matterScopeGuard;
 
     public CourtCaseResponse getCourtCase(String ourCourtCaseRef) {
         UUID firmId = getRequiredFirmId();
@@ -285,8 +286,16 @@ public class CourtCaseServiceImpl implements CourtCaseService {
     }
 
     private CourtCase findCourtCase(String ourCourtCaseRef, UUID firmId) {
-        return courtCaseRepository.findByOurCourtCaseRefAndFirmId(ourCourtCaseRef, firmId)
+        CourtCase cc = courtCaseRepository.findByOurCourtCaseRefAndFirmId(ourCourtCaseRef, firmId)
                 .orElseThrow(() -> new ResourceNotFoundException("Court case not found: " + ourCourtCaseRef));
+        // Every court-case read/write funnels through here, so a client account can only
+        // reach proceedings that belong to one of its own matters.
+        if (matterScopeGuard.isClientScope()) {
+            Matter matter = matterRepository.findById(cc.getMatterId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Matter not found for court case"));
+            matterScopeGuard.requireVisible(matter);
+        }
+        return cc;
     }
 
     private void recordTimeline(Matter matter, UUID courtCaseId, TimelineEventType type,

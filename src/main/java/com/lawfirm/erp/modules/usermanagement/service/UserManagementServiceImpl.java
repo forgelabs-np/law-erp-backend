@@ -211,6 +211,11 @@ public class UserManagementServiceImpl implements UserManagementService {
         User user = getValidatedUser(userId, firmId);
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        // An admin-chosen password is a temporary credential: force the holder to pick
+        // their own on the next login, whether or not the account is brand new.
+        user.setMustChangePassword(true);
+        user.setLoginAttempts(0);
+        user.setLockedUntil(null);
         userRepository.save(user);
 
         userRepository.incrementPermissionVersion(userId);

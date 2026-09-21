@@ -46,6 +46,7 @@ class CourtEventServiceTest {
     @Mock private MatterRepository matterRepository;
     @Mock private MatterTimelineRepository matterTimelineRepository;
     @Mock private AuditService auditService;
+    @Mock private MatterScopeGuard matterScopeGuard;
     @Mock private CourtCaseServiceImpl courtCaseService;
 
     @InjectMocks

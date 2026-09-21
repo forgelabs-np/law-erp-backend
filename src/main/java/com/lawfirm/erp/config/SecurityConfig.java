@@ -56,6 +56,8 @@ public class SecurityConfig {
                                 "/api/v1/auth/mfa/setup/confirm",
                                 "/api/v1/auth/mfa/validate",
                                 "/api/v1/auth/change-password",
+                                "/api/v1/auth/forgot-password",
+                                "/api/v1/auth/reset-password",
                                 "/auth/mfa/setup/confirm",
                                 "/api/v1/super-admin/login",
                                 "/api/v1/super-admin/register",

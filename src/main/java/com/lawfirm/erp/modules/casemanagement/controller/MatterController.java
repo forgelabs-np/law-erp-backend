@@ -55,12 +55,13 @@ public class MatterController {
     public ResponseEntity<ApiResponse<Page<MatterResponse>>> listMatters(
             @RequestParam(required = false) MatterType matterType,
             @RequestParam(required = false) MatterStatus status,
+            @RequestParam(required = false) UUID clientUserId,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
         return responseHandler.ok(
-                matterService.listMatters(matterType, status, search, page, size),
+                matterService.listMatters(matterType, status, clientUserId, search, page, size),
                 "Matters fetched successfully");
     }
 

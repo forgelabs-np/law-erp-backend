@@ -8,13 +8,15 @@ import org.springframework.data.domain.Page;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 public interface MatterService {
 
     MatterResponse createMatter(CreateMatterRequest request);
 
+    /** {@code clientUserId} filters to one client's matters; ignored for client-scoped callers. */
     Page<MatterResponse> listMatters(MatterType matterType, MatterStatus status,
-                                     String search, int page, int size);
+                                     UUID clientUserId, String search, int page, int size);
 
     MatterResponse getMatter(String matterNumber);
 

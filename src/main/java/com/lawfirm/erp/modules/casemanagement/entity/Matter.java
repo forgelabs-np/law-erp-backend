@@ -20,6 +20,7 @@ import java.util.UUID;
 @Table(name = "matters", indexes = {
         @Index(name = "idx_matters_firm_type", columnList = "firmId, matterType"),
         @Index(name = "idx_matters_firm_status", columnList = "firmId, status"),
+        @Index(name = "idx_matters_firm_client", columnList = "firmId, clientUserId"),
         @Index(name = "idx_matters_number", columnList = "firmId, matterNumber", unique = true)
 })
 @Getter
@@ -50,6 +51,17 @@ public class Matter extends ActiveAuditableEntity {
 
     /** Overall matter owner (may differ from per-instance advocate). */
     private UUID assignedPartnerId;
+
+    /**
+     * The client this matter is for — the client portal's "my cases" link and the
+     * anchor for OWN-scope filtering. Nullable: a matter may be opened before the
+     * client account exists (opposing-party-only, pro bono intake, etc.).
+     */
+    private UUID clientUserId;
+
+    /** Denormalized client name — survives the client account being deleted. */
+    @Column(name = "client_name", length = 200)
+    private String clientName;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 15, nullable = false)

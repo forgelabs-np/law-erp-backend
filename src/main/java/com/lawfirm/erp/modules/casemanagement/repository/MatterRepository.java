@@ -21,6 +21,12 @@ public interface MatterRepository extends JpaRepository<Matter, UUID> {
 
     Page<Matter> findByFirmId(UUID firmId, Pageable pageable);
 
+    /** "My cases" — every matter belonging to one client account. */
+    Page<Matter> findByClientUserIdAndFirmId(UUID clientUserId, UUID firmId, Pageable pageable);
+
+    /** Client-scoped matters, no filters — used by the portal timeline. */
+    List<Matter> findByClientUserIdAndFirmIdOrderByCreatedAtDesc(UUID clientUserId, UUID firmId);
+
     Optional<Matter> findByMatterNumberAndFirmId(String matterNumber, UUID firmId);
 
     Optional<Matter> findByIdAndFirmId(UUID id, UUID firmId);
@@ -34,11 +40,13 @@ public interface MatterRepository extends JpaRepository<Matter, UUID> {
     @Query("SELECT m FROM Matter m WHERE m.firmId = :firmId " +
            "AND (:matterType IS NULL OR m.matterType = :matterType) " +
            "AND (:status IS NULL OR m.status = :status) " +
+           "AND (:clientUserId IS NULL OR m.clientUserId = :clientUserId) " +
            "AND (:search IS NULL OR LOWER(m.title) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) " +
            "     OR LOWER(m.matterNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))")
     Page<Matter> findByFilters(@Param("firmId") UUID firmId,
                                @Param("matterType") MatterType matterType,
                                @Param("status") MatterStatus status,
+                               @Param("clientUserId") UUID clientUserId,
                                @Param("search") String search,
                                Pageable pageable);
 
