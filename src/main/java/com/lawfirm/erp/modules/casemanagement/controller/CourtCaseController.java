@@ -1,6 +1,7 @@
 package com.lawfirm.erp.modules.casemanagement.controller;
 
 import com.lawfirm.erp.auth.security.PermissionEvaluator;
+import com.lawfirm.erp.common.annotation.RequiresModule;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
+@RequiresModule("CASE_MANAGEMENT")
 @RequestMapping("/api/v1/firm/court-cases")
 @RequiredArgsConstructor
 @Tag(name = "Court Cases", description = "One row per court instance the matter is registered in")

@@ -67,7 +67,7 @@ public class EmployeeDashboardServiceImpl implements EmployeeDashboardService {
 
         // Filter today's events from the already-fetched data (no extra query)
         List<EmployeeDashboardResponse.MyTodayEvent> todayEvents = buildTodayEvents(
-                eventsByCC, ccMap, matterMap, today);
+                eventsByCC, ccMap, matterMap, userId, today);
 
         // Upcoming hearings (next 14 days)
         List<EmployeeDashboardResponse.MyUpcomingHearing> upcomingHearings = buildUpcomingHearings(

@@ -142,9 +142,9 @@ public class EmailServiceImpl implements EmailService {
     @Async
     public void sendPasswordResetLink(UUID firmId, UUID triggeredByUserId, String toEmail, String fullName,
                                       String resetToken, int validMinutes, String firmName) {
-        Map<String, String> cfg = systemConfigService.getEffectiveConfig(firmId);
-        String primaryColor = cfg.getOrDefault(SystemConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
-        String footer = cfg.getOrDefault(SystemConfigService.KEY_EMAIL_FOOTER_TEXT, "");
+        Map<String, String> cfg = firmConfigService.getEffectiveConfig(firmId);
+        String primaryColor = cfg.getOrDefault(FirmConfigService.KEY_BRAND_COLOR_PRIMARY, "#1A237E");
+        String footer = cfg.getOrDefault(FirmConfigService.KEY_EMAIL_FOOTER_TEXT, "");
         String resetBase = cfg.getOrDefault("PASSWORD_RESET_URL",
                 cfg.getOrDefault("LOGIN_URL", "https://app.nepalcrm.com") + "/reset-password");
         String resetUrl = resetBase + (resetBase.contains("?") ? "&" : "?") + "token=" + resetToken;

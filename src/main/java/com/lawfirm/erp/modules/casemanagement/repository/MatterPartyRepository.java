@@ -22,6 +22,9 @@ public interface MatterPartyRepository extends JpaRepository<MatterParty, UUID> 
 
     Optional<MatterParty> findByIdAndFirmId(UUID id, UUID firmId);
 
+    /** All parties for a given firm+client combination. */
+    List<MatterParty> findByFirmIdAndClientId(UUID firmId, UUID clientId);
+
     /** Every matter where this client account is recorded as "our client". */
     @Query("SELECT p FROM MatterParty p WHERE p.clientId = :clientId AND p.firmId = :firmId AND p.isOurClient = true")
     List<MatterParty> findByClientIdAndFirmIdAndOurClientTrue(@Param("clientId") UUID clientId,

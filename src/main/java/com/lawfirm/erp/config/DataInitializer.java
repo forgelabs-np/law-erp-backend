@@ -95,9 +95,9 @@ public class DataInitializer implements CommandLineRunner {
         }
         createSystemRoles();
         createModulesAndPermissions();
+        seedConfigurationSubModules();
         assignPermissionsToRoles();
         seedDefaultRenewalTypes();
-        seedConfigurationSubModules();
         seedModulesForSystemFirm(systemFirm);
 
         log.info("=== DataInitializer: seed complete ===");
@@ -326,7 +326,8 @@ public class DataInitializer implements CommandLineRunner {
                 {"USER_MANAGEMENT",        FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
                 {"DASHBOARD_MANAGEMENT",   FULL, FULL, READ_ONLY, READ_ONLY, NO_ACCESS},
                 {"NOTIFICATION_MANAGEMENT", FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
-                {"GLOBAL_CONFIG", FULL, READ_ONLY, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+                {"CONFIGURATION", FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
+                {"GLOBAL_CONFIG", FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
                 {"FIRM_CONFIG", FULL, FULL, NO_ACCESS, NO_ACCESS, NO_ACCESS},
         };
 

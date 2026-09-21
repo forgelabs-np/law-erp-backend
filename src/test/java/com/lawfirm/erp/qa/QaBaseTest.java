@@ -6,8 +6,12 @@ import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.integration.BaseIntegrationTest;
+import com.lawfirm.erp.firm.entity.FirmModule;
+import com.lawfirm.erp.firm.repository.FirmModuleRepository;
+import com.lawfirm.erp.rbac.entity.Module;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
+import com.lawfirm.erp.rbac.repository.ModuleRepository;
 import com.lawfirm.erp.rbac.repository.PermissionRepository;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import jakarta.persistence.EntityManager;
@@ -39,6 +43,12 @@ public abstract class QaBaseTest extends BaseIntegrationTest {
 
     @Autowired
     protected RolePermissionRepository rolePermissionRepository;
+
+    @Autowired
+    protected ModuleRepository moduleRepository;
+
+    @Autowired
+    protected FirmModuleRepository firmModuleRepository;
 
     @Autowired
     private PermissionEvaluator permissionEvaluator;
@@ -230,10 +240,32 @@ public abstract class QaBaseTest extends BaseIntegrationTest {
      * admin's token is re-minted afterwards (the grant bumps permVersion).
      */
     protected String grantEverythingAndToken(String saToken, Firm firm, String adminUsername) throws Exception {
+        // Enable all modules for the firm so @RequiresModule doesn't block requests
+        enableAllModulesForFirm(firm);
+
         MvcResult grant = grantRolePermissions(saToken, firm, firmRole(firm, "FIRM_ADMIN"), everyPermissionId());
         assertEquals(200, grant.getResponse().getStatus(),
                 "Granting all permissions should succeed: " + grant.getResponse().getContentAsString());
         return token(firmAdmin(firm, adminUsername));
+    }
+
+    /** Enable every top-level module for a firm (bypasses the API, directly inserts FirmModule rows). */
+    protected void enableAllModulesForFirm(Firm firm) {
+        List<Module> modules = moduleRepository.findAll();
+        for (Module module : modules) {
+            FirmModule fm = firmModuleRepository.findByFirmIdAndModuleId(firm.getId(), module.getId())
+                    .orElse(null);
+            if (fm == null) {
+                firmModuleRepository.save(FirmModule.builder()
+                        .firm(firm)
+                        .module(module)
+                        .isEnabled(true)
+                        .build());
+            } else if (!Boolean.TRUE.equals(fm.getIsEnabled())) {
+                fm.setIsEnabled(true);
+                firmModuleRepository.save(fm);
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════

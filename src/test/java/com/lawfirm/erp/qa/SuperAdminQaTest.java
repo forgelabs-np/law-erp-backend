@@ -174,6 +174,7 @@ class SuperAdminQaTest extends QaBaseTest {
         String wideToken = grantEverythingAndToken(sa, wide, "qa_wide");
 
         // Narrow firm: read-only case management only
+        enableAllModulesForFirm(narrow);
         grantRolePermissions(sa, narrow, firmRole(narrow, "FIRM_ADMIN"),
                 permIds("CASE_MANAGEMENT:ACCESS", "CASE_MANAGEMENT:VIEW"));
         String narrowToken = token(firmAdmin(narrow, "qa_narrow"));
@@ -311,10 +312,9 @@ class SuperAdminQaTest extends QaBaseTest {
         assertAllowed(authPost(sa, "/api/v1/super-admin/firms/" + firm.getId() + "/modules",
                 apiRequest(Map.of("moduleId", caseModule.getId(), "isEnabled", false))), "disable module");
 
-        // FINDING: PermissionEvaluator.requireModuleAccess()/hasModuleAccess() are never
-        // invoked from any controller or filter, so plan/module gating is cosmetic.
-        assertAllowed(authGet(adminToken, "/api/v1/firm/matters?page=0&size=5"),
-                "GAP: case-management API still served while its module is disabled");
+        // FIXED (F-6): disabling a module now blocks its API endpoints via @RequiresModule
+        assertDenied(authGet(adminToken, "/api/v1/firm/matters?page=0&size=5"),
+                "case-management API must be blocked when module is disabled");
     }
 
     // ═══════════════════════════════════════════════════════════════════════
