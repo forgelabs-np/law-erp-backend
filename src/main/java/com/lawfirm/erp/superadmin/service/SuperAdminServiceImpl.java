@@ -34,6 +34,8 @@ import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.entity.RolePermission;
 import com.lawfirm.erp.rbac.repository.PermissionRepository;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
+import com.lawfirm.erp.auth.entity.RefreshToken;
+import com.lawfirm.erp.auth.repository.RefreshTokenRepository;
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
@@ -73,6 +75,7 @@ public class SuperAdminServiceImpl implements SuperAdminService {
     private final TotpUtil totpUtil;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final FirmRepository firmRepository;
     private final PasswordEncoder passwordEncoder;
     private final RolePermissionRepository rolePermissionRepository;
@@ -439,6 +442,14 @@ public class SuperAdminServiceImpl implements SuperAdminService {
     private LoginResponse issueFullTokens(User user) {
         String accessToken = jwtUtil.generateAccessToken(user);
         String refreshToken = jwtUtil.generateRefreshToken(user);
+
+        // Tracked like AuthServiceImpl.recordRefreshToken: without the row the token could
+        // not be rotated, revoked or reuse-detected (F-9).
+        RefreshToken row = new RefreshToken();
+        row.setId(jwtUtil.extractTokenId(refreshToken));
+        row.setUserId(user.getId());
+        row.setExpiresAt(LocalDateTime.now().plusNanos(jwtUtil.getRefreshExpiryMs() * 1_000_000L));
+        refreshTokenRepository.save(row);
 
         auditService.log(AuditAction.LOGIN, AuditEntity.AUTH, user.getId(),
                 "Super Admin logged in: " + user.getUsername());

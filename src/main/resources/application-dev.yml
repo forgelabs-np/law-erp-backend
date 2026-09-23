@@ -29,8 +29,10 @@ spring:
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
-    username: ${MAIL_USER:tryaac1ss@gmail.com} to d
-    password: ${MAIL_PASS:acxf frwi bjfo ibas}
+    # Gmail needs an App Password (16 chars, no spaces). Do not paste anything after
+    # the closing brace — the whole line becomes the username and SMTP auth fails.
+    username: ${MAIL_USER:tryaac1ss@gmail.com}
+    password: ${MAIL_PASS:acxffrwibjfoibas}
     properties:
       mail:
         smtp:

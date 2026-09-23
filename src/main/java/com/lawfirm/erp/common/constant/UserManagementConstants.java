@@ -21,7 +21,7 @@ public final class UserManagementConstants {
     public static final String GET_ACTIVITY_DESCRIPTION = "Paginated audit log for a specific user within this firm. Supports date range filtering.";
 
     public static final String RESET_PASSWORD_SUMMARY = "Reset a user's password";
-    public static final String RESET_PASSWORD_DESCRIPTION = "Firm admin resets password for any user in their firm. Immediately invalidates the user's existing JWT — they must re-login.";
+    public static final String RESET_PASSWORD_DESCRIPTION = "Firm admin resets password for any user in their firm. The body is optional and may be bare or {\"data\": …} wrapped: send {\"newPassword\": …} (8–50 chars, also accepted as \"password\") to set a chosen password, or send no body at all to have a temporary one generated and returned for the admin to hand over. Immediately invalidates the user's existing JWT — they must re-login.";
 
     public static final String DELETE_USER_SUMMARY = "Delete user";
     public static final String DELETE_USER_DESCRIPTION = "Soft-deletes a user by deactivating their account";

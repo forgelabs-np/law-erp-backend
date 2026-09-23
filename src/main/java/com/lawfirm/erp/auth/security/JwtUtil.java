@@ -91,9 +91,17 @@ public class JwtUtil {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId().toString());
         claims.put("type", "refresh");
+        // Same staleness rule as access tokens (F-9): password resets, role changes and
+        // logout all bump permissionVersion, and refreshToken() refuses a token minted
+        // against an older version — otherwise a stolen refresh token outlives the very
+        // event that was meant to kill the session.
+        claims.put("permVersion", user.getPermissionVersion() != null ? user.getPermissionVersion() : 0);
 
         String token = Jwts.builder()
                 .claims(claims)
+                // jti — primary key of this token's RefreshToken row, so it can be rotated,
+                // revoked and replay-detected. Set after .claims() so it cannot be overwritten.
+                .id(UUID.randomUUID().toString())
                 .subject(user.getUsername())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + refreshExpiry))
@@ -102,6 +110,16 @@ public class JwtUtil {
 
         log.debug("Generated refresh token for user: {}", user.getUsername());
         return token;
+    }
+
+    /** The jti claim — for refresh tokens this is the primary key of their RefreshToken row. */
+    public String extractTokenId(String token) {
+        return extractClaim(token, Claims::getId);
+    }
+
+    /** Refresh-token lifetime in ms — lets callers compute the row's expiry without re-parsing. */
+    public long getRefreshExpiryMs() {
+        return refreshExpiry;
     }
 
     public Claims extractAllClaims(String token) {

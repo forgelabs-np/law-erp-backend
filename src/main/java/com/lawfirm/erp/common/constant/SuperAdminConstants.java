@@ -14,6 +14,9 @@ public final class SuperAdminConstants {
     public static final String GET_USERS_SUMMARY = "Get all users with their roles";
     public static final String GET_USERS_DESCRIPTION = "User-first view for the super admin: returns every user with its role (name/code) and firm (code/name). Optional filters: userType, search, firmCode.";
 
+    public static final String RESET_PASSWORD_SUMMARY = "Reset any user's password";
+    public static final String RESET_PASSWORD_DESCRIPTION = "The body is optional and may be bare or {\"data\": …} wrapped: send {\"newPassword\": …} (8–50 chars, also accepted as \"password\") to set a chosen password, or send no body at all to have a temporary one generated and returned for the admin to hand over. Immediately invalidates the user's existing JWT — they must re-login.";
+
     public static final String RESET_MFA_SUMMARY = "Reset user MFA";
     public static final String RESET_MFA_DESCRIPTION = "Super Admin resets a user's MFA authenticator, forcing them to set it up again on next login";
 

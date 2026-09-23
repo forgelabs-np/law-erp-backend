@@ -75,8 +75,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 return;
             }
             // ── Permission version staleness check ────────────────────────
-            // Only for non-super-admin users
-            if (userIdStr != null && !"SUPER_ADMIN".equals(userType)) {
+            // Every full access token, Super Admin included: logout, password resets and
+            // role changes bump permissionVersion and must bite for SA sessions too (F-9).
+            if (userIdStr != null) {
                 UUID userId = UUID.fromString(userIdStr);
                 Integer tokenVersion = claims.get("permVersion", Integer.class);
 

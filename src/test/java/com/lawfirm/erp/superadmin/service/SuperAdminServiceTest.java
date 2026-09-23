@@ -22,6 +22,7 @@ import com.lawfirm.erp.rbac.repository.RoleRepository;
 import com.lawfirm.erp.dto.admin.response.RoleResponse;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.auth.mapper.AuthMapper;
+import com.lawfirm.erp.auth.repository.RefreshTokenRepository;
 import com.lawfirm.erp.auth.security.JwtUtil;
 import com.lawfirm.erp.auth.security.TotpUtil;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,6 +59,7 @@ import static org.mockito.Mockito.*;
 class SuperAdminServiceTest {
 
     @Mock private AuthenticationManager authenticationManager;
+    @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private JwtUtil jwtUtil;
     @Mock private TotpUtil totpUtil;
     @Mock private UserRepository userRepository;

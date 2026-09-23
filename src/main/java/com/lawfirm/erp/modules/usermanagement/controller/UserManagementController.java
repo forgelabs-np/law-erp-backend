@@ -110,7 +110,7 @@ public class UserManagementController {
 
     @PostMapping("/{userId}/reset-password")
     @Operation(summary = UserManagementConstants.RESET_PASSWORD_SUMMARY,
-            description = "The body is optional: with no password the service generates a temporary one and returns it for the admin to hand over.")
+            description = UserManagementConstants.RESET_PASSWORD_DESCRIPTION)
     public ResponseEntity<ApiResponse<PasswordResetResult>> resetPassword(
             @PathVariable UUID userId,
             @RequestBody(required = false) String body) {

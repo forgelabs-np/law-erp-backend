@@ -273,6 +273,56 @@ class AuthSecurityQaTest extends QaBaseTest {
                 "A password-change token must be issued");
     }
 
+    /** POST the admin reset with an arbitrary raw body (null = send no body at all). */
+    private MvcResult adminResetRaw(String adminToken, UUID userId, String body) throws Exception {
+        var request = post("/api/v1/modules/users/" + userId + "/reset-password")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON);
+        if (body != null) {
+            request.content(body);
+        }
+        return mockMvc.perform(request).andReturn();
+    }
+
+    @Test
+    @DisplayName("AUTH-14: an admin-typed reset password is applied — bare, aliased or enveloped")
+    void adminTypedResetPasswordTakes() throws Exception {
+        Setup s = setupFirm("QAAUTH14", "qa_auth14_admin");
+        EmployeeFixture employee = createEmployee(s.firm(), s.adminToken(), "qa_auth14_emp");
+
+        // 1. Bare body under an alias key — the password the admin typed must be the one set
+        MvcResult bare = adminResetRaw(s.adminToken(), employee.id(), "{\"password\":\"Bare2026!\"}");
+        assertAllowed(bare, "bare password-field body");
+        assertFalse(json(bare).path("data").path("generated").asBoolean(),
+                "A supplied password must not be swapped for a generated one: " + raw(bare));
+        MvcResult bareLogin = loginRaw("QAAUTH14", employee.username(), "Bare2026!");
+        assertEquals(200, status(bareLogin),
+                "The admin-typed password must authenticate: " + raw(bareLogin));
+
+        // 2. Same password behind the standard envelope, still under the alias key
+        MvcResult enveloped = authPost(s.adminToken(),
+                "/api/v1/modules/users/" + employee.id() + "/reset-password",
+                apiRequest(Map.of("password", "Envelope2026!")));
+        assertAllowed(enveloped, "enveloped password field");
+        assertFalse(json(enveloped).path("data").path("generated").asBoolean(),
+                "A supplied password must not be swapped for a generated one: " + raw(enveloped));
+        MvcResult envelopeLogin = loginRaw("QAAUTH14", employee.username(), "Envelope2026!");
+        assertEquals(200, status(envelopeLogin),
+                "The enveloped admin-typed password must authenticate: " + raw(envelopeLogin));
+
+        // 3. No body at all still generates a temporary password and hands it back exactly once
+        MvcResult none = adminResetRaw(s.adminToken(), employee.id(), null);
+        assertAllowed(none, "no body at all");
+        assertTrue(json(none).path("data").path("generated").asBoolean(),
+                "With no password supplied the service must generate one: " + raw(none));
+        String temp = json(none).path("data").path("temporaryPassword").asText();
+        assertFalse(temp.isBlank(),
+                "The generated password must be returned to the admin: " + raw(none));
+        MvcResult tempLogin = loginRaw("QAAUTH14", employee.username(), temp);
+        assertEquals(200, status(tempLogin),
+                "The generated temporary password must authenticate: " + raw(tempLogin));
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // Lockout / enumeration
     // ═══════════════════════════════════════════════════════════════════════
@@ -395,6 +445,99 @@ class AuthSecurityQaTest extends QaBaseTest {
                         .content(objectMapper.writeValueAsString(apiRequest(Map.of("refreshToken", "not.a.token")))))
                 .andReturn();
         assertNotEquals(200, status(garbage), "Garbage refresh token must be rejected");
+    }
+
+    private MvcResult refreshRaw(String refreshToken) throws Exception {
+        return mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(apiRequest(Map.of("refreshToken", refreshToken)))))
+                .andReturn();
+    }
+
+    private MvcResult logoutRaw(String accessToken) throws Exception {
+        return mockMvc.perform(post("/api/v1/auth/logout")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andReturn();
+    }
+
+    @Test
+    @DisplayName("AUTH-15: refresh tokens are single-use — a replay revokes the account's whole refresh family")
+    void refreshTokenIsSingleUse() throws Exception {
+        Setup s = setupFirm("QAAUTH15", "qa_auth15_admin");
+        EmployeeFixture employee = createEmployee(s.firm(), s.adminToken(), "qa_auth15_emp");
+
+        JsonNode session = rotatePassword("QAAUTH15", employee.username(), EMP_PWD, "Single2026!");
+        String firstRefresh = session.path("refreshToken").asText();
+
+        MvcResult rotated = refreshRaw(firstRefresh);
+        assertEquals(200, status(rotated), "First refresh must succeed: " + raw(rotated));
+        String secondRefresh = json(rotated).path("data").path("refreshToken").asText();
+        assertFalse(secondRefresh.isBlank(), "Refresh must rotate in a new refresh token");
+        assertNotEquals(firstRefresh, secondRefresh, "Rotation must issue a different refresh token");
+
+        MvcResult replay = refreshRaw(firstRefresh);
+        assertNotEquals(200, status(replay),
+                "Replaying a used refresh token must be refused: " + raw(replay));
+
+        MvcResult family = refreshRaw(secondRefresh);
+        assertNotEquals(200, status(family),
+                "Reuse detection must revoke every refresh token for the account: " + raw(family));
+    }
+
+    @Test
+    @DisplayName("AUTH-16: logout is server-side — access and refresh tokens die for the account")
+    void logoutRevokesServerSide() throws Exception {
+        Setup s = setupFirm("QAAUTH16", "qa_auth16_admin");
+        EmployeeFixture employee = createEmployee(s.firm(), s.adminToken(), "qa_auth16_emp");
+
+        JsonNode session = rotatePassword("QAAUTH16", employee.username(), EMP_PWD, "Logout2026!");
+        String accessToken = session.path("accessToken").asText();
+        String refreshToken = session.path("refreshToken").asText();
+        assertAllowed(authGet(accessToken, "/api/v1/me"), "the live session works before logout");
+
+        assertAllowed(logoutRaw(accessToken), "server-side logout");
+
+        // The access token must be dead after logout
+        assertUnauthorized(authGet(accessToken, "/api/v1/me"));
+        assertNotEquals(200, status(refreshRaw(refreshToken)),
+                "The refresh token must be dead after logout");
+
+        // The account itself is fine — a fresh login must work
+        MvcResult again = loginRaw("QAAUTH16", employee.username(), "Logout2026!");
+        assertEquals(200, status(again), "Login must work after logout: " + raw(again));
+        assertFalse(json(again).path("data").path("refreshToken").asText().isBlank(),
+                "A fresh login must issue a new refresh token");
+    }
+
+    @Test
+    @DisplayName("AUTH-17: an admin password reset retires live refresh tokens")
+    void adminResetKillsRefreshTokens() throws Exception {
+        Setup s = setupFirm("QAAUTH17", "qa_auth17_admin");
+        EmployeeFixture employee = createEmployee(s.firm(), s.adminToken(), "qa_auth17_emp");
+
+        JsonNode session = rotatePassword("QAAUTH17", employee.username(), EMP_PWD, "Before2026!");
+        String refreshToken = session.path("refreshToken").asText();
+
+        assertAllowed(authPost(s.adminToken(), "/api/v1/modules/users/" + employee.id() + "/reset-password",
+                apiRequest(Map.of("newPassword", "After2026!"))), "admin resets the password");
+
+        assertNotEquals(200, status(refreshRaw(refreshToken)),
+                "A live refresh token must not survive an admin password reset");
+
+        MvcResult fresh = loginRaw("QAAUTH17", employee.username(), "After2026!");
+        assertEquals(200, status(fresh), "The reset password must authenticate: " + raw(fresh));
+    }
+
+    @Test
+    @DisplayName("AUTH-18: Super Admin sessions obey the same staleness rule — logout kills them too")
+    void superAdminTokensAreNotExemptFromStaleness() throws Exception {
+        Setup s = setupFirm("QAAUTH18", "qa_auth18_admin");
+        String sa = s.saToken();
+
+        assertAllowed(authGet(sa, "/api/v1/super-admin/firms"), "the SA session works");
+        assertAllowed(logoutRaw(sa), "SA server-side logout");
+        // Super Admin tokens must not be exempt from the staleness check
+        assertUnauthorized(authGet(sa, "/api/v1/super-admin/firms"));
     }
 
     // ═══════════════════════════════════════════════════════════════════════

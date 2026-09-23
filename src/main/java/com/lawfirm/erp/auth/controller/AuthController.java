@@ -57,6 +57,14 @@ public class AuthController {
         );
     }
 
+    @PostMapping("/logout")
+    @Operation(summary = AuthConstants.LOGOUT_SUMMARY, description = AuthConstants.LOGOUT_DESCRIPTION)
+    public ResponseEntity<ApiResponse<Void>> logout() {
+        authService.logout();
+        return responseHandler.ok(null, Message.SUCCESS,
+                "Logged out. Every session for this account has been ended.");
+    }
+
     @PostMapping("/mfa/setup/confirm")
     @Operation(summary = AuthConstants.MFA_SETUP_CONFIRM_SUMMARY, description = AuthConstants.MFA_SETUP_CONFIRM_DESCRIPTION)
     public ResponseEntity<ApiResponse<LoginResponse>> confirmMfaSetup(

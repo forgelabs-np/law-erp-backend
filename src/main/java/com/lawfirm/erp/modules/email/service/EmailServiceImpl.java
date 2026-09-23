@@ -321,7 +321,8 @@ public class EmailServiceImpl implements EmailService {
     private JavaMailSender resolveMailSender(UUID firmId) {
         Optional<FirmEmailConfig> firmConfig = firmEmailConfigService.getDecrypted(firmId);
         if (firmConfig.isPresent() && firmConfig.get().isActive()) {
-            log.debug("Using firm SMTP config for firm: {}", firmId);
+            log.info("Using firm SMTP config for firm: {} (host={}:{})",
+                    firmId, firmConfig.get().getSmtpHost(), firmConfig.get().getSmtpPort());
             return createMailSender(
                     firmConfig.get().getSmtpHost(),
                     firmConfig.get().getSmtpPort(),
@@ -340,12 +341,14 @@ public class EmailServiceImpl implements EmailService {
             String password = systemConfigService.getGlobal(SystemConfigService.KEY_SMTP_PASSWORD).orElse("");
 
             if (!username.isEmpty() && !password.isEmpty()) {
-                log.debug("Using global DB SMTP config for firm: {}", firmId);
+                log.info("Using global DB SMTP config for firm: {} (host={}:{})", firmId, host, port);
                 return createMailSender(host, port, username, password, true);
             }
         }
 
-        log.debug("Using Spring auto-configured mail sender (no DB SMTP config found) for firm: {}", firmId);
+        // Which sender actually ran is the first question when mail "just does not arrive",
+        // so this branch is logged at INFO rather than DEBUG.
+        log.info("Using Spring auto-configured mail sender from spring.mail.* for firm: {}", firmId);
         return defaultMailSender;
     }
 
@@ -359,7 +362,14 @@ public class EmailServiceImpl implements EmailService {
             return dbFrom.get();
         }
         if (defaultMailSender instanceof JavaMailSenderImpl impl) {
-            return impl.getUsername();
+            // Only the authenticated account may be used as the From address, and only when it
+            // actually looks like one: a corrupted spring.mail.username (stray text, no @ domain)
+            // would otherwise be handed to InternetAddress and fail every send with an illegal
+            // address — the same root cause class as the SMTP auth failure it also causes.
+            String candidate = impl.getUsername();
+            if (candidate != null && candidate.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")) {
+                return candidate;
+            }
         }
         return "noreply@nepalcrm.com";
     }

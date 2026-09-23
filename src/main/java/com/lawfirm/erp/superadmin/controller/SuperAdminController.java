@@ -117,8 +117,8 @@ public class SuperAdminController {
 
     @PostMapping("/users/{userId}/reset-password")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
-    @Operation(summary = "Reset any user's password",
-            description = "The body is optional: with no password the service generates a temporary one and returns it for the Super Admin to hand over.")
+    @Operation(summary = SuperAdminConstants.RESET_PASSWORD_SUMMARY,
+            description = SuperAdminConstants.RESET_PASSWORD_DESCRIPTION)
     public ResponseEntity<ApiResponse<PasswordResetResult>> resetPassword(
             @PathVariable UUID userId,
             @RequestBody(required = false) String body) {

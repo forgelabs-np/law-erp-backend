@@ -222,11 +222,13 @@ one assignment → exactly that matter appears. As firm admin: unchanged full li
 |---|---|
 | `POST /api/v1/auth/client/login` | accepts the username **or** the mobile number |
 | `POST /api/v1/auth/forgot-password` | also resolves mobile numbers |
-| `POST /api/v1/modules/users/{userId}/reset-password` | optional body; returns the generated temporary password |
+| `POST /api/v1/modules/users/{userId}/reset-password` | optional body (`newPassword` or `password`, bare or enveloped); returns the generated temporary password |
 | `POST /api/v1/modules/users/bulk-deactivate` | accepts the bare payload; rejects an empty selection |
 | `POST /api/v1/modules/users/bulk-role-change` | accepts the bare payload; rejects an empty selection |
-| `POST /api/v1/super-admin/users/{userId}/reset-password` | optional body; returns the generated temporary password |
+| `POST /api/v1/super-admin/users/{userId}/reset-password` | optional body (`newPassword` or `password`, bare or enveloped); returns the generated temporary password |
 | `POST /api/v1/me/change-password` | **new** — self-service change (current password required) |
+| `POST /api/v1/auth/logout` | **new** — server-side logout; kills every access + refresh token for the account |
+| `POST /api/v1/auth/refresh` | single-use rotation; family revoke on replay; `permVersion` checked |
 | `GET /api/v1/firm/matters`, `GET /api/v1/firm/matters/stale` | scoped to the caller's assignments for non-admin staff |
 | `GET /api/v1/super-admin/firms/admins`, firm profile | `isTrial`, `trialDays`, `trialExpiresAt` added |
 
@@ -260,12 +262,12 @@ one assignment → exactly that matter appears. As firm admin: unchanged full li
 ## Verification
 
 ```
-JAVA_HOME=/c/Users/Dev/.jdks/ms-21.0.12 ./mvnw -o test
-[INFO] Tests run: 461, Failures: 0, Errors: 0, Skipped: 0
+JAVA_HOME="$HOME/.jdks/corretto-21.0.11" ./mvnw -o test   # JDK 21 required; the shell default is not it
+[INFO] Tests run: 462, Failures: 0, Errors: 0, Skipped: 0
 [INFO] BUILD SUCCESS
 ```
 
-QA suites (63 tests): `AuthSecurityQaTest` 16, `SuperAdminQaTest` 16, `FirmRoleMatrixQaTest` 12,
+QA suites (64 tests): `AuthSecurityQaTest` 17, `SuperAdminQaTest` 16, `FirmRoleMatrixQaTest` 12,
 `CaseManagementQaTest` 11, `ProjectManagementQaTest` 8.
 
 ## Still open (not part of this batch)
@@ -275,3 +277,82 @@ QA suites (63 tests): `AuthSecurityQaTest` 16, `SuperAdminQaTest` 16, `FirmRoleM
 - A Postgres (not H2) pass for the native `date(...)` aggregates, as noted in `MEMORY/STATE.md`.
 - `FirmMapper`'s duplicate `toFirmAdminResponse` / `toFirmProfileResponse` builders (dead code,
   now out of date with the trial fields).
+
+---
+
+## Follow-up batch (same day): forgot-password e-mail + admin-typed reset password
+
+Two reports received on the batch above.
+
+### F1. Forgot-password e-mail never arrives
+
+**Root cause.** `application-dev.yml`'s `spring.mail.username` line was corrupted:
+`username: ${MAIL_USER:tryaac1ss@gmail.com} to d`. Placeholder resolution keeps the trailingaggarbage, so the app authenticated as `tryaac1ss@gmail.com to d` → SMTP auth fails (535) —
+**and** the same string was used as the From address by `resolveFromAddress()`'s fallback
+(`impl.getUsername()`), an illegal address either way. The app password also carried Gmail's
+display spaces (`acxf frwi bjfo ibas`). Every failure is swallowed by `sendHtmlEmail` (logged
+`EMAIL_FAILED` + audit row) while `/auth/forgot-password` always returns the generic success —
+so the UI says "sent" and nothing arrives.
+
+**Fix.** Corrected the yml (nothing after the closing brace; app password without spaces).
+`resolveFromAddress()` now only falls back to the authenticated username when it looks like an
+e-mail address, else `noreply@nepalcrm.com`, and `resolveMailSender()` logs at INFO which of the
+three sources (firm row → GLOBAL row → `spring.mail.*`) was picked — one log line answers
+"where was it trying to send from" next time.
+
+**Verified.** Auth-only SMTP check (STARTTLS + `AUTH PLAIN`, no message sent):
+`235 2.7.0 Accepted` with the corrected credentials. Creds are alive.
+
+### F2. "The reset doesn't take the new password the admin sets"
+
+**Flow as built.** The console's reset is a confirm-only dialog that posts **no body** → the
+service generates a temporary password, returns it once in `data.temporaryPassword`, forces a
+rotation on next login, and e-mails a notice that deliberately carries no password. The dialog
+never renders `temporaryPassword`, so the generated secret is seen by nobody. An admin-*chosen*
+password does work — but only when the body carries it as `newPassword` (bare or
+`{"data": …}`); any other field name was silently dropped and fell back to generation, which
+is exactly "I set a password and it didn't take."
+
+**Fix (backend).** `ResetPasswordRequest.newPassword` also answers to `password` / `pwd` /
+`new_password` (`@JsonAlias`), so a differently-named field sets the typed password instead of
+silently generating one. Both endpoints' `@Operation` text now documents the two shapes.
+No-body behaviour is unchanged (still generates). Regression test `AUTH-14` covers bare-alias,
+enveloped-alias and no-body shapes end to end (reset → login proves which password took).
+
+**Still open (frontend — not in this repo).** The reset dialog needs a password input posting
+`{"newPassword": …}`, and should render `data.generated` / `data.temporaryPassword` when the
+service generated one. Until then, "no body" remains the live path and only the response
+carries the password.
+
+### F9. Refresh-token revocation + server-side logout (QA finding F-9)
+
+**Root cause.** Refresh was stateless: nothing on the server knew a refresh token existed, so it
+minted access tokens for its full 7-day life — surviving password resets, role changes and
+"logout" (which only cleared client storage). Super Admin tokens were also explicitly exempted
+from the `permVersion` staleness check in `JwtAuthFilter`.
+
+**Fix.**
+- New `refresh_tokens` store keyed by the JWT's `jti` (`auth/entity/RefreshToken` +
+  `auth/repository/RefreshTokenRepository`): every issued refresh token is recorded;
+  `refreshToken()` marks it used and mints a fresh one (rotation); replaying a used token
+  revokes the account's whole family — two copies exist, one is in the wrong hands. The family
+  revoke is done as entity writes, not a bulk `UPDATE`, so the persistence context cannot hand
+  back a stale, still-"active" sibling row.
+- Refresh tokens now carry the `permVersion` claim and `refreshToken()` refuses a token minted
+  against an older version — so password resets, role changes and logout retire them all. This
+  closed an *unreported* hole too: previously an admin password reset did NOT kill live refresh
+  tokens (AUTH-17's red run proved they kept minting fresh access tokens afterwards).
+- New `POST /api/v1/auth/logout` (authenticated, no body): bumps `permissionVersion` →
+  `JwtAuthFilter` refuses every access token immediately and `refreshToken()` refuses every
+  refresh token — on every device, not just the one that logged out. Audited with the existing
+  `AuditAction.LOGOUT`.
+- `JwtAuthFilter`: the `!"SUPER_ADMIN"` exemption on the staleness check removed.
+- Expired rows purged opportunistically inside refresh (`deleteExpired`).
+
+**Tests.** `AUTH-15` (single-use + family revoke), `AUTH-16` (server-side logout, fresh login
+still works), `AUTH-17` (admin reset kills refresh), `AUTH-18` (SA staleness) — all watched red
+first. **466 green.**
+
+**Gotcha.** `refreshToken()` must NOT be `@Transactional`: the family revoke is immediately
+followed by a thrown `BadCredentialsException`, and the outer transaction rolled the revokeback (AUTH-15 caught this). Each store operation commits on its own; every failure path is
+fail-closed — worst case the user re-logs in.
