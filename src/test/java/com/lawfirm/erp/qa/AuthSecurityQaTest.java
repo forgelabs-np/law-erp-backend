@@ -321,6 +321,20 @@ class AuthSecurityQaTest extends QaBaseTest {
         MvcResult tempLogin = loginRaw("QAAUTH14", employee.username(), temp);
         assertEquals(200, status(tempLogin),
                 "The generated temporary password must authenticate: " + raw(tempLogin));
+
+        // 4. An empty body behaves like no body at all — both the bare {} a dialog posts when
+        //    nothing was typed and the empty {data:{}} envelope must generate, not 400.
+        for (String emptyBody : new String[]{"{}", "{\"data\":{}}"}) {
+            MvcResult empty = adminResetRaw(s.adminToken(), employee.id(), emptyBody);
+            assertAllowed(empty, "empty body " + emptyBody);
+            assertTrue(json(empty).path("data").path("generated").asBoolean(),
+                    "An empty body must fall through to a generated password: " + raw(empty));
+            String fromEmpty = json(empty).path("data").path("temporaryPassword").asText();
+            assertFalse(fromEmpty.isBlank(),
+                    "The generated password must be handed back for " + emptyBody + ": " + raw(empty));
+            assertEquals(200, status(loginRaw("QAAUTH14", employee.username(), fromEmpty)),
+                    "The password generated from " + emptyBody + " must authenticate: " + raw(empty));
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════

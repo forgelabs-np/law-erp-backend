@@ -29,6 +29,7 @@ import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
+import com.lawfirm.erp.modules.email.service.EmailService;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.entity.RolePermission;
@@ -82,6 +83,7 @@ public class SuperAdminServiceImpl implements SuperAdminService {
     private final PermissionRepository permissionRepository;
     private final CurrentUserResolver currentUserResolver;
     private final AuditService auditService;
+    private final EmailService emailService;
     private final AuthMapper authMapper;
     private final SystemConfigService systemConfigService;
     private final RbacResponseMapper rbacResponseMapper;
@@ -249,6 +251,19 @@ public class SuperAdminServiceImpl implements SuperAdminService {
 
         log.info("Password reset for user: {} by Super Admin (generated={})",
                 user.getUsername(), generated);
+
+        // Same delivery as the firm-admin reset: the credential only exists in the response body
+        // otherwise, and the SA console does not render temporaryPassword. A null firm is
+        // legitimate here — Super Admin resets reach accounts with no firm of their own.
+        UUID firmId = user.getFirm() != null ? user.getFirm().getId() : null;
+        emailService.sendPasswordReset(
+                firmId,
+                currentUserResolver.getCurrentUserId(),
+                user.getEmail(),
+                user.getFullName(),
+                chosen,
+                user.getFirm() != null ? user.getFirm().getName() : "Your Firm"
+        );
 
         return PasswordResetResult.builder()
                 .username(user.getUsername())

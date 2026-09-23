@@ -14,9 +14,9 @@ public interface EmailService {
                               String username, String tempPassword, String firmName, String firmCode);
 
     /**
-     * Notice that an administrator reset the account's password. The password itself is
-     * deliberately NOT transmitted — the admin hands it over out of band and the user
-     * rotates it on first login.
+     * Notice that an administrator reset the account's password. The password IS carried in
+     * the e-mail: the reset dialog does not render the API's generated temporary password,
+     * so the recipient would otherwise never learn it. Rotation is still forced on first login.
      */
     void sendPasswordReset(UUID firmId, UUID triggeredByUserId, String toEmail, String fullName,
                            String tempPassword, String firmName);

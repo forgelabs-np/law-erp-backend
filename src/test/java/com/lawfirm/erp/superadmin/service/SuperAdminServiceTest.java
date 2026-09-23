@@ -67,6 +67,7 @@ class SuperAdminServiceTest {
     @Mock private FirmRepository firmRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private AuditService auditService;
+    @Mock private com.lawfirm.erp.modules.email.service.EmailService emailService;
     @Mock private AuthMapper authMapper;
     @Mock private SystemConfigService systemConfigService;
     @Mock private RolePermissionRepository rolePermissionRepository;

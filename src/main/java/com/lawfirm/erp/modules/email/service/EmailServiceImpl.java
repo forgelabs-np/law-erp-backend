@@ -124,12 +124,13 @@ public class EmailServiceImpl implements EmailService {
 
         String subject = "Password reset for " + firmName;
 
-        // The temporary password is NOT put in the e-mail: the admin who set it passes it
-        // on out of band, and the user is forced to rotate it on first login. Everything
-        // the recipient needs here is the login link.
+        // The password IS put in the e-mail. The console's reset dialog never renders the
+        // API's generated temporary password, so "the admin hands it over" left the user
+        // with a credential nobody ever saw. It still forces a rotation on first login.
         Context ctx = new Context();
         ctx.setVariable("firmName", firmName);
         ctx.setVariable("fullName", fullName);
+        ctx.setVariable("tempPassword", tempPassword);
         ctx.setVariable("loginUrl", loginUrl);
         ctx.setVariable("primaryColor", primaryColor);
         ctx.setVariable("emailFooter", footer);

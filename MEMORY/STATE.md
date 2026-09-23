@@ -1,6 +1,23 @@
 # Project State
 
 ## Current Focus
+**2026-09-23 — latest addition: both admin-reset paths now e-mail the temporary password**
+(the console never displayed `data.temporaryPassword`, so the flow produced a credential nobody
+could see). `EmailServiceImpl.sendPasswordReset` sets the variable it already received,
+`password-reset-notice.html` renders it under `th:if="${tempPassword}"` and no longer claims it is
+withheld, and `SuperAdminServiceImpl.resetPassword` now injects `EmailService` and mails too (its
+credential was previously trapped in the response body). Deliberate reversal of the QA finding in
+`docs/qa-report-2026-09-21.md:211` — a credential now travels in clear text by choice.
+**471 tests green.** The `Sign in` button is already GLOBAL `LOGIN_URL` config; set it to
+`http://localhost:5173/` with `PUT /api/v1/super-admin/config` (no code change — the seed is
+insert-if-missing). Still open: the console dialogs must render `data.temporaryPassword`.
+
+**Handover written the same day:** `docs/frontend-reset-password-guide.md` — the FE contract for
+all three password endpoints (admin reset, forced rotation, profile change), including two traps
+found while documenting: `/auth/change-password` collapses a confirm-mismatch, an expired token and
+a reused token into one generic `401` (so the match must be validated client-side), and
+`/me/change-password` actually kills the **caller's own** session despite saying "other sessions".
+
 **2026-09-23 — six reported UI bugs fixed, e-mail repaired, F-9 closed — 466 tests green.** Client-portal login (username or
 mobile), the reset/change-password APIs (bare/absent body, one 8–50 policy, generated temporary
 password, new self-service `POST /api/v1/me/change-password`), `isTrial` on the firm responses,
@@ -32,8 +49,12 @@ cleanup for existing firm rows carrying a `SUPER_ADMIN` role), a Postgres (not H
 native `date(...)` aggregates, and the manual UI checklist sign-off.
 
 ## Branch
-`devG` — the 2026-09-23 six-bug batch is uncommitted here. (`production` still carries the
-uncommitted 2026-09-21 F-1..F-15 batch; PR #29 was merged into it from `devG`.)
+`devG` — everything from 2026-09-23 is **uncommitted** here: the six-bug batch, the F-9
+refresh-token work, the reset-mail changes (firm-admin + Super Admin paths), the `AUTH-14`
+extension and `docs/frontend-reset-password-guide.md`. (`production` still carries the uncommitted
+2026-09-21 F-1..F-15 batch; PR #29 was merged into it from `devG`.)
+**Build command on this machine:** `JAVA_HOME="$HOME/.jdks/corretto-21.0.11" ./mvnw -o test` — the
+env default is a JDK this module cannot build with.
 
 ## Tech Stack
 - Spring Boot (Java), PostgreSQL (Supabase), Hibernate `ddl-auto: update` — no Flyway
@@ -84,7 +105,10 @@ uncommitted 2026-09-21 F-1..F-15 batch; PR #29 was merged into it from `devG`.)
 ## Deep History Index
 - `senior dev[ponytail]` — ponytail skill install commands (kept, not re-run) + the
   "review this senior" workflow: review → list simpler/faster options → wait for approval → fix
-- `memory/2026-09-23.md` — Six-bug fix batch: client-portal login, reset/change password APIs + unified password policy, `isTrial`, bulk deactivate, assignment e-mail, assignment-scoped matter lists; `JsonNode` body-binding gotcha; follow-up: SMTP username corruption (e-mail fix, Gmail 235 verified) + admin-reset `@JsonAlias` (`AUTH-14`); F-9 closed — refresh store/rotation/family-revoke, server-side `POST /auth/logout`, SA staleness (`AUTH-15`..`AUTH-18`)
+- `memory/2026-09-23.md` — Six-bug fix batch (client-portal login, reset/change-password APIs + unified password policy, `isTrial`, bulk deactivate, assignment e-mail, assignment-scoped matter lists; `JsonNode` body-binding gotcha); SMTP username corruption (Gmail 235 verified) + admin-reset `@JsonAlias` (`AUTH-14`); F-9 closed — refresh store/rotation/family-revoke, server-side `POST /auth/logout`, SA staleness (`AUTH-15`..`AUTH-18`); then reset mails (firm **and** SA) carry the temporary password, `LOGIN_URL` owns the Sign in link, accepted reset body shapes incl. `{}`, dead `PASSWORD_RESET_URL` knob, orphaned `password-reset.html`, and the `SpringTemplateEngine`-not-OGNL test gotcha
+- `docs/frontend-reset-password-guide.md` — the frontend contract for ① admin reset, ② forced
+  rotation, ③ profile change: body shapes, error-status table, masked-401 warning, the "kills your
+  own session" warning on `/me/change-password`, `LOGIN_URL` setup, and a 12-step manual script
 - `fixes.md` — the per-bug deliverable for the 2026-09-23 batch
 - `memory/2026-09-21.md` — Full API QA + security pass (56 new tests, 416 green), findings F-1..F-14, case/project client-binding verdict, UI test checklist, test-harness gotchas
 - `docs/qa-report-2026-09-21.md` / `docs/ui-test-checklist.md` — QA deliverables
