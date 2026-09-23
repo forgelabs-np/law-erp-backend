@@ -85,6 +85,9 @@ public class FirmProfileServiceImpl implements FirmProfileService {
                 .address(firm.getAddress())
                 .jurisdiction(firm.getJurisdiction())
                 .logoUrl(firm.getLogoUrl())
+                .isTrial(Boolean.TRUE.equals(firm.getIsTrial()))
+                .trialDays(firm.getTrialDays())
+                .trialExpiresAt(firm.getTrialExpiresAt())
                 .createdAt(firm.getCreatedAt())
                 .build();
     }

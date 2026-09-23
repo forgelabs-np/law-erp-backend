@@ -44,6 +44,7 @@ class MatterServiceTest {
     @Mock private AuditService auditService;
     @Mock private MatterScopeGuard matterScopeGuard;
     @Mock private ReadScopeGuard readScopeGuard;
+    @Mock private CaseAssignmentRepository caseAssignmentRepository;
 
     @InjectMocks
     private MatterServiceImpl matterService;

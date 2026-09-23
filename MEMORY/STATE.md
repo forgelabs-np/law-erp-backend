@@ -1,6 +1,14 @@
 # Project State
 
 ## Current Focus
+**2026-09-23 — six reported UI bugs fixed — 461 tests green.** Client-portal login (username or
+mobile), the reset/change-password APIs (bare/absent body, one 8–50 policy, generated temporary
+password, new self-service `POST /api/v1/me/change-password`), `isTrial` on the firm responses,
+bulk deactivate/role-change binding, the assignment e-mail default (`CASE_ASSIGNED` now e-mails),
+and assignment-scoped matter lists for non-admin staff. Full write-up in `fixes.md`.
+Uncommitted on `devG`.
+
+### Previous focus (2026-09-21)
 **QA findings F-1..F-5, F-7, F-8 fixed — plus F-15 found in review** — **423 tests green**.
 Changes are uncommitted in the working tree (matter↔client binding + OWN scope, suspended-firm
 enforcement at login **and** per-request, `GET /super-admin/firms` restored, guarded user-activity
@@ -14,12 +22,23 @@ cleanup for existing firm rows carrying a `SUPER_ADMIN` role), a Postgres (not H
 native `date(...)` aggregates, and the manual UI checklist sign-off.
 
 ## Branch
-`production` (last merge: PR #29 from `devG`) — fix batch is uncommitted on top of it.
+`devG` — the 2026-09-23 six-bug batch is uncommitted here. (`production` still carries the
+uncommitted 2026-09-21 F-1..F-15 batch; PR #29 was merged into it from `devG`.)
 
 ## Tech Stack
 - Spring Boot (Java), PostgreSQL (Supabase), Hibernate `ddl-auto: update` — no Flyway
 - Multi-tenant ERP system
 - Modules: Auth, RBAC, Case Management, Invoicing, Super Admin, Customer, Firm, Tenant, Scraper
+
+## Recent Work (2026-09-23 fix batch)
+- **Six bugs fixed**, per-bug symptom → root cause → manual steps in `fixes.md` (repo root)
+- **New shared pieces** — `PasswordPolicy` (the single 8–50 rule + `generateTemporary()`) and
+  `RequestBodyBinder` (envelope-or-bare body; also fixes that `JsonNode` parameters cannot bind here)
+- **New endpoint** — `POST /api/v1/me/change-password` (self-service, proves the current password,
+  revokes other sessions). No frontend form calls it yet.
+- **Scoping** — `ReadScopeGuard.isAssignmentScope()` + `MatterRepository.findByFiltersAndIdIn` so an
+  employee's matter lists are their assignments (empty page when none)
+- **461 tests green** (63 in the QA suites); new regression test `AUTH-09b`
 
 ## Recent Work (2026-09-21 QA session)
 - **Fix batch** — F-1..F-5, F-7, F-8 implemented and their QA tests flipped to assert the fixed
@@ -42,6 +61,8 @@ native `date(...)` aggregates, and the manual UI checklist sign-off.
 - **Postman** — sections 8-11 for all new endpoints
 
 ## Deep History Index
+- `memory/2026-09-23.md` — Six-bug fix batch: client-portal login, reset/change password APIs + unified password policy, `isTrial`, bulk deactivate, assignment e-mail, assignment-scoped matter lists; `JsonNode` body-binding gotcha
+- `fixes.md` — the per-bug deliverable for the 2026-09-23 batch
 - `memory/2026-09-21.md` — Full API QA + security pass (56 new tests, 416 green), findings F-1..F-14, case/project client-binding verdict, UI test checklist, test-harness gotchas
 - `docs/qa-report-2026-09-21.md` / `docs/ui-test-checklist.md` — QA deliverables
 - `memory/2026-09-13.md` — Bug fix batch: GetAllFirms isTrial, custom perms grouped, NOTIFICATION_MANAGEMENT seed, default role delete block, MFA reset for Firm Admin, client password reset confirmed

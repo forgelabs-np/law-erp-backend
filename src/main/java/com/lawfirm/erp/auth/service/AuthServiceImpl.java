@@ -34,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -83,10 +84,9 @@ public class AuthServiceImpl implements AuthService {
                     "Your firm account has been suspended. Please contact support.");
         }
 
-        User user = isClient
-                ? userRepository.findByMobileNoAndFirmId(request.getUsername(), firm.getId())
-                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"))
-                : userRepository.findByUsernameAndFirmId(request.getUsername(), firm.getId())
+        User user = (isClient
+                ? findClientAccount(request.getUsername(), firm.getId())
+                : userRepository.findByUsernameAndFirmId(request.getUsername(), firm.getId()))
                 .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
 
         if (isClient && user.getUserType() != UserType.CLIENT) {
@@ -136,6 +136,27 @@ public class AuthServiceImpl implements AuthService {
         }
 
         return issueFullTokens(user);
+    }
+
+    /**
+     * The client account behind a portal sign-in.
+     *
+     * <p>The portal has one identifier field and it is labelled "username", but a client is handed
+     * a generated username and is also told they can sign in with their mobile number. Resolving
+     * both here means either one reaches the same account: the mobile arm was the only one, so a
+     * client typing the name their firm gave them got a bare "Invalid credentials" and could never
+     * open the portal.
+     */
+    private Optional<User> findClientAccount(String identifier, UUID firmId) {
+
+        if (identifier == null || identifier.isBlank()) {
+            return Optional.empty();
+        }
+
+        String value = identifier.trim();
+
+        return userRepository.findByMobileNoAndFirmId(value, firmId)
+                .or(() -> userRepository.findByUsernameAndFirmId(value, firmId));
     }
 
     @Override
@@ -250,6 +271,8 @@ public class AuthServiceImpl implements AuthService {
         String identifier = request.getUsername().trim();
         User user = userRepository.findByUsernameAndFirmId(identifier, firm.getId())
                 .or(() -> userRepository.findByEmailAndFirmId(identifier, firm.getId()))
+                // Clients are asked for their mobile number on the portal, so it has to resolve here too.
+                .or(() -> userRepository.findByMobileNoAndFirmId(identifier, firm.getId()))
                 .orElse(null);
 
         if (user == null || !user.isActive() || Boolean.TRUE.equals(user.getIsBlocked())) {

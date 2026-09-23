@@ -451,6 +451,34 @@ class AuthSecurityQaTest extends QaBaseTest {
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
+    @DisplayName("AUTH-09b: a client can sign into the portal with the username the firm created")
+    void clientPortalAcceptsTheUsernameToo() throws Exception {
+        Setup s = setupFirm("QAAUTH19", "qa_auth19_admin");
+        String mobile = "9812341919";
+
+        MvcResult created = authPost(s.adminToken(), "/api/v1/firm/clients", apiRequest(Map.of(
+                "username", "qa_auth19_client",
+                "email", "qa_auth19_client@qaauth19.test",
+                "mobileNo", mobile,
+                "password", CLIENT_PWD,
+                "fullName", "Portal Client",
+                "portalAccessEnabled", true)));
+        assertAllowed(created, "create client with portal access");
+
+        UUID clientId = UUID.fromString(json(created).path("data").path("id").asText());
+        String username = userRepository.findById(clientId).orElseThrow().getUsername();
+        assertNotNull(username, "A portal account must carry a username to type");
+
+        // The portal has one identifier field, labelled username. A client handed a username must
+        // not be turned away because the lookup only ever knew about mobile numbers.
+        MvcResult byUsername = clientLoginRaw("QAAUTH19", username, CLIENT_PWD);
+        assertEquals(200, status(byUsername), "Client portal login by username: " + raw(byUsername));
+
+        MvcResult byMobile = clientLoginRaw("QAAUTH19", mobile, CLIENT_PWD);
+        assertEquals(200, status(byMobile), "Client portal login by mobile: " + raw(byMobile));
+    }
+
+    @Test
     @DisplayName("AUTH-10: injection-style input fails closed without 5xx or auth bypass")
     void injectionAttempts() throws Exception {
         Setup s = setupFirm("QAAUTH10", "qa_auth10_admin");

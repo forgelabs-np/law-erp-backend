@@ -27,7 +27,7 @@ public class NotificationPreferenceServiceImpl implements NotificationPreference
     public boolean isEmailEnabledFor(UUID userId, NotificationType type) {
         return preferenceRepository.findByUserIdAndType(userId, type)
                 .map(NotificationPreference::isEmailEnabled)
-                .orElseGet(() -> type.getCategory() == NotificationCategory.ALERT);
+                .orElseGet(type::emailsByDefault);
     }
 
     @Override
@@ -41,7 +41,7 @@ public class NotificationPreferenceServiceImpl implements NotificationPreference
                     .filter(p -> p.getType() == type)
                     .findFirst()
                     .map(NotificationPreference::isEmailEnabled)
-                    .orElseGet(() -> type.getCategory() == NotificationCategory.ALERT);
+                    .orElseGet(type::emailsByDefault);
             boolean locked = type.getCategory() == NotificationCategory.ALERT;
             views.add(new NotificationPreferenceView(type, effective, locked));
         }

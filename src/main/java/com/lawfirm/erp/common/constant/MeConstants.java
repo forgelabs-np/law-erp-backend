@@ -6,4 +6,7 @@ public final class MeConstants {
 
     public static final String GET_ME_SUMMARY = "Get current user identity";
     public static final String GET_ME_DESCRIPTION = "Returns full identity for the logged-in user: profile, firm context, role, all permissions (flat + grouped by module). Frontend calls this once on app load to build the sidebar and permission checks.";
+
+    public static final String CHANGE_PASSWORD_SUMMARY = "Change your own password";
+    public static final String CHANGE_PASSWORD_DESCRIPTION = "Signed-in users change their own password here by proving the current one. The forced first-login rotation uses /auth/change-password with its one-time token instead. A successful change signs out every other session.";
 }

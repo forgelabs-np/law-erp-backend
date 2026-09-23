@@ -1,11 +1,17 @@
 package com.lawfirm.erp.modules.me.service;
 
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
+import com.lawfirm.erp.common.enums.AuditAction;
+import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.FirmStatus;
+import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.exception.UnauthorizedException;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.common.util.PasswordPolicy;
+import com.lawfirm.erp.modules.audit.service.AuditService;
+import com.lawfirm.erp.modules.me.dto.ChangeOwnPasswordRequest;
 import com.lawfirm.erp.common.service.FirmConfigService;
 import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.entity.User;
@@ -20,7 +26,9 @@ import com.lawfirm.erp.rbac.repository.ModuleRepository;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -32,6 +40,8 @@ import java.util.stream.Collectors;
 public class MeServiceImpl implements MeService {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final AuditService auditService;
     private final RolePermissionRepository rolePermissionRepository;
     private final FirmModuleRepository firmModuleRepository;
     private final ModuleRepository moduleRepository;
@@ -39,6 +49,51 @@ public class MeServiceImpl implements MeService {
     private final SystemConfigService systemConfigService;
     private final FirmConfigService firmConfigService;
     private final MeMapper meMapper;
+
+    @Override
+    @Transactional
+    public void changeOwnPassword(ChangeOwnPasswordRequest request) {
+
+        UUID userId = currentUserResolver.getCurrentUserId();
+        if (userId == null) {
+            throw new UnauthorizedException("Not authenticated");
+        }
+
+        if (request.getNewPassword() == null
+                || !request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new BusinessRuleException("Passwords do not match");
+        }
+
+        String violation = PasswordPolicy.violation(request.getNewPassword());
+        if (violation != null) {
+            throw new BusinessRuleException(violation);
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new BusinessRuleException("Current password is incorrect");
+        }
+
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
+            throw new BusinessRuleException("Please choose a password you have not used before");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setMustChangePassword(false);
+        user.setLoginAttempts(0);
+        user.setLockedUntil(null);
+        userRepository.save(user);
+
+        // Changing a password is also "sign out everywhere": every token minted before this
+        // point carries the old permissionVersion and is refused by JwtAuthFilter.
+        userRepository.incrementPermissionVersion(userId);
+
+        auditService.log(AuditAction.PASSWORD_CHANGED, AuditEntity.AUTH, userId,
+                "Password changed by the account owner: " + user.getUsername());
+        log.info("Password changed by the account owner: {}", user.getUsername());
+    }
 
     @Override
     public MeResponse getMe() {

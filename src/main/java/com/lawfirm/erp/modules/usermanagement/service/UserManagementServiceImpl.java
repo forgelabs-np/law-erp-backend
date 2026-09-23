@@ -11,6 +11,7 @@ import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.common.util.PasswordPolicy;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
@@ -20,6 +21,7 @@ import com.lawfirm.erp.modules.usermanagement.dto.request.BulkDeactivateRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkRoleChangeRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.response.BulkOperationResult;
+import com.lawfirm.erp.modules.usermanagement.dto.response.PasswordResetResult;
 import com.lawfirm.erp.modules.usermanagement.dto.response.UserPermissionsResponse;
 import com.lawfirm.erp.modules.usermanagement.dto.response.UserProfileResponse;
 import com.lawfirm.erp.modules.usermanagement.dto.response.UserSummaryResponse;
@@ -206,12 +208,27 @@ public class UserManagementServiceImpl implements UserManagementService {
 
     @Override
     @Transactional
-    public void resetPassword(UUID userId, ResetPasswordRequest request) {
+    public PasswordResetResult resetPassword(UUID userId, ResetPasswordRequest request) {
         UUID firmId = getRequiredFirmId();
         User user = getValidatedUser(userId, firmId);
 
-        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
-        // An admin-chosen password is a temporary credential: force the holder to pick
+        // The console's reset is a confirmation dialog: it sends no password. Generate one that
+        // satisfies the product's policy and hand it back to the admin to pass on, rather than
+        // refusing the action the button was built for.
+        String chosen = request != null ? request.getNewPassword() : null;
+        boolean generated = chosen == null || chosen.isBlank();
+
+        if (generated) {
+            chosen = PasswordPolicy.generateTemporary();
+        } else {
+            String violation = PasswordPolicy.violation(chosen);
+            if (violation != null) {
+                throw new BusinessRuleException(violation);
+            }
+        }
+
+        user.setPassword(passwordEncoder.encode(chosen));
+        // An admin-issued password is a temporary credential: force the holder to pick
         // their own on the next login, whether or not the account is brand new.
         user.setMustChangePassword(true);
         user.setLoginAttempts(0);
@@ -222,16 +239,35 @@ public class UserManagementServiceImpl implements UserManagementService {
         permissionEvaluator.clearUserCache(userId);
 
         auditService.log(AuditAction.PASSWORD_CHANGED, AuditEntity.USER, userId,
-                "Password reset by firm admin for: " + user.getUsername());
+                "Password reset by firm admin for: " + user.getUsername()
+                        + (generated ? " (temporary password generated)" : " (password set by admin)"));
 
-        log.info("Password reset for: {}", user.getUsername());
+        log.info("Password reset for: {} (generated={})", user.getUsername(), generated);
 
         UUID currentUserId = currentUserResolver.getCurrentUserId();
         emailService.sendPasswordReset(
                 firmId, currentUserId, user.getEmail(), user.getFullName(),
-                request.getNewPassword(),
+                chosen,
                 user.getFirm() != null ? user.getFirm().getName() : "Your Firm"
         );
+
+        return PasswordResetResult.builder()
+                .username(user.getUsername())
+                .generated(generated)
+                // Only ever echoed for a password we generated: an admin-chosen one is theirs.
+                .temporaryPassword(generated ? chosen : null)
+                .mustChangePassword(true)
+                .build();
+    }
+
+    /**
+     * A bulk selection must not be empty. Checked here rather than only on the DTO because the
+     * screens post the payload bare, which the envelope's {@code @Valid} never saw.
+     */
+    private void requireUserIds(List<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            throw new BusinessRuleException("At least one user ID is required");
+        }
     }
 
     @Override
@@ -255,6 +291,9 @@ public class UserManagementServiceImpl implements UserManagementService {
     @Override
     @Transactional
     public BulkOperationResult bulkDeactivate(BulkDeactivateRequest request) {
+
+        requireUserIds(request != null ? request.getUserIds() : null);
+
         UUID firmId = getRequiredFirmId();
         UUID currentUserId = currentUserResolver.getCurrentUserId();
 
@@ -317,6 +356,9 @@ public class UserManagementServiceImpl implements UserManagementService {
     @Override
     @Transactional
     public BulkOperationResult bulkRoleChange(BulkRoleChangeRequest request) {
+
+        requireUserIds(request != null ? request.getUserIds() : null);
+
         UUID firmId = getRequiredFirmId();
 
         Role newRole = roleRepository.findById(request.getRoleId())

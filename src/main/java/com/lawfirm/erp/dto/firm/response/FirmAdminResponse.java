@@ -25,6 +25,10 @@ public class FirmAdminResponse {
     private String firmType;
     private String firmAddress;
     private String firmPhone;
+    /** The firm's own trial state — the Super Admin console lists firms through this response. */
+    private Boolean isTrial;
+    private Integer trialDays;
+    private LocalDateTime trialExpiresAt;
     private Boolean isActive;
     private LocalDateTime createdAt;
 }

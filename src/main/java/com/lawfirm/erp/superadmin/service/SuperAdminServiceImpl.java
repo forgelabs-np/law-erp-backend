@@ -7,9 +7,11 @@ import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.UserType;
+import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.common.util.PasswordPolicy;
 import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
 import com.lawfirm.erp.dto.admin.response.AdminUserResponse;
@@ -19,6 +21,7 @@ import com.lawfirm.erp.dto.admin.response.RoleResponse;
 import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.dto.auth.request.RegisterSuperAdminRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
+import com.lawfirm.erp.modules.usermanagement.dto.response.PasswordResetResult;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
 import com.lawfirm.erp.dto.auth.response.RegisterResponse;
@@ -211,11 +214,23 @@ public class SuperAdminServiceImpl implements SuperAdminService {
 
     @Override
     @Transactional
-    public void resetPassword(UUID userId, ResetPasswordRequest request) {
+    public PasswordResetResult resetPassword(UUID userId, ResetPasswordRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        String chosen = request != null ? request.getNewPassword() : null;
+        boolean generated = chosen == null || chosen.isBlank();
+
+        if (generated) {
+            chosen = PasswordPolicy.generateTemporary();
+        } else {
+            String violation = PasswordPolicy.violation(chosen);
+            if (violation != null) {
+                throw new BusinessRuleException(violation);
+            }
+        }
+
+        user.setPassword(passwordEncoder.encode(chosen));
         // Super-Admin-issued passwords are temporary: force a rotation on next login and
         // clear any lockout so the user can actually get back in.
         user.setMustChangePassword(true);
@@ -226,9 +241,19 @@ public class SuperAdminServiceImpl implements SuperAdminService {
         userRepository.incrementPermissionVersion(userId);
 
         auditService.log(AuditAction.PASSWORD_CHANGED, AuditEntity.USER, userId,
-                "Password reset by Super Admin for: " + user.getUsername());
+                "Password reset by Super Admin for: " + user.getUsername()
+                        + (generated ? " (temporary password generated)" : " (password set by SA)"));
 
-        log.info("Password reset for user: {} by Super Admin", user.getUsername());
+        log.info("Password reset for user: {} by Super Admin (generated={})",
+                user.getUsername(), generated);
+
+        return PasswordResetResult.builder()
+                .username(user.getUsername())
+                .generated(generated)
+                // Never echo a password the caller chose; only the one we had to invent.
+                .temporaryPassword(generated ? chosen : null)
+                .mustChangePassword(true)
+                .build();
     }
 
     @Override

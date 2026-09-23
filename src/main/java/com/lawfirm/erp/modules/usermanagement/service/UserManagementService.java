@@ -7,6 +7,7 @@ import com.lawfirm.erp.modules.usermanagement.dto.request.BulkRoleChangeRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
 import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.response.BulkOperationResult;
+import com.lawfirm.erp.modules.usermanagement.dto.response.PasswordResetResult;
 import com.lawfirm.erp.modules.usermanagement.dto.response.UserPermissionsResponse;
 import com.lawfirm.erp.modules.usermanagement.dto.response.UserProfileResponse;
 import com.lawfirm.erp.modules.usermanagement.dto.response.UserSummaryResponse;
@@ -27,7 +28,11 @@ public interface UserManagementService {
 
     List<UserProfileResponse.ActivityEntry> getUserActivity(UUID userId, LocalDateTime from, LocalDateTime to, int page, int size);
 
-    void resetPassword(UUID userId, ResetPasswordRequest request);
+    /**
+     * Sets a new password for another user. With none supplied, a policy-compliant temporary one
+     * is generated and returned; either way the holder must rotate it on the next login.
+     */
+    PasswordResetResult resetPassword(UUID userId, ResetPasswordRequest request);
 
     void resetMfa(UUID userId, MfaResetRequest request);
 

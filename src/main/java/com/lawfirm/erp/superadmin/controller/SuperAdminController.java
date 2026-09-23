@@ -4,6 +4,7 @@ import com.lawfirm.erp.common.constant.SuperAdminConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.dto.PagedResponse;
+import com.lawfirm.erp.common.dto.RequestBodyBinder;
 import com.lawfirm.erp.common.enums.Message;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.exception.ResponseHandler;
@@ -13,6 +14,7 @@ import com.lawfirm.erp.dto.admin.response.RolePermissionResponse;
 import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.dto.auth.request.RegisterSuperAdminRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
+import com.lawfirm.erp.modules.usermanagement.dto.response.PasswordResetResult;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
 import com.lawfirm.erp.dto.auth.response.RegisterResponse;
@@ -37,6 +39,7 @@ public class SuperAdminController {
     private final SuperAdminService superAdminService;
     private final com.lawfirm.erp.firm.service.FirmRoleService firmRoleService;
     private final ResponseHandler responseHandler;
+    private final RequestBodyBinder requestBodyBinder;
 
     @PostMapping("/register")
     @Operation(summary = SuperAdminConstants.REGISTER_SUMMARY, description = SuperAdminConstants.REGISTER_DESCRIPTION)
@@ -114,12 +117,15 @@ public class SuperAdminController {
 
     @PostMapping("/users/{userId}/reset-password")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
-    @Operation(summary = "Reset any user's password")
-    public ResponseEntity<ApiResponse<Void>> resetPassword(
+    @Operation(summary = "Reset any user's password",
+            description = "The body is optional: with no password the service generates a temporary one and returns it for the Super Admin to hand over.")
+    public ResponseEntity<ApiResponse<PasswordResetResult>> resetPassword(
             @PathVariable UUID userId,
-            @Valid @RequestBody ApiRequest<ResetPasswordRequest> request) {
-        superAdminService.resetPassword(userId, request.getData());
-        return responseHandler.ok(null, "Password reset successfully. User must re-login.");
+            @RequestBody(required = false) String body) {
+        ResetPasswordRequest payload = requestBodyBinder.bind(body, ResetPasswordRequest.class);
+        return responseHandler.ok(
+                superAdminService.resetPassword(userId, payload),
+                "Password reset successfully. User must re-login.");
     }
 
     @PostMapping("/mfa/reset")

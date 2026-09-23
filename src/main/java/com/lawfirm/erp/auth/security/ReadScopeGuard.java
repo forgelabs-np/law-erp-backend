@@ -30,6 +30,22 @@ public class ReadScopeGuard {
         return user != null && "CLIENT".equalsIgnoreCase(user.getUserType());
     }
 
+    /**
+     * True when the caller is firm staff who may only see the work assigned to them.
+     *
+     * <p>A firm admin owns the whole book, a client is already limited by {@link #isClientScope()},
+     * and a platform admin is outside firms entirely. Everyone else — advocate, paralegal, custom
+     * roles — works a caseload, so the case lists are narrowed to their assignments. Without this
+     * an employee with no assignment at all still read every matter in the firm.
+     */
+    public boolean isAssignmentScope() {
+        AuthenticatedUser user = currentUserResolver.getCurrentUser();
+        if (user == null || user.isSuperAdmin() || user.isFirmAdmin()) {
+            return false;
+        }
+        return !"CLIENT".equalsIgnoreCase(user.getUserType());
+    }
+
     public UUID currentUserId() {
         return currentUserResolver.getCurrentUserId();
     }
