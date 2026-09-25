@@ -6,6 +6,7 @@ import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.dto.firm.request.CreateFirmRequest;
 import com.lawfirm.erp.dto.firm.request.ExtendTrialRequest;
+import com.lawfirm.erp.dto.firm.request.UpdateFirmRequest;
 import com.lawfirm.erp.dto.firm.response.FirmAdminResponse;
 import com.lawfirm.erp.dto.firm.response.FirmCreationResponse;
 import com.lawfirm.erp.dto.firm.response.FirmListResponse;
@@ -49,6 +50,17 @@ public class FirmAdminController {
         return responseHandler.ok(
                 firmService.getAllFirms(),
                 "Firms fetched successfully"
+        );
+    }
+
+    @PutMapping("/{firmId}")
+    @Operation(summary = FirmConstants.UPDATE_FIRM_SUMMARY, description = FirmConstants.UPDATE_FIRM_DESCRIPTION)
+    public ResponseEntity<ApiResponse<FirmListResponse>> updateFirm(
+            @PathVariable UUID firmId,
+            @Valid @RequestBody ApiRequest<UpdateFirmRequest> request) {
+        return responseHandler.ok(
+                firmService.updateFirm(firmId, request.getData()),
+                "Firm updated successfully"
         );
     }
 

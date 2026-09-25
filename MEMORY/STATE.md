@@ -1,7 +1,20 @@
 # Project State
 
 ## Current Focus
-**2026-09-23 — latest addition: both admin-reset paths now e-mail the temporary password**
+**2026-09-25 — firm Edit no longer demands the admin password: new `PUT /api/v1/super-admin/firms/{firmId}`.**
+The console's Edit dialog was POSTing to **create** — the only endpoint binding `CreateFirmRequest` — so
+validation answered "Admin password is required", and would have answered "Firm code already exists"
+even with one. No firm-update endpoint existed at all. The new PUT updates firm details plus the
+FIRM_ADMIN's name/email/mobile with **no password in the payload**; `lawFirmCode`, `adminUsername` and
+`adminPassword` are accepted only so the create body can be replayed unchanged, and a *different*
+value is a 400 pointing at the reset-password endpoint (silently dropping a credential change is the
+`AUTH-14` failure mode). Omitted fields are left untouched, an explicit `""` clears a nullable column,
+and the oldest FIRM_ADMIN wins when a firm has several. Audit `FIRM_UPDATED`. **488 tests green**
+(+15 unit, +2 QA). Postman request added. **Owed on the FE:** point Edit at the new PUT — the old
+`POST /super-admin/firms` call can never work as update.
+
+### Previous focus (2026-09-23) — reset mails carry the temporary password
+**2026-09-23 — both admin-reset paths now e-mail the temporary password**
 (the console never displayed `data.temporaryPassword`, so the flow produced a credential nobody
 could see). `EmailServiceImpl.sendPasswordReset` sets the variable it already received,
 `password-reset-notice.html` renders it under `th:if="${tempPassword}"` and no longer claims it is
@@ -51,7 +64,9 @@ native `date(...)` aggregates, and the manual UI checklist sign-off.
 ## Branch
 `devG` — everything from 2026-09-23 is **uncommitted** here: the six-bug batch, the F-9
 refresh-token work, the reset-mail changes (firm-admin + Super Admin paths), the `AUTH-14`
-extension and `docs/frontend-reset-password-guide.md`. (`production` still carries the uncommitted
+extension and `docs/frontend-reset-password-guide.md`. 2026-09-25 adds `UpdateFirmRequest`,
+`FirmServiceImpl.updateFirm` + `PUT /api/v1/super-admin/firms/{firmId}`, `FirmServiceUpdateTest`,
+`SuperAdminQaTest` SA-04b/SA-04c and the Postman request. (`production` still carries the uncommitted
 2026-09-21 F-1..F-15 batch; PR #29 was merged into it from `devG`.)
 **Build command on this machine:** `JAVA_HOME="$HOME/.jdks/corretto-21.0.11" ./mvnw -o test` — the
 env default is a JDK this module cannot build with.
@@ -103,6 +118,9 @@ env default is a JDK this module cannot build with.
 - **Postman** — sections 8-11 for all new endpoints
 
 ## Deep History Index
+- `memory/2026-09-25.md` — firm Edit POSTed to create ("Admin password is required"): new
+  `PUT /super-admin/firms/{firmId}` + `UpdateFirmRequest`; why the immutables are rejected rather
+  than ignored, null-vs-blank field semantics, and the "oldest FIRM_ADMIN is primary" rule
 - `senior dev[ponytail]` — ponytail skill install commands (kept, not re-run) + the
   "review this senior" workflow: review → list simpler/faster options → wait for approval → fix
 - `memory/2026-09-23.md` — Six-bug fix batch (client-portal login, reset/change-password APIs + unified password policy, `isTrial`, bulk deactivate, assignment e-mail, assignment-scoped matter lists; `JsonNode` body-binding gotcha); SMTP username corruption (Gmail 235 verified) + admin-reset `@JsonAlias` (`AUTH-14`); F-9 closed — refresh store/rotation/family-revoke, server-side `POST /auth/logout`, SA staleness (`AUTH-15`..`AUTH-18`); then reset mails (firm **and** SA) carry the temporary password, `LOGIN_URL` owns the Sign in link, accepted reset body shapes incl. `{}`, dead `PASSWORD_RESET_URL` knob, orphaned `password-reset.html`, and the `SpringTemplateEngine`-not-OGNL test gotcha

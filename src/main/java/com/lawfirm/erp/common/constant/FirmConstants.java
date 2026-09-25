@@ -31,6 +31,8 @@ public final class FirmConstants {
 
     // FirmAdminController (Super Admin)
     public static final String CREATE_FIRM_SUMMARY = "Create a new firm with Firm Admin";
+    public static final String UPDATE_FIRM_SUMMARY = "Update an existing firm";
+    public static final String UPDATE_FIRM_DESCRIPTION = "Updates the firm's details and, optionally, the firm admin's name/email/mobile. Sending a different lawFirmCode, adminUsername or adminPassword is rejected with 400 — the password is changed through POST /api/v1/super-admin/users/{userId}/reset-password. Omitted fields are left unchanged.";
     public static final String GET_ALL_FIRM_ADMINS_SUMMARY = "Get all firm admins across all firms";
     public static final String GET_FIRM_ADMINS_BY_FIRM_SUMMARY = "Get all firm admins for a specific firm";
     public static final String GET_FIRM_ADMIN_BY_ID_SUMMARY = "Get firm admin by ID";
