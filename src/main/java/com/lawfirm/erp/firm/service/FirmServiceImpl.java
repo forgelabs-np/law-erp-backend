@@ -13,6 +13,7 @@ import com.lawfirm.erp.common.exception.DuplicateResourceException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
 import com.lawfirm.erp.dto.firm.request.CreateFirmRequest;
+import com.lawfirm.erp.dto.firm.request.UpdateFirmRequest;
 import com.lawfirm.erp.dto.firm.response.FirmCreationResponse;
 import com.lawfirm.erp.dto.firm.response.FirmListResponse;
 import com.lawfirm.erp.entity.User;
@@ -29,6 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -175,22 +177,156 @@ public class FirmServiceImpl implements FirmService {
     @Override
     public List<FirmListResponse> getAllFirms() {
         return firmRepository.findAll().stream()
-                .map(firm -> FirmListResponse.builder()
-                        .id(firm.getId())
-                        .lawFirmCode(firm.getLawFirmCode())
-                        .name(firm.getName())
-                        .firmType(firm.getFirmType())
-                        .status(firm.getStatus())
-                        .email(firm.getEmail())
-                        .phone(firm.getPhone())
-                        .address(firm.getAddress())
-                        .jurisdiction(firm.getJurisdiction())
-                        .isTrial(Boolean.TRUE.equals(firm.getIsTrial()))
-                        .trialDays(firm.getTrialDays())
-                        .trialExpiresAt(firm.getTrialExpiresAt())
-                        .createdAt(firm.getCreatedAt())
-                        .build())
+                .map(this::toListResponse)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Updates a firm's own details and, optionally, its FIRM_ADMIN contact details.
+     *
+     * <p>Null/blank fields are skipped rather than written, so a partially filled edit form cannot
+     * wipe the columns it left empty. The firm code, the admin username and the admin password are
+     * immutable here — see {@link #rejectImmutableChanges}.
+     */
+    @Override
+    @Transactional
+    public FirmListResponse updateFirm(UUID firmId, UpdateFirmRequest request) {
+        Firm firm = firmRepository.findById(firmId)
+                .orElseThrow(() -> new ResourceNotFoundException("Firm not found"));
+
+        User admin = primaryFirmAdmin(firmId);
+        rejectImmutableChanges(firm, admin, request);
+
+        if (hasText(request.getName())) firm.setName(request.getName().trim());
+        if (request.getFirmType() != null) firm.setFirmType(request.getFirmType());
+        if (request.getEmail() != null) firm.setEmail(trimToNull(request.getEmail()));
+        if (request.getPhone() != null) firm.setPhone(trimToNull(request.getPhone()));
+        if (request.getAddress() != null) firm.setAddress(trimToNull(request.getAddress()));
+        if (request.getJurisdiction() != null) firm.setJurisdiction(trimToNull(request.getJurisdiction()));
+        if (request.getLogoUrl() != null) firm.setLogoUrl(trimToNull(request.getLogoUrl()));
+        firmRepository.save(firm);
+
+        applyAdminDetails(firm, admin, request);
+
+        auditService.logExplicit(
+                firm.getId(),
+                admin != null ? admin.getId() : null,
+                "S",
+                AuditAction.FIRM_UPDATED,
+                AuditEntity.FIRM,
+                firm.getId(),
+                "Firm updated: " + firm.getLawFirmCode() + " (" + firm.getName() + ")",
+                null
+        );
+        log.info("Firm {} updated", firm.getLawFirmCode());
+
+        return toListResponse(firm);
+    }
+
+    /**
+     * Rejects attempts to change the three fields this endpoint does not own. The console replays
+     * the whole create body, so an <i>unchanged</i> value must pass — only a different one is an
+     * error. A dropped password change would look exactly like a successful update.
+     */
+    private void rejectImmutableChanges(Firm firm, User admin, UpdateFirmRequest request) {
+        if (hasText(request.getLawFirmCode())
+                && !firm.getLawFirmCode().equalsIgnoreCase(request.getLawFirmCode().trim())) {
+            throw new BusinessRuleException(
+                    "Law firm code cannot be changed after creation (current: " + firm.getLawFirmCode() + ")");
+        }
+        if (hasText(request.getAdminUsername()) && admin != null
+                && !admin.getUsername().equalsIgnoreCase(request.getAdminUsername().trim())) {
+            throw new BusinessRuleException(
+                    "Firm admin username cannot be changed after creation (current: " + admin.getUsername() + ")");
+        }
+        if (hasText(request.getAdminPassword())) {
+            throw new BusinessRuleException(
+                    "The firm admin password cannot be changed here — use "
+                            + "POST /api/v1/super-admin/users/{userId}/reset-password");
+        }
+    }
+
+    /** Admin contact details only; a no-op when the payload carries none of them. */
+    private void applyAdminDetails(Firm firm, User admin, UpdateFirmRequest request) {
+        boolean detailsSent = hasText(request.getAdminFullName())
+                || hasText(request.getAdminEmail())
+                || hasText(request.getAdminMobileNo());
+        if (!detailsSent) {
+            return;
+        }
+        if (admin == null) {
+            throw new BusinessRuleException("No " + RoleCode.FIRM_ADMIN
+                    + " account exists for firm '" + firm.getLawFirmCode()
+                    + "' — admin details cannot be updated");
+        }
+
+        if (hasText(request.getAdminFullName())) {
+            admin.setFullName(request.getAdminFullName().trim());
+        }
+        if (hasText(request.getAdminEmail())) {
+            String email = request.getAdminEmail().trim();
+            if (!email.equalsIgnoreCase(admin.getEmail())) {
+                // Same firm scope as employee creation: the checks exclude nobody, so they run only
+                // when the value actually changes (otherwise an unchanged email collides with itself).
+                if (userRepository.existsByEmailAndFirmId(email, admin.getFirmId())) {
+                    throw new DuplicateResourceException("Admin email already exists in this firm");
+                }
+                admin.setEmail(email);
+            }
+        }
+        if (hasText(request.getAdminMobileNo())) {
+            String mobileNo = request.getAdminMobileNo().trim();
+            if (!mobileNo.equals(admin.getMobileNo())) {
+                if (userRepository.existsByMobileNoAndFirmId(mobileNo, admin.getFirmId())) {
+                    throw new DuplicateResourceException("Admin mobile number already exists in this firm");
+                }
+                admin.setMobileNo(mobileNo);
+            }
+        }
+
+        userRepository.save(admin);
+        log.info("Firm admin {} contact details updated", admin.getUsername());
+    }
+
+    /**
+     * The firm's FIRM_ADMIN account — the one created alongside the firm. More than one user can
+     * hold FIRM_ADMIN (an employee promoted to it), so the oldest wins: repeated edits keep hitting
+     * the same account. Null when the firm has none.
+     */
+    private User primaryFirmAdmin(UUID firmId) {
+        return userRepository.findFirmAdminsByFirmId(firmId).stream()
+                .min(Comparator.comparing(User::getCreatedAt,
+                                Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(User::getId))
+                .orElse(null);
+    }
+
+    private FirmListResponse toListResponse(Firm firm) {
+        return FirmListResponse.builder()
+                .id(firm.getId())
+                .lawFirmCode(firm.getLawFirmCode())
+                .name(firm.getName())
+                .firmType(firm.getFirmType())
+                .status(firm.getStatus())
+                .email(firm.getEmail())
+                .phone(firm.getPhone())
+                .address(firm.getAddress())
+                .jurisdiction(firm.getJurisdiction())
+                .isTrial(Boolean.TRUE.equals(firm.getIsTrial()))
+                .trialDays(firm.getTrialDays())
+                .trialExpiresAt(firm.getTrialExpiresAt())
+                .createdAt(firm.getCreatedAt())
+                .build();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    /** Blank input clears the column (the console sends "" when the operator empties a field). */
+    private String trimToNull(String value) {
+        String trimmed = value == null ? null : value.trim();
+        return trimmed == null || trimmed.isEmpty() ? null : trimmed;
     }
 
     @Override

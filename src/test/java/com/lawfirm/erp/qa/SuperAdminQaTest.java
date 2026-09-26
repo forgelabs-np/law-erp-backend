@@ -141,6 +141,70 @@ class SuperAdminQaTest extends QaBaseTest {
     }
 
     @Test
+    @DisplayName("SA-04b: PUT /super-admin/firms/{firmId} edits a firm without re-sending the admin password")
+    void updateFirm_withoutAdminPassword() throws Exception {
+        String sa = token(superAdmin("qa_sa_update"));
+        JsonNode created = createFirm(sa, "QAEDIT1", "qa_edit1");
+        UUID firmId = UUID.fromString(created.path("firmId").asText());
+
+        // The console replays the whole create body on edit: same code and username, no password.
+        // Before the fix this hit POST /firms and failed with "Admin password is required".
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("lawFirmCode", "QAEDIT1");
+        body.put("name", "QAEDIT1 Renamed");
+        body.put("firmType", "SOLO");
+        body.put("email", "hello@qaedit1.test");
+        body.put("phone", "9855555555");
+        body.put("address", "Lalitpur");
+        body.put("jurisdiction", "Nepal");
+        body.put("adminUsername", "qa_edit1");
+        body.put("adminEmail", "qa_edit1b@qaedit1.test");
+        body.put("adminMobileNo", "9866666666");
+        body.put("adminFullName", "Renamed Admin");
+
+        MvcResult result = authPut(sa, "/api/v1/super-admin/firms/" + firmId, apiRequest(body));
+        assertAllowed(result, "SA updating a firm");
+
+        Firm firm = firmByCode("QAEDIT1");
+        assertEquals("QAEDIT1 Renamed", firm.getName());
+        assertEquals("SOLO", firm.getFirmType().name());
+        assertEquals("hello@qaedit1.test", firm.getEmail());
+        assertEquals("Lalitpur", firm.getAddress());
+        assertEquals("QAEDIT1", firm.getLawFirmCode(), "the firm code must stay immutable");
+
+        User admin = firmAdmin(firm, "qa_edit1");
+        assertEquals("Renamed Admin", admin.getFullName());
+        assertEquals("qa_edit1b@qaedit1.test", admin.getEmail());
+        assertEquals("9866666666", admin.getMobileNo());
+    }
+
+    @Test
+    @DisplayName("SA-04c: an update cannot change the firm code, the admin username or the admin password")
+    void updateFirm_immutableFieldsRejected() throws Exception {
+        String sa = token(superAdmin("qa_sa_update2"));
+        JsonNode created = createFirm(sa, "QAEDIT2", "qa_edit2");
+        UUID firmId = UUID.fromString(created.path("firmId").asText());
+
+        assertRejected(authPut(sa, "/api/v1/super-admin/firms/" + firmId,
+                apiRequest(Map.of("lawFirmCode", "SOMETHINGELSE"))), "changing the law firm code");
+        assertRejected(authPut(sa, "/api/v1/super-admin/firms/" + firmId,
+                apiRequest(Map.of("adminUsername", "otheredit"))), "changing the admin username");
+        assertRejected(authPut(sa, "/api/v1/super-admin/firms/" + firmId,
+                apiRequest(Map.of("adminPassword", "BrandNew123!"))), "changing the admin password");
+
+        Firm firm = firmByCode("QAEDIT2");
+        assertEquals("QAEDIT2", firm.getLawFirmCode());
+        assertEquals("qa_edit2", firmAdmin(firm, "qa_edit2").getUsername());
+
+        // Only the Super Admin owns this endpoint
+        assertDenied(authPut(token(firmAdmin(firm, "qa_edit2")),
+                "/api/v1/super-admin/firms/" + firmId, apiRequest(Map.of("name", "Hijacked"))),
+                "a firm admin editing a firm through the super-admin API");
+        assertEquals("QAEDIT2 Law Firm", firmByCode("QAEDIT2").getName(),
+                "a denied update must not have touched the row");
+    }
+
+    @Test
     @DisplayName("SA-05: granting every permission gives the firm admin full module access")
     void grantAllPermissions_adminHasFullAccess() throws Exception {
         String sa = token(superAdmin("qa_sa_grantall"));

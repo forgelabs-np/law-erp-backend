@@ -12,7 +12,9 @@ import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
+import com.lawfirm.erp.modules.email.service.EmailService;
 import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
+import com.lawfirm.erp.modules.usermanagement.dto.response.PasswordResetResult;
 import com.lawfirm.erp.rbac.repository.PermissionRepository;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
@@ -47,6 +49,7 @@ class SuperAdminPasswordResetTest {
     @Mock private PermissionRepository permissionRepository;
     @Mock private CurrentUserResolver currentUserResolver;
     @Mock private AuditService auditService;
+    @Mock private EmailService emailService;
     @Mock private AuthMapper authMapper;
     @Mock private SystemConfigService systemConfigService;
     @Mock private RbacResponseMapper rbacResponseMapper;
@@ -90,6 +93,49 @@ class SuperAdminPasswordResetTest {
         verify(auditService).log(eq(com.lawfirm.erp.common.enums.AuditAction.PASSWORD_CHANGED),
                 eq(com.lawfirm.erp.common.enums.AuditEntity.USER),
                 eq(anyUser.getId()), anyString());
+
+        // The credential must reach the user, not just the response body
+        verify(emailService).sendPasswordReset(eq(anyUser.getFirm().getId()),
+                any(), eq("advocate@test.com"), eq("Test Advocate"),
+                eq("NewPass123!"), eq("Test Firm"));
+    }
+
+    @Test
+    @DisplayName("A generated Super Admin reset password is e-mailed, not left in the response")
+    void resetPassword_generatedPasswordIsEmailed() {
+        when(userRepository.findById(anyUser.getId())).thenReturn(Optional.of(anyUser));
+
+        // No body at all — the SA console's confirmation-only reset
+        PasswordResetResult result = superAdminService.resetPassword(anyUser.getId(), null);
+
+        assertTrue(result.isGenerated(), "No supplied password must generate one");
+        String generated = result.getTemporaryPassword();
+        assertNotNull(generated, "The generated password must be handed back once");
+        assertTrue(passwordPolicyAccepts(generated),
+                "The generated password must satisfy the same 8-50 policy: " + generated);
+
+        verify(emailService).sendPasswordReset(eq(anyUser.getFirm().getId()),
+                any(), eq("advocate@test.com"), eq("Test Advocate"),
+                eq(generated), eq("Test Firm"));
+    }
+
+    @Test
+    @DisplayName("A user with no firm still gets the reset e-mail, with a null firm scope")
+    void resetPassword_userWithoutFirmIsStillEmailed() {
+        anyUser.setFirm(null);
+        when(userRepository.findById(anyUser.getId())).thenReturn(Optional.of(anyUser));
+        when(passwordEncoder.encode("NoFirm2026!")).thenReturn("$encoded");
+
+        ResetPasswordRequest request = new ResetPasswordRequest();
+        request.setNewPassword("NoFirm2026!");
+
+        assertDoesNotThrow(() -> superAdminService.resetPassword(anyUser.getId(), request));
+        verify(emailService).sendPasswordReset(isNull(), any(), eq("advocate@test.com"),
+                eq("Test Advocate"), eq("NoFirm2026!"), eq("Your Firm"));
+    }
+
+    private boolean passwordPolicyAccepts(String password) {
+        return com.lawfirm.erp.common.util.PasswordPolicy.isAcceptable(password);
     }
 
     @Test

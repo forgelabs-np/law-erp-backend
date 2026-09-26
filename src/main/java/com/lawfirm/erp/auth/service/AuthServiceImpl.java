@@ -1,6 +1,9 @@
 package com.lawfirm.erp.auth.service;
 
+import com.lawfirm.erp.auth.entity.RefreshToken;
 import com.lawfirm.erp.auth.mapper.AuthMapper;
+import com.lawfirm.erp.auth.repository.RefreshTokenRepository;
+import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import com.lawfirm.erp.auth.security.JwtUtil;
 import com.lawfirm.erp.auth.security.TotpUtil;
 import com.lawfirm.erp.common.enums.AuditAction;
@@ -34,6 +37,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -51,6 +56,8 @@ public class AuthServiceImpl implements AuthService {
     private final AuditService auditService;
     private final AuthMapper authMapper;
     private final EmailService emailService;
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final CurrentUserResolver currentUserResolver;
 
     @Value("${security.max-login-attempts:5}")
     private int maxLoginAttempts;
@@ -83,10 +90,9 @@ public class AuthServiceImpl implements AuthService {
                     "Your firm account has been suspended. Please contact support.");
         }
 
-        User user = isClient
-                ? userRepository.findByMobileNoAndFirmId(request.getUsername(), firm.getId())
-                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"))
-                : userRepository.findByUsernameAndFirmId(request.getUsername(), firm.getId())
+        User user = (isClient
+                ? findClientAccount(request.getUsername(), firm.getId())
+                : userRepository.findByUsernameAndFirmId(request.getUsername(), firm.getId()))
                 .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
 
         if (isClient && user.getUserType() != UserType.CLIENT) {
@@ -138,6 +144,31 @@ public class AuthServiceImpl implements AuthService {
         return issueFullTokens(user);
     }
 
+    /**
+     * The client account behind a portal sign-in.
+     *
+     * <p>The portal has one identifier field and it is labelled "username", but a client is handed
+     * a generated username and is also told they can sign in with their mobile number. Resolving
+     * both here means either one reaches the same account: the mobile arm was the only one, so a
+     * client typing the name their firm gave them got a bare "Invalid credentials" and could never
+     * open the portal.
+     */
+    private Optional<User> findClientAccount(String identifier, UUID firmId) {
+
+        if (identifier == null || identifier.isBlank()) {
+            return Optional.empty();
+        }
+
+        String value = identifier.trim();
+
+        return userRepository.findByMobileNoAndFirmId(value, firmId)
+                .or(() -> userRepository.findByUsernameAndFirmId(value, firmId));
+    }
+
+    // Deliberately NOT @Transactional: the reuse-revoke must survive the BadCredentialsException
+    // thrown right after it — an outer transaction would roll the family revoke back and the
+    // stolen token's siblings would live on. Each store operation commits on its own, and every
+    // failure path here is fail-closed (worst case: the user re-logs in).
     @Override
     public LoginResponse refreshToken(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) {
@@ -151,10 +182,72 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BadCredentialsException("User not found"));
 
+        // Same staleness rule as JwtAuthFilter (F-9): a password reset, role change or
+        // logout bumps permissionVersion, so it must retire live refresh tokens too —
+        // otherwise a stolen refresh token outlives the event meant to kill the session.
+        // Read from the row, not the entity: incrementPermissionVersion bypasses the
+        // persistence context, so the loaded entity can be stale.
+        Integer tokenVersion = jwtUtil.extractClaim(refreshToken,
+                claims -> claims.get("permVersion", Integer.class));
+        Integer dbVersion = userRepository.findPermissionVersionById(userId);
+        int currentVersion = dbVersion != null ? dbVersion : 0;
+        if (tokenVersion == null || tokenVersion != currentVersion) {
+            throw new BadCredentialsException("Your session has ended. Please login again.");
+        }
+
+        // Single-use rotation: the jti row is marked used; presenting it again means two
+        // copies exist and one is in the wrong hands, so the account's whole family dies.
+        String jti = jwtUtil.extractTokenId(refreshToken);
+        if (jti != null) {
+            Optional<RefreshToken> row = refreshTokenRepository.findById(jti);
+            if (row.isPresent()) {
+                if (row.get().getUsedAt() != null || row.get().getRevokedAt() != null) {
+                    // Two copies exist and one is in the wrong hands: revoke the whole family.
+                    // Done as entity writes (not a bulk UPDATE) so the persistence context this
+                    // request reads through cannot hand back a stale, still-active sibling.
+                    LocalDateTime now = LocalDateTime.now();
+                    List<RefreshToken> family = refreshTokenRepository.findByUserIdAndRevokedAtIsNull(userId);
+                    family.forEach(token -> token.setRevokedAt(now));
+                    refreshTokenRepository.saveAll(family);
+                    auditService.log(AuditAction.LOGIN_FAILED, AuditEntity.AUTH, userId,
+                            "Refresh token reuse detected — all sessions revoked for: "
+                                    + user.getUsername());
+                    throw new BadCredentialsException("Invalid refresh token");
+                }
+                row.get().setUsedAt(LocalDateTime.now());
+                refreshTokenRepository.save(row.get());
+            }
+            // Row absent = token minted outside a login flow (pre-store sessions, test
+            // helpers): the permVersion check above still bounds its life.
+        }
+
+        // Opportunistic cleanup — expired rows are dead weight; refresh is where they surface.
+        refreshTokenRepository.deleteExpired(LocalDateTime.now());
+
         auditService.log(AuditAction.TOKEN_REFRESHED, AuditEntity.AUTH, user.getId(),
                 "Token refreshed: " + user.getUsername());
 
         return issueFullTokens(user);
+    }
+
+    @Override
+    @Transactional
+    public void logout() {
+        UUID userId = currentUserResolver.getCurrentUserId();
+        if (userId == null) {
+            throw new BadCredentialsException("Not authenticated");
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadCredentialsException("User not found"));
+
+        // One bump kills everything server-side: JwtAuthFilter refuses the stale access
+        // tokens immediately, refreshToken() refuses the stale refresh tokens — on every
+        // device, not just the one that called /logout.
+        userRepository.incrementPermissionVersion(userId);
+
+        auditService.log(AuditAction.LOGOUT, AuditEntity.AUTH, user.getId(),
+                "Logout: " + user.getUsername());
+        log.info("Server-side logout for: {}", user.getUsername());
     }
 
     @Override
@@ -250,6 +343,8 @@ public class AuthServiceImpl implements AuthService {
         String identifier = request.getUsername().trim();
         User user = userRepository.findByUsernameAndFirmId(identifier, firm.getId())
                 .or(() -> userRepository.findByEmailAndFirmId(identifier, firm.getId()))
+                // Clients are asked for their mobile number on the portal, so it has to resolve here too.
+                .or(() -> userRepository.findByMobileNoAndFirmId(identifier, firm.getId()))
                 .orElse(null);
 
         if (user == null || !user.isActive() || Boolean.TRUE.equals(user.getIsBlocked())) {
@@ -390,10 +485,24 @@ public class AuthServiceImpl implements AuthService {
     private LoginResponse issueFullTokens(User user) {
         String accessToken = jwtUtil.generateAccessToken(user);
         String refreshToken = jwtUtil.generateRefreshToken(user);
+        recordRefreshToken(user, refreshToken);
 
         auditService.log(AuditAction.LOGIN, AuditEntity.AUTH, user.getId(),
                 "Login successful: " + user.getUsername());
 
         return authMapper.toSuccessResponse(accessToken, refreshToken);
+    }
+
+    /**
+     * Persist the just-minted refresh token so it can be rotated, revoked (logout) and
+     * detected on reuse. The JWT alone is untrackable — that was F-9. Mirrored in
+     * SuperAdminServiceImpl.issueFullTokens.
+     */
+    private void recordRefreshToken(User user, String refreshToken) {
+        RefreshToken row = new RefreshToken();
+        row.setId(jwtUtil.extractTokenId(refreshToken));
+        row.setUserId(user.getId());
+        row.setExpiresAt(LocalDateTime.now().plusNanos(jwtUtil.getRefreshExpiryMs() * 1_000_000L));
+        refreshTokenRepository.save(row);
     }
 }

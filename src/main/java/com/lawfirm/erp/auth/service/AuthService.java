@@ -16,6 +16,13 @@ public interface AuthService {
 
     LoginResponse refreshToken(String refreshToken);
 
+    /**
+     * Server-side logout: ends every session for the account on every device by bumping
+     * its permissionVersion (stale access tokens are refused by JwtAuthFilter, stale
+     * refresh tokens by refreshToken()).
+     */
+    void logout();
+
     LoginResponse confirmMfaSetup(MfaSetupConfirmRequest request);
 
     LoginResponse validateMfa(MfaValidateRequest request);

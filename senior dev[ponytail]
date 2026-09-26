@@ -1,0 +1,56 @@
+# senior dev[ponytail]
+
+Install commands are KEPT in this file — do NOT run them again and again.
+The skills for this repo are already installed (see "Already done" below).
+
+## Install commands (for other tools / fresh machines)
+
+```
+# Claude Code
+/plugin marketplace add DietrichGebert/ponytail
+/plugin install ponytail@ponytail
+
+# codex
+codex plugin marketplace add DietrichGebert/ponytail
+
+# copilot cli
+copilot plugin install ponytail@ponytail
+
+# gemini cli
+gemini extensions install github.com/DietrichGebert/ponytail
+```
+
+## Already done (2026-09-23, this repo)
+
+```
+npx --yes skills add DietrichGebert/ponytail --yes
+```
+
+Installed into `.agents/skills/`:
+- `ponytail` — base: laziest solution that works (YAGNI, stdlib first, one line before fifty)
+- `ponytail-review` — over-engineering review of a diff/change
+- `ponytail-audit` — whole-repo over-engineering audit (report only)
+- `ponytail-debt` — harvest `ponytail:` comments into a debt ledger
+- `ponytail-gain` — impact scoreboard
+- `ponytail-help` — quick reference
+
+---
+
+## The reviewer workflow — trigger: "review this senior"
+
+When I say **"review this senior"** (or "senior, review this"):
+
+1. **Activate** the ponytail skill(s) — `ponytail-review` for the review, `ponytail` as the
+   base mindset.
+2. **Give feedback** on what I point at: findings only first — what's over-engineered,
+   reinvented, dead, or could be simpler. No edits yet.
+3. **BEFORE fixing — list the options.** For each finding, lay out how we could fix it:
+   simpler / faster / better approach, what each costs, and a recommendation.
+   Rank them. Do not touch any code in this step.
+4. **Wait for my explicit approval** of which option to take.
+5. **Only then implement** the approved option, run the tests, and report the result.
+
+Rules:
+- No fix lands without approval in step 4. Feedback and options ≠ permission.
+- If a finding is trivial (one-line typo-level), still list it — but batch the approval
+  instead of asking one question per line.

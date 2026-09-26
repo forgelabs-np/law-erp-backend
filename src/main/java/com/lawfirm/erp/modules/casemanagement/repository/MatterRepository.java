@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -49,6 +50,25 @@ public interface MatterRepository extends JpaRepository<Matter, UUID> {
                                @Param("clientUserId") UUID clientUserId,
                                @Param("search") String search,
                                Pageable pageable);
+
+    /**
+     * The filter set above, narrowed to a set of matter ids — how an employee's list is
+     * restricted to the matters assigned to them. Callers must never pass an empty
+     * collection (an empty {@code IN} is not valid JPQL); they return an empty page instead.
+     */
+    @Query("SELECT m FROM Matter m WHERE m.firmId = :firmId AND m.id IN :matterIds " +
+           "AND (:matterType IS NULL OR m.matterType = :matterType) " +
+           "AND (:status IS NULL OR m.status = :status) " +
+           "AND (:clientUserId IS NULL OR m.clientUserId = :clientUserId) " +
+           "AND (:search IS NULL OR LOWER(m.title) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) " +
+           "     OR LOWER(m.matterNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))")
+    Page<Matter> findByFiltersAndIdIn(@Param("firmId") UUID firmId,
+                                      @Param("matterType") MatterType matterType,
+                                      @Param("status") MatterStatus status,
+                                      @Param("clientUserId") UUID clientUserId,
+                                      @Param("search") String search,
+                                      @Param("matterIds") Collection<UUID> matterIds,
+                                      Pageable pageable);
 
     /** Count by status — avoids loading all matters just to count. */
     @Query("SELECT COUNT(m) FROM Matter m WHERE m.firmId = :firmId AND m.status = :status")

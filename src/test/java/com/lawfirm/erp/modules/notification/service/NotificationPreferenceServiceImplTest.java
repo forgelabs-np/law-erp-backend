@@ -42,15 +42,19 @@ class NotificationPreferenceServiceImplTest {
     }
 
     @Test
-    @DisplayName("No row → ALERT types default to email ON, others OFF")
+    @DisplayName("No row → ALERT and CASE_ASSIGNED default to email ON, other SYSTEM types OFF")
     void defaults_byCategory() {
         when(preferenceRepository.findByUserIdAndType(USER_ID, NotificationType.HEARING_REMINDER))
                 .thenReturn(Optional.empty());
         when(preferenceRepository.findByUserIdAndType(USER_ID, NotificationType.CASE_ASSIGNED))
                 .thenReturn(Optional.empty());
+        when(preferenceRepository.findByUserIdAndType(USER_ID, NotificationType.INVOICE_STATUS))
+                .thenReturn(Optional.empty());
 
         assertTrue(service.isEmailEnabledFor(USER_ID, NotificationType.HEARING_REMINDER));
-        assertFalse(service.isEmailEnabledFor(USER_ID, NotificationType.CASE_ASSIGNED));
+        assertTrue(service.isEmailEnabledFor(USER_ID, NotificationType.CASE_ASSIGNED),
+                "an assignment must reach the assignee's inbox without them opting in");
+        assertFalse(service.isEmailEnabledFor(USER_ID, NotificationType.INVOICE_STATUS));
     }
 
     @Test
@@ -102,8 +106,8 @@ class NotificationPreferenceServiceImplTest {
         assertTrue(hearing.locked(), "ALERT not mutable");
         var caseAssigned = rows.stream()
                 .filter(r -> r.type() == NotificationType.CASE_ASSIGNED).findFirst().orElseThrow();
-        assertFalse(caseAssigned.emailEnabled(), "SYSTEM default OFF");
-        assertFalse(caseAssigned.locked(), "SYSTEM mutable");
+        assertTrue(caseAssigned.emailEnabled(), "CASE_ASSIGNED default ON");
+        assertFalse(caseAssigned.locked(), "CASE_ASSIGNED stays mutable");
     }
 
     @Test

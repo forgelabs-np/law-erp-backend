@@ -7,9 +7,11 @@ import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.enums.AuditAction;
 import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.enums.UserType;
+import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
 import com.lawfirm.erp.common.repository.UserRepository;
+import com.lawfirm.erp.common.util.PasswordPolicy;
 import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.dto.admin.request.RolePermissionRequest;
 import com.lawfirm.erp.dto.admin.response.AdminUserResponse;
@@ -19,6 +21,7 @@ import com.lawfirm.erp.dto.admin.response.RoleResponse;
 import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
 import com.lawfirm.erp.dto.auth.request.RegisterSuperAdminRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
+import com.lawfirm.erp.modules.usermanagement.dto.response.PasswordResetResult;
 import com.lawfirm.erp.dto.auth.request.SuperAdminLoginRequest;
 import com.lawfirm.erp.dto.auth.response.LoginResponse;
 import com.lawfirm.erp.dto.auth.response.RegisterResponse;
@@ -26,11 +29,14 @@ import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.audit.service.AuditService;
+import com.lawfirm.erp.modules.email.service.EmailService;
 import com.lawfirm.erp.rbac.entity.Permission;
 import com.lawfirm.erp.rbac.entity.Role;
 import com.lawfirm.erp.rbac.entity.RolePermission;
 import com.lawfirm.erp.rbac.repository.PermissionRepository;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
+import com.lawfirm.erp.auth.entity.RefreshToken;
+import com.lawfirm.erp.auth.repository.RefreshTokenRepository;
 import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
@@ -70,12 +76,14 @@ public class SuperAdminServiceImpl implements SuperAdminService {
     private final TotpUtil totpUtil;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final FirmRepository firmRepository;
     private final PasswordEncoder passwordEncoder;
     private final RolePermissionRepository rolePermissionRepository;
     private final PermissionRepository permissionRepository;
     private final CurrentUserResolver currentUserResolver;
     private final AuditService auditService;
+    private final EmailService emailService;
     private final AuthMapper authMapper;
     private final SystemConfigService systemConfigService;
     private final RbacResponseMapper rbacResponseMapper;
@@ -211,11 +219,23 @@ public class SuperAdminServiceImpl implements SuperAdminService {
 
     @Override
     @Transactional
-    public void resetPassword(UUID userId, ResetPasswordRequest request) {
+    public PasswordResetResult resetPassword(UUID userId, ResetPasswordRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        String chosen = request != null ? request.getNewPassword() : null;
+        boolean generated = chosen == null || chosen.isBlank();
+
+        if (generated) {
+            chosen = PasswordPolicy.generateTemporary();
+        } else {
+            String violation = PasswordPolicy.violation(chosen);
+            if (violation != null) {
+                throw new BusinessRuleException(violation);
+            }
+        }
+
+        user.setPassword(passwordEncoder.encode(chosen));
         // Super-Admin-issued passwords are temporary: force a rotation on next login and
         // clear any lockout so the user can actually get back in.
         user.setMustChangePassword(true);
@@ -226,9 +246,32 @@ public class SuperAdminServiceImpl implements SuperAdminService {
         userRepository.incrementPermissionVersion(userId);
 
         auditService.log(AuditAction.PASSWORD_CHANGED, AuditEntity.USER, userId,
-                "Password reset by Super Admin for: " + user.getUsername());
+                "Password reset by Super Admin for: " + user.getUsername()
+                        + (generated ? " (temporary password generated)" : " (password set by SA)"));
 
-        log.info("Password reset for user: {} by Super Admin", user.getUsername());
+        log.info("Password reset for user: {} by Super Admin (generated={})",
+                user.getUsername(), generated);
+
+        // Same delivery as the firm-admin reset: the credential only exists in the response body
+        // otherwise, and the SA console does not render temporaryPassword. A null firm is
+        // legitimate here — Super Admin resets reach accounts with no firm of their own.
+        UUID firmId = user.getFirm() != null ? user.getFirm().getId() : null;
+        emailService.sendPasswordReset(
+                firmId,
+                currentUserResolver.getCurrentUserId(),
+                user.getEmail(),
+                user.getFullName(),
+                chosen,
+                user.getFirm() != null ? user.getFirm().getName() : "Your Firm"
+        );
+
+        return PasswordResetResult.builder()
+                .username(user.getUsername())
+                .generated(generated)
+                // Never echo a password the caller chose; only the one we had to invent.
+                .temporaryPassword(generated ? chosen : null)
+                .mustChangePassword(true)
+                .build();
     }
 
     @Override
@@ -414,6 +457,14 @@ public class SuperAdminServiceImpl implements SuperAdminService {
     private LoginResponse issueFullTokens(User user) {
         String accessToken = jwtUtil.generateAccessToken(user);
         String refreshToken = jwtUtil.generateRefreshToken(user);
+
+        // Tracked like AuthServiceImpl.recordRefreshToken: without the row the token could
+        // not be rotated, revoked or reuse-detected (F-9).
+        RefreshToken row = new RefreshToken();
+        row.setId(jwtUtil.extractTokenId(refreshToken));
+        row.setUserId(user.getId());
+        row.setExpiresAt(LocalDateTime.now().plusNanos(jwtUtil.getRefreshExpiryMs() * 1_000_000L));
+        refreshTokenRepository.save(row);
 
         auditService.log(AuditAction.LOGIN, AuditEntity.AUTH, user.getId(),
                 "Super Admin logged in: " + user.getUsername());

@@ -167,6 +167,40 @@
           }
         },
         {
+          "name": "Update Firm (SA)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (!json.success) console.log('Update failed:', json.message);",
+                  "console.log('Updated firm:', json.data && json.data.name);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"lawFirmCode\": \"TESTFIRM\",\n    \"name\": \"Test Law Firm (renamed)\",\n    \"firmType\": \"FIRM\",\n    \"email\": \"info@testfirm.com\",\n    \"phone\": \"9800000010\",\n    \"address\": \"Kathmandu\",\n    \"jurisdiction\": \"Nepal\",\n    \"adminUsername\": \"firmadmin\",\n    \"adminEmail\": \"admin@testfirm.com\",\n    \"adminMobileNo\": \"9800000011\",\n    \"adminFullName\": \"Firm Admin User\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/super-admin/firms/{{firmId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "super-admin", "firms", "{{firmId}}"]
+            }
+          }
+        },
+        {
           "name": "Create Trial Firm (15 days)",
           "event": [
             {

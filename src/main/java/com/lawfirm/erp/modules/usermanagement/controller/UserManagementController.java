@@ -5,6 +5,7 @@ import com.lawfirm.erp.common.constant.UserManagementConstants;
 import com.lawfirm.erp.common.dto.ApiRequest;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.dto.PagedResponse;
+import com.lawfirm.erp.common.dto.RequestBodyBinder;
 import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.dto.auth.request.MfaResetRequest;
@@ -12,6 +13,7 @@ import com.lawfirm.erp.modules.usermanagement.dto.request.BulkDeactivateRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.BulkRoleChangeRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.request.ResetPasswordRequest;
 import com.lawfirm.erp.modules.usermanagement.dto.response.BulkOperationResult;
+import com.lawfirm.erp.modules.usermanagement.dto.response.PasswordResetResult;
 import com.lawfirm.erp.modules.usermanagement.dto.response.UserPermissionsResponse;
 import com.lawfirm.erp.modules.usermanagement.dto.response.UserProfileResponse;
 import com.lawfirm.erp.modules.usermanagement.dto.response.UserSummaryResponse;
@@ -37,6 +39,7 @@ public class UserManagementController {
     private final UserManagementService userManagementService;
     private final PermissionEvaluator permissionEvaluator;
     private final ResponseHandler responseHandler;
+    private final RequestBodyBinder requestBodyBinder;
 
     @GetMapping
     @Operation(summary = UserManagementConstants.LIST_USERS_SUMMARY, description = UserManagementConstants.LIST_USERS_DESCRIPTION)
@@ -106,13 +109,16 @@ public class UserManagementController {
     }
 
     @PostMapping("/{userId}/reset-password")
-    @Operation(summary = UserManagementConstants.RESET_PASSWORD_SUMMARY, description = UserManagementConstants.RESET_PASSWORD_DESCRIPTION)
-    public ResponseEntity<ApiResponse<Void>> resetPassword(
+    @Operation(summary = UserManagementConstants.RESET_PASSWORD_SUMMARY,
+            description = UserManagementConstants.RESET_PASSWORD_DESCRIPTION)
+    public ResponseEntity<ApiResponse<PasswordResetResult>> resetPassword(
             @PathVariable UUID userId,
-            @Valid @RequestBody ApiRequest<ResetPasswordRequest> request) {
+            @RequestBody(required = false) String body) {
         permissionEvaluator.require("USER_MANAGEMENT:EDIT");
-        userManagementService.resetPassword(userId, request.getData());
-        return responseHandler.ok(null, "Password reset successfully. User must re-login.");
+        ResetPasswordRequest payload = requestBodyBinder.bind(body, ResetPasswordRequest.class);
+        return responseHandler.ok(
+                userManagementService.resetPassword(userId, payload),
+                "Password reset successfully. User must re-login.");
     }
 
     @PostMapping("/{userId}/reset-mfa")
@@ -136,10 +142,12 @@ public class UserManagementController {
     @PostMapping("/bulk-deactivate")
     @Operation(summary = UserManagementConstants.BULK_DEACTIVATE_SUMMARY, description = UserManagementConstants.BULK_DEACTIVATE_DESCRIPTION)
     public ResponseEntity<ApiResponse<BulkOperationResult>> bulkDeactivate(
-            @Valid @RequestBody ApiRequest<BulkDeactivateRequest> request) {
+            @RequestBody(required = false) String body) {
         permissionEvaluator.require("USER_MANAGEMENT:DELETE");
+        // Body may wear the {data} envelope or be the bare payload - the screens send it bare.
+        BulkDeactivateRequest payload = requestBodyBinder.bind(body, BulkDeactivateRequest.class);
         return responseHandler.ok(
-                userManagementService.bulkDeactivate(request.getData()),
+                userManagementService.bulkDeactivate(payload),
                 "Bulk deactivation complete"
         );
     }
@@ -147,10 +155,11 @@ public class UserManagementController {
     @PostMapping("/bulk-role-change")
     @Operation(summary = UserManagementConstants.BULK_ROLE_CHANGE_SUMMARY, description = UserManagementConstants.BULK_ROLE_CHANGE_DESCRIPTION)
     public ResponseEntity<ApiResponse<BulkOperationResult>> bulkRoleChange(
-            @Valid @RequestBody ApiRequest<BulkRoleChangeRequest> request) {
+            @RequestBody(required = false) String body) {
         permissionEvaluator.require("USER_MANAGEMENT:EDIT");
+        BulkRoleChangeRequest payload = requestBodyBinder.bind(body, BulkRoleChangeRequest.class);
         return responseHandler.ok(
-                userManagementService.bulkRoleChange(request.getData()),
+                userManagementService.bulkRoleChange(payload),
                 "Bulk role change complete"
         );
     }

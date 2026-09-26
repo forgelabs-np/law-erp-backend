@@ -1,6 +1,7 @@
 package com.lawfirm.erp.firm.service;
 
 import com.lawfirm.erp.dto.firm.request.CreateFirmRequest;
+import com.lawfirm.erp.dto.firm.request.UpdateFirmRequest;
 import com.lawfirm.erp.dto.firm.response.FirmCreationResponse;
 import com.lawfirm.erp.dto.firm.response.FirmListResponse;
 
@@ -12,6 +13,8 @@ public interface FirmService {
     FirmCreationResponse createFirm(CreateFirmRequest request);
 
     List<FirmListResponse> getAllFirms();
+
+    FirmListResponse updateFirm(UUID firmId, UpdateFirmRequest request);
 
     void suspendFirm(UUID firmId);
 

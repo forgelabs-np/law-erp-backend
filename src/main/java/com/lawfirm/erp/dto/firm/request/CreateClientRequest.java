@@ -23,7 +23,8 @@ public class CreateClientRequest {
     private String mobileNo;
 
     @NotBlank(message = "Password is required")
-    @Size(min = 6, max = 50)
+    // One password policy for the whole product (8–50), the same the change/reset endpoints enforce.
+    @Size(min = 8, max = 50, message = "Password must be 8-50 characters")
     private String password;
 
     @NotBlank(message = "Full name is required")

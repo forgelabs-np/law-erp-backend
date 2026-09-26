@@ -21,5 +21,9 @@ public class FirmProfileResponse {
     private String address;
     private String jurisdiction;
     private String logoUrl;
+    /** Trial badge/expiry for the firm's own profile screen — mirrors the Super Admin list. */
+    private Boolean isTrial;
+    private Integer trialDays;
+    private LocalDateTime trialExpiresAt;
     private LocalDateTime createdAt;
 }

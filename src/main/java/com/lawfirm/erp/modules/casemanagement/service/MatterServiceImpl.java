@@ -45,6 +45,7 @@ public class MatterServiceImpl implements MatterService {
     private final UserRepository userRepository;
     private final ReadScopeGuard readScopeGuard;
     private final MatterScopeGuard matterScopeGuard;
+    private final CaseAssignmentRepository caseAssignmentRepository;
 
     @Transactional
     public MatterResponse createMatter(CreateMatterRequest request) {
@@ -124,7 +125,10 @@ public class MatterServiceImpl implements MatterService {
         }
 
         Page<Matter> matters;
-        if (effectiveClientId != null) {
+        if (readScopeGuard.isAssignmentScope()) {
+            // An employee works a caseload: their list is their assignments, never the firm's book.
+            matters = assignedMatters(firmId, matterType, status, effectiveClientId, search, pageable);
+        } else if (effectiveClientId != null) {
             matters = matterRepository.findByFilters(firmId, matterType, status, effectiveClientId, search, pageable);
         } else if (matterType != null || status != null || search != null) {
             matters = matterRepository.findByFilters(firmId, matterType, status, null, search, pageable);
@@ -137,6 +141,26 @@ public class MatterServiceImpl implements MatterService {
     public MatterResponse getMatter(String matterNumber) {
         Matter matter = findMatter(matterNumber);
         return toMatterResponse(matter, true);
+    }
+
+    /**
+     * The page of matters assigned to the caller.
+     *
+     * <p>An employee with no assignments gets an empty page rather than the firm's matters — the
+     * honest answer to "what am I working on?", and the reason this exists at all.
+     */
+    private Page<Matter> assignedMatters(UUID firmId, MatterType matterType, MatterStatus status,
+                                         UUID clientUserId, String search, Pageable pageable) {
+
+        List<UUID> assigned = caseAssignmentRepository
+                .findMatterIdsByUserIdAndFirmId(readScopeGuard.currentUserId(), firmId);
+
+        if (assigned.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        return matterRepository.findByFiltersAndIdIn(
+                firmId, matterType, status, clientUserId, search, assigned, pageable);
     }
 
     /** Validate + denormalize the matter's client link. */
@@ -240,10 +264,15 @@ public class MatterServiceImpl implements MatterService {
     public Page<StaleMatterResponse> getStaleMatters(int days, int page, int size) {
         UUID firmId = getRequiredFirmId();
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Matter> matters = readScopeGuard.isClientScope()
-                ? matterRepository.findByClientUserIdAndFirmId(
-                        readScopeGuard.currentUserId(), firmId, pageable)
-                : matterRepository.findByFirmId(firmId, pageable);
+        Page<Matter> matters;
+        if (readScopeGuard.isClientScope()) {
+            matters = matterRepository.findByClientUserIdAndFirmId(
+                    readScopeGuard.currentUserId(), firmId, pageable);
+        } else if (readScopeGuard.isAssignmentScope()) {
+            matters = assignedMatters(firmId, null, null, null, null, pageable);
+        } else {
+            matters = matterRepository.findByFirmId(firmId, pageable);
+        }
 
         List<UUID> leafIds = matters.getContent().stream()
                 .map(Matter::getCurrentCourtCaseId)

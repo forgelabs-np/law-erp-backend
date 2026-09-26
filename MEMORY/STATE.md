@@ -1,6 +1,54 @@
 # Project State
 
 ## Current Focus
+**2026-09-25 — firm Edit no longer demands the admin password: new `PUT /api/v1/super-admin/firms/{firmId}`.**
+The console's Edit dialog was POSTing to **create** — the only endpoint binding `CreateFirmRequest` — so
+validation answered "Admin password is required", and would have answered "Firm code already exists"
+even with one. No firm-update endpoint existed at all. The new PUT updates firm details plus the
+FIRM_ADMIN's name/email/mobile with **no password in the payload**; `lawFirmCode`, `adminUsername` and
+`adminPassword` are accepted only so the create body can be replayed unchanged, and a *different*
+value is a 400 pointing at the reset-password endpoint (silently dropping a credential change is the
+`AUTH-14` failure mode). Omitted fields are left untouched, an explicit `""` clears a nullable column,
+and the oldest FIRM_ADMIN wins when a firm has several. Audit `FIRM_UPDATED`. **488 tests green**
+(+15 unit, +2 QA). Postman request added. **Owed on the FE:** point Edit at the new PUT — the old
+`POST /super-admin/firms` call can never work as update.
+
+### Previous focus (2026-09-23) — reset mails carry the temporary password
+**2026-09-23 — both admin-reset paths now e-mail the temporary password**
+(the console never displayed `data.temporaryPassword`, so the flow produced a credential nobody
+could see). `EmailServiceImpl.sendPasswordReset` sets the variable it already received,
+`password-reset-notice.html` renders it under `th:if="${tempPassword}"` and no longer claims it is
+withheld, and `SuperAdminServiceImpl.resetPassword` now injects `EmailService` and mails too (its
+credential was previously trapped in the response body). Deliberate reversal of the QA finding in
+`docs/qa-report-2026-09-21.md:211` — a credential now travels in clear text by choice.
+**471 tests green.** The `Sign in` button is already GLOBAL `LOGIN_URL` config; set it to
+`http://localhost:5173/` with `PUT /api/v1/super-admin/config` (no code change — the seed is
+insert-if-missing). Still open: the console dialogs must render `data.temporaryPassword`.
+
+**Handover written the same day:** `docs/frontend-reset-password-guide.md` — the FE contract for
+all three password endpoints (admin reset, forced rotation, profile change), including two traps
+found while documenting: `/auth/change-password` collapses a confirm-mismatch, an expired token and
+a reused token into one generic `401` (so the match must be validated client-side), and
+`/me/change-password` actually kills the **caller's own** session despite saying "other sessions".
+
+**2026-09-23 — six reported UI bugs fixed, e-mail repaired, F-9 closed — 466 tests green.** Client-portal login (username or
+mobile), the reset/change-password APIs (bare/absent body, one 8–50 policy, generated temporary
+password, new self-service `POST /api/v1/me/change-password`), `isTrial` on the firm responses,
+bulk deactivate/role-change binding, the assignment e-mail default (`CASE_ASSIGNED` now e-mails),
+and assignment-scoped matter lists for non-admin staff. Full write-up in `fixes.md`.
+**Follow-up same day (fixes.md F1/F2):** all e-mail was dead because `application-dev.yml`'s
+`spring.mail.username` had trailing garbage (`…@gmail.com to d`) + spaces in the app password —
+fixed and verified `235 Accepted` auth-only; and the admin reset now accepts `password`/`pwd`/
+`new_password` as aliases for `newPassword` (`AUTH-14`) so an admin-typed password can't be
+dropped into "generate" silently. Frontend still owes a password field on the reset dialog.
+**F-9 closed same day:** refresh tokens now live in a `refresh_tokens` store keyed by JWT `jti`
+(single-use rotation, family revoke on replay), `POST /api/v1/auth/logout` bumps
+`permissionVersion` so every access + refresh token dies server-side on every device, refresh
+tokens carry the `permVersion` claim (an admin reset now kills them — that hole was unreported),
+and `JwtAuthFilter` no longer exempts Super Admin from the staleness check. Tests `AUTH-15`..`AUTH-18`.
+Uncommitted on `devG`.
+
+### Previous focus (2026-09-21)
 **QA findings F-1..F-5, F-7, F-8 fixed — plus F-15 found in review** — **423 tests green**.
 Changes are uncommitted in the working tree (matter↔client binding + OWN scope, suspended-firm
 enforcement at login **and** per-request, `GET /super-admin/firms` restored, guarded user-activity
@@ -8,18 +56,46 @@ endpoint, create-role applies `permissionIds`, self-service password reset made 
 A same-day adversarial review reproduced and fixed **F-15 (High)**: a firm admin could mint a
 `SUPER_ADMIN`-coded firm role and reach `/super-admin/**`. Full report + gap table updated in
 `docs/qa-report-2026-09-21.md` / `docs/ui-test-checklist.md`.
-Remaining: F-6 (module/plan gating is dead code) and F-9–F-14 (medium/low).
+Remaining: F-6 (module/plan gating is dead code) and F-10–F-14 (medium/low).
 **Owed before release:** the two F-15 follow-ups (defence-in-depth in the authority builder + a
 cleanup for existing firm rows carrying a `SUPER_ADMIN` role), a Postgres (not H2) pass for the
 native `date(...)` aggregates, and the manual UI checklist sign-off.
 
 ## Branch
-`production` (last merge: PR #29 from `devG`) — fix batch is uncommitted on top of it.
+`devG` — everything from 2026-09-23 is **uncommitted** here: the six-bug batch, the F-9
+refresh-token work, the reset-mail changes (firm-admin + Super Admin paths), the `AUTH-14`
+extension and `docs/frontend-reset-password-guide.md`. 2026-09-25 adds `UpdateFirmRequest`,
+`FirmServiceImpl.updateFirm` + `PUT /api/v1/super-admin/firms/{firmId}`, `FirmServiceUpdateTest`,
+`SuperAdminQaTest` SA-04b/SA-04c and the Postman request. (`production` still carries the uncommitted
+2026-09-21 F-1..F-15 batch; PR #29 was merged into it from `devG`.)
+**Build command on this machine:** `JAVA_HOME="$HOME/.jdks/corretto-21.0.11" ./mvnw -o test` — the
+env default is a JDK this module cannot build with.
 
 ## Tech Stack
 - Spring Boot (Java), PostgreSQL (Supabase), Hibernate `ddl-auto: update` — no Flyway
 - Multi-tenant ERP system
 - Modules: Auth, RBAC, Case Management, Invoicing, Super Admin, Customer, Firm, Tenant, Scraper
+
+## Recent Work (2026-09-23 fix batch)
+- **Six bugs fixed**, per-bug symptom → root cause → manual steps in `fixes.md` (repo root)
+- **New shared pieces** — `PasswordPolicy` (the single 8–50 rule + `generateTemporary()`) and
+  `RequestBodyBinder` (envelope-or-bare body; also fixes that `JsonNode` parameters cannot bind here)
+- **New endpoint** — `POST /api/v1/me/change-password` (self-service, proves the current password,
+  revokes other sessions). No frontend form calls it yet.
+- **Scoping** — `ReadScopeGuard.isAssignmentScope()` + `MatterRepository.findByFiltersAndIdIn` so an
+  employee's matter lists are their assignments (empty page when none)
+- **462 tests green** (64 in the QA suites); regression tests `AUTH-09b` and `AUTH-14`
+- **Mail repair** — corrupted `spring.mail.username` in `application-dev.yml` (trailing ` to d`,
+  spaces in the app password) killed every send; creds verified against Gmail (`235 Accepted`,
+  auth-only). `resolveFromAddress` guards the From fallback; `resolveMailSender` logs its source
+  at INFO
+- **Admin reset binding** — `ResetPasswordRequest` gained `@JsonAlias({"password","pwd",
+  "new_password"})` + both endpoints document the two body shapes in `@Operation`
+- **F-9 closed** — new `refresh_tokens` store keyed by JWT `jti` (rotation + family revoke on
+  replay), `permVersion` claim on refresh tokens, new `POST /api/v1/auth/logout` (all access +
+  refresh tokens dead on every device), SA no longer exempt from the staleness check.
+  `refreshToken()` must stay non-`@Transactional` (revoke-then-throw gets rolled back).
+  Tests `AUTH-15`..`AUTH-18`; **466 green**
 
 ## Recent Work (2026-09-21 QA session)
 - **Fix batch** — F-1..F-5, F-7, F-8 implemented and their QA tests flipped to assert the fixed
@@ -42,6 +118,16 @@ native `date(...)` aggregates, and the manual UI checklist sign-off.
 - **Postman** — sections 8-11 for all new endpoints
 
 ## Deep History Index
+- `memory/2026-09-25.md` — firm Edit POSTed to create ("Admin password is required"): new
+  `PUT /super-admin/firms/{firmId}` + `UpdateFirmRequest`; why the immutables are rejected rather
+  than ignored, null-vs-blank field semantics, and the "oldest FIRM_ADMIN is primary" rule
+- `senior dev[ponytail]` — ponytail skill install commands (kept, not re-run) + the
+  "review this senior" workflow: review → list simpler/faster options → wait for approval → fix
+- `memory/2026-09-23.md` — Six-bug fix batch (client-portal login, reset/change-password APIs + unified password policy, `isTrial`, bulk deactivate, assignment e-mail, assignment-scoped matter lists; `JsonNode` body-binding gotcha); SMTP username corruption (Gmail 235 verified) + admin-reset `@JsonAlias` (`AUTH-14`); F-9 closed — refresh store/rotation/family-revoke, server-side `POST /auth/logout`, SA staleness (`AUTH-15`..`AUTH-18`); then reset mails (firm **and** SA) carry the temporary password, `LOGIN_URL` owns the Sign in link, accepted reset body shapes incl. `{}`, dead `PASSWORD_RESET_URL` knob, orphaned `password-reset.html`, and the `SpringTemplateEngine`-not-OGNL test gotcha
+- `docs/frontend-reset-password-guide.md` — the frontend contract for ① admin reset, ② forced
+  rotation, ③ profile change: body shapes, error-status table, masked-401 warning, the "kills your
+  own session" warning on `/me/change-password`, `LOGIN_URL` setup, and a 12-step manual script
+- `fixes.md` — the per-bug deliverable for the 2026-09-23 batch
 - `memory/2026-09-21.md` — Full API QA + security pass (56 new tests, 416 green), findings F-1..F-14, case/project client-binding verdict, UI test checklist, test-harness gotchas
 - `docs/qa-report-2026-09-21.md` / `docs/ui-test-checklist.md` — QA deliverables
 - `memory/2026-09-13.md` — Bug fix batch: GetAllFirms isTrial, custom perms grouped, NOTIFICATION_MANAGEMENT seed, default role delete block, MFA reset for Firm Admin, client password reset confirmed

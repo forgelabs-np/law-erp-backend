@@ -136,6 +136,9 @@ public class FirmAdminServiceImpl implements FirmAdminService {
                 .firmType(firm != null && firm.getFirmType() != null ? firm.getFirmType().name() : null)
                 .firmAddress(firm != null ? firm.getAddress() : null)
                 .firmPhone(firm != null ? firm.getPhone() : null)
+                .isTrial(firm != null && Boolean.TRUE.equals(firm.getIsTrial()))
+                .trialDays(firm != null ? firm.getTrialDays() : null)
+                .trialExpiresAt(firm != null ? firm.getTrialExpiresAt() : null)
                 .isActive(user.isActive())
                 .createdAt(user.getCreatedAt())
                 .build();
