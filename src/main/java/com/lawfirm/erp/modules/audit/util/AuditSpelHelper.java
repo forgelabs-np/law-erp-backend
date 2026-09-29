@@ -26,6 +26,12 @@ public class AuditSpelHelper {
         try {
             StandardEvaluationContext context = new StandardEvaluationContext(rootObject);
             variables.forEach(context::setVariable);
+            // Every @Audit expression in this codebase is written against "#result" (see the
+            // annotation's javadoc). Without this binding the variable is undefined, SpEL throws
+            // VARIABLE_NOT_FOUND, and the catch below silently yields null — so entityId and
+            // summary came out empty for every annotated method. Bound after the parameters so
+            // "#result" always means the return value, whatever the parameter names are.
+            context.setVariable("result", rootObject);
             return parser.parseExpression(expression).getValue(context);
         } catch (Exception e) {
             // If SpEL fails, return null and let the caller handle it

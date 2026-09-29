@@ -1,6 +1,46 @@
 # Project State
 
 ## Current Focus
+**2026-09-28 — Phase 1 document store shipped: MinIO-backed, bound to a case or a project, with a
+per-firm storage allocation. 613 tests green (+125).**
+
+Documents upload **straight to object storage** — the bytes never pass through the API. Nothing is
+readable until `confirm` succeeds, and confirm is where trust is withdrawn: it re-reads the object and
+checks its real size against the declared size plus its **file signature** against the declared type,
+deleting the object on every rejection so a failed upload leaves no orphan. A renamed executable with a
+spoofed header dies there. **Presigned POST policy, not PUT** — a PUT URL cannot cap the size written
+to it (MinIO would take one PUT up to 5 GB), whereas the POST policy signs `content-length-range`,
+`eq key` and `eq Content-Type`, so storage itself enforces all three.
+
+A document belongs to **exactly one** of a case (`matterNumber`) or a project (`projectCode`) — DB
+check constraint plus a service check — with an optional `courtCaseId` tag mirroring
+`MatterTimelineEvent`. Downloads gate on `:VIEW`, **not** `:DOWNLOAD`, because the seeded `READ_ONLY`
+(paralegal) and `OWN` (client) roles hold only `ACCESS + VIEW`; gating on `:DOWNLOAD` would lock both
+out of reading any file (the shape of QA finding F-14). Sharing is a single flag rather than a grant
+table. `DELETE` **archives** — the quota is released, the bytes are kept.
+
+Quota lives in its own `firm_storage_usage` table and is **Super-Admin-only** (`PUT/GET
+/api/v1/super-admin/firms/{firmId}/storage-quota|storage-usage`) on purpose: a firm admin must not be
+able to raise their own limit, which a firm-config key would have allowed. `0 = unlimited`; a firm's
+first write gets 5 GiB.
+
+**Three real bugs fixed in shared code, previously green:** `AuditSpelHelper` never bound `#result`
+(every `#result.x` expression threw and was swallowed) and `AuditAspect.getCurrentUser()` matched the
+SecurityContext principal against the wrong type — together these meant **no `@Audit` method anywhere in
+the app had ever written a row**. Also fixed: `etag` overflow from a client-supplied value,
+`MatterScopeGuard` ignoring `Matter.clientUserId`, project membership demanded for staff reads, and two
+disagreeing upload whitelists (`.tiff`/`.zip` unreachable, `.gif`/`.svg` failing with a confusing
+message) — now derived from one source.
+
+Handover written: `docs/document-store-module.pdf` (13-section implementation write-up) and
+**`docs/frontend-guide.md`** (the FE contract — the three-step upload with copy-pasteable code, every
+payload, the permission matrix, a 30-row error table, quota semantics, 17 gotchas).
+
+**Owed:** the migration SQL is unrun against a real PostgreSQL, and "MinIO really rejects an oversized
+POST" is unconfirmed on the live build (early releases ignored `content-length-range`; if so, add a
+`stat`-based backstop — confirm already re-checks size). All of it is **uncommitted** on `devG`.
+
+### Previous focus (2026-09-25) — firm Edit no longer demands the admin password: new `PUT /api/v1/super-admin/firms/{firmId}`.
 **2026-09-25 — firm Edit no longer demands the admin password: new `PUT /api/v1/super-admin/firms/{firmId}`.**
 The console's Edit dialog was POSTing to **create** — the only endpoint binding `CreateFirmRequest` — so
 validation answered "Admin password is required", and would have answered "Firm code already exists"
@@ -66,10 +106,14 @@ native `date(...)` aggregates, and the manual UI checklist sign-off.
 refresh-token work, the reset-mail changes (firm-admin + Super Admin paths), the `AUTH-14`
 extension and `docs/frontend-reset-password-guide.md`. 2026-09-25 adds `UpdateFirmRequest`,
 `FirmServiceImpl.updateFirm` + `PUT /api/v1/super-admin/firms/{firmId}`, `FirmServiceUpdateTest`,
-`SuperAdminQaTest` SA-04b/SA-04c and the Postman request. (`production` still carries the uncommitted
-2026-09-21 F-1..F-15 batch; PR #29 was merged into it from `devG`.)
-**Build command on this machine:** `JAVA_HOME="$HOME/.jdks/corretto-21.0.11" ./mvnw -o test` — the
-env default is a JDK this module cannot build with.
+`SuperAdminQaTest` SA-04b/SA-04c and the Postman request. **2026-09-28 adds the whole document store**
+(`common/storage/**`, `modules/document/**`, `StorageQuotaController`, the audit-aspect fixes, the
+`MatterScopeGuard` fix, minio + okhttp-jvm deps, `docker-compose.yml`, the `V2026_09_28` migration, 125
+tests and two docs). (`production` still carries the uncommitted 2026-09-21 F-1..F-15 batch; PR #29 was
+merged into it from `devG`.)
+**Build command on this machine:** plain `./mvnw -o test` — `JAVA_HOME` is already set correctly
+(`C:\Users\Dev\.jdks\ms-21.0.12`) and works. (The old instruction here pointed at
+`$HOME/.jdks/corretto-21.0.11`, which does not exist on this machine — corrected 2026-09-28.)
 
 ## Tech Stack
 - Spring Boot (Java), PostgreSQL (Supabase), Hibernate `ddl-auto: update` — no Flyway

@@ -54,3 +54,13 @@ super-admin:
 app:
   name: Tarikh
   production: false
+
+# Local MinIO from docker-compose.yml. The endpoint must be the URL the BROWSER can reach,
+# because document uploads/downloads go straight to storage and never through this app.
+storage:
+  minio:
+    endpoint: http://localhost:9000
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    bucket: tarikh-documents
+    default-quota-bytes: 5368709120

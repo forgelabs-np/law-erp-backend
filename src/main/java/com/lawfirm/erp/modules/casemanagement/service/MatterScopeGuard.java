@@ -4,6 +4,7 @@ import com.lawfirm.erp.auth.security.ReadScopeGuard;
 import com.lawfirm.erp.modules.casemanagement.entity.Matter;
 import com.lawfirm.erp.modules.casemanagement.entity.MatterParty;
 import com.lawfirm.erp.modules.casemanagement.repository.MatterPartyRepository;
+import com.lawfirm.erp.modules.casemanagement.repository.MatterRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -24,6 +25,7 @@ import java.util.UUID;
 public class MatterScopeGuard {
 
     private final MatterPartyRepository matterPartyRepository;
+    private final MatterRepository matterRepository;
     private final ReadScopeGuard readScopeGuard;
 
     /** True when the caller is a client-portal account (must only see its own matters). */
@@ -50,18 +52,31 @@ public class MatterScopeGuard {
         readScopeGuard.requireOwnClientRecord(ownerClientId(matter), "this matter");
     }
 
-    /** Convenience for callers that already hold a matter id. */
+    /**
+     * Convenience for callers that already hold a matter id.
+     *
+     * <p>Resolves the client the same way {@link #requireVisible(Matter)} does — the
+     * {@code clientUserId} column first, then a party marked as our client. Checking only the
+     * party table would refuse every matter bound through the column, which is how the client
+     * portal binds matters today.
+     */
     public void requireVisible(UUID matterId, UUID firmId, String what) {
         if (!isClientScope()) {
             return;
         }
-        UUID owner = matterPartyRepository
-                .findByMatterIdInAndFirmIdAndOurClientTrue(List.of(matterId), firmId)
-                .stream()
-                .map(MatterParty::getClientId)
-                .filter(Objects::nonNull)
-                .findFirst()
+        UUID owner = matterRepository.findById(matterId)
+                .map(Matter::getClientUserId)
                 .orElse(null);
+
+        if (owner == null) {
+            owner = matterPartyRepository
+                    .findByMatterIdInAndFirmIdAndOurClientTrue(List.of(matterId), firmId)
+                    .stream()
+                    .map(MatterParty::getClientId)
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse(null);
+        }
         readScopeGuard.requireOwnClientRecord(owner, what);
     }
 }

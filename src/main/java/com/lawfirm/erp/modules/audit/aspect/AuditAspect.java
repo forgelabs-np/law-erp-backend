@@ -5,6 +5,7 @@ import com.lawfirm.erp.modules.audit.entity.AuditLog;
 import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
 import com.lawfirm.erp.modules.audit.util.AuditSpelHelper;
 import com.lawfirm.erp.auth.security.AuthenticatedUser;
+import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -41,6 +42,7 @@ import java.util.UUID;
 public class AuditAspect {
 
     private final AuditLogRepository auditLogRepository;
+    private final CurrentUserResolver currentUserResolver;
 
     @Around("@annotation(com.lawfirm.erp.modules.audit.annotation.Audit)")
     public Object logAudit(ProceedingJoinPoint joinPoint) throws Throwable {
@@ -119,8 +121,21 @@ public class AuditAspect {
         }
     }
 
+    /**
+     * Resolves the caller the same way {@code AuditServiceImpl} does: the request-scoped user
+     * first, then the security context.
+     *
+     * <p>Checking the security context principal alone never matched here — {@code JwtAuthFilter}
+     * sets an {@code AuthenticatedDetail} as the principal and publishes the
+     * {@code AuthenticatedUser} as a request attribute — so annotated methods logged nothing.
+     */
     private AuthenticatedUser getCurrentUser() {
         try {
+            AuthenticatedUser fromRequest = currentUserResolver.getCurrentUser();
+            if (fromRequest != null) {
+                return fromRequest;
+            }
+
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.getPrincipal() instanceof AuthenticatedUser user) {
                 return user;

@@ -48,6 +48,21 @@ config:
   encryption:
     key: ${CONFIG_ENCRYPTION_KEY:rFBpF36+KeLlIKw+m6RiNCJmEmRZcoLXVgeKRY+bNWw=}
 
+# Object storage (MinIO or any S3-compatible endpoint) — used by the document store.
+# Everything storage-related is read from this block; no other module touches MinIO config.
+storage:
+  minio:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    bucket: ${MINIO_BUCKET:tarikh-documents}
+    region: ${MINIO_REGION:us-east-1}
+    # Presigned URL lifetimes: uploads 30 min, downloads 15 min.
+    upload-expiry-seconds: 1800
+    download-expiry-seconds: 900
+    max-file-size-bytes: 52428800        # 50 MB per file
+    default-quota-bytes: 5368709120      # 5 GB allocated to a firm with no explicit quota
+
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:}
 

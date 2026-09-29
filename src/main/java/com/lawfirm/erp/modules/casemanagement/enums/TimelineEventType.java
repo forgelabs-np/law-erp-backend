@@ -13,5 +13,6 @@ public enum TimelineEventType {
     PARTY_ADDED,
     JUDGMENT_RECORDED,
     APPEAL_FILED,
-    MATTER_NOTE_ADDED
+    MATTER_NOTE_ADDED,
+    DOCUMENT_UPLOADED
 }

@@ -140,6 +140,24 @@
             <version>1.18.3</version>
         </dependency>
 
+        <!-- MinIO — S3-compatible object storage for the document store -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>8.6.0</version>
+        </dependency>
+        <!--
+          Required because minio 8.6.0 depends on okhttp 5.x, and the `okhttp` artifact at 5.x is
+          a Kotlin-multiplatform metadata jar with no classes in it (the JVM classes live in
+          okhttp-jvm). Gradle resolves that variant from module metadata; Maven does not, so the
+          JVM artifact has to be declared explicitly or compilation fails on okhttp3.HttpUrl.
+        -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp-jvm</artifactId>
+            <version>5.1.0</version>
+        </dependency>
+
         <!-- OpenHTMLtoPDF — HTML/CSS to PDF conversion -->
         <dependency>
             <groupId>com.openhtmltopdf</groupId>

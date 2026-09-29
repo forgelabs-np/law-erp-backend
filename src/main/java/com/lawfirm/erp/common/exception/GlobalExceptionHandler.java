@@ -95,6 +95,14 @@ public class GlobalExceptionHandler {
         return responseHandler.error(ex.getMessage(), ApiStatus.BAD_REQUEST, HttpStatus.BAD_REQUEST);
     }
 
+    @ExceptionHandler(StorageOperationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleStorageOperation(StorageOperationException ex) {
+        log.error("Object storage failure: {}", ex.getMessage(), ex);
+        return responseHandler.error(
+                "Document storage is temporarily unavailable. Please try again.",
+                ApiStatus.INTERNAL_ERROR, HttpStatus.BAD_GATEWAY);
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException ex) {
         log.error("Data integrity violation: {}", ex.getMessage());

@@ -1,0 +1,30 @@
+# Local object storage for the document store.
+#
+#   docker compose up -d
+#   console: http://localhost:9001  (sign in with MINIO_ROOT_USER / MINIO_ROOT_PASSWORD)
+#
+# The application creates the bucket on startup, so there is no init step. The bucket is
+# private — nothing is ever served without a presigned URL.
+services:
+  minio:
+    # Pin a release tag before using this anywhere but a developer machine.
+    image: minio/minio:latest
+    container_name: tarikh-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"   # S3 API — the app and the browser both talk to this
+      - "9001:9001"   # web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  minio-data:
