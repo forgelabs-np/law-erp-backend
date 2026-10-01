@@ -47,7 +47,7 @@ public class DocumentScopeGuard {
     /** Uploading into a project. */
     public void requireUploadAllowed(Project project) {
         refuseClients();
-        requireProjMember(project.getId());
+        requireProjectMember(project.getId());
     }
 
     /** Confirming or changing a document — same rules as uploading it. */
