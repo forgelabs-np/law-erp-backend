@@ -6,6 +6,7 @@ import com.lawfirm.erp.common.dto.SystemConfigSettingView;
 import com.lawfirm.erp.common.entity.SystemConfig;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.repository.SystemConfigRepository;
+import com.lawfirm.erp.common.storage.StorageProperties;
 import com.lawfirm.erp.common.util.ConfigEncryptionUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +41,13 @@ public class SystemConfigService {
     private final SystemConfigRepository systemConfigRepository;
     private final ConfigEncryptionUtil configEncryptionUtil;
 
+    /**
+     * Supplies the connection settings and the pre-seed fallback for the STORAGE policy values.
+     * Nothing is read from {@code storage.minio} once the STORAGE keys exist in the DB, but a
+     * fresh deployment seeds from whatever the running yml holds.
+     */
+    private final StorageProperties storageProperties;
+
     /** application.yml app.production — seed default for APP_PRODUCTION only. */
     @Value("${app.production:false}")
     private boolean appProductionFallback;
@@ -63,6 +71,20 @@ public class SystemConfigService {
     public static final String KEY_TRIAL_DEFAULT_DAYS = "TRIAL_DEFAULT_DAYS";
     public static final String KEY_TRIAL_WARNING_DAYS = "TRIAL_WARNING_DAYS";
     public static final String KEY_NOTIFICATION_MAX_ATTEMPTS = "NOTIFICATION_MAX_ATTEMPTS";
+
+    // STORAGE-scope keys: object-storage policy, global because the store is shared infra.
+    public static final String KEY_STORAGE_MAX_FILE_SIZE_BYTES = "STORAGE_MAX_FILE_SIZE_BYTES";
+    public static final String KEY_STORAGE_UPLOAD_EXPIRY_SECONDS = "STORAGE_UPLOAD_EXPIRY_SECONDS";
+    public static final String KEY_STORAGE_DOWNLOAD_EXPIRY_SECONDS = "STORAGE_DOWNLOAD_EXPIRY_SECONDS";
+    public static final String KEY_STORAGE_DEFAULT_QUOTA_BYTES = "STORAGE_DEFAULT_QUOTA_BYTES";
+    public static final String KEY_DOCUMENT_MAX_FILENAME_LENGTH = "DOCUMENT_MAX_FILENAME_LENGTH";
+
+    /** Fallbacks, mirrored in {@link ConfigKeyRegistry} and {@link StorageProperties}. */
+    public static final long DEFAULT_STORAGE_MAX_FILE_SIZE_BYTES = 50L * 1024 * 1024;
+    public static final int DEFAULT_STORAGE_UPLOAD_EXPIRY_SECONDS = 1800;
+    public static final int DEFAULT_STORAGE_DOWNLOAD_EXPIRY_SECONDS = 900;
+    public static final long DEFAULT_STORAGE_QUOTA_BYTES = 5L * 1024 * 1024 * 1024;
+    public static final int DEFAULT_DOCUMENT_MAX_FILENAME_LENGTH = 120;
 
     /** Fallbacks, mirrored as registry defaults. */
     public static final String DEFAULT_LOGIN_URL = "https://app.nepalcrm.com/login";
@@ -217,6 +239,36 @@ public class SystemConfigService {
         return intValue(KEY_NOTIFICATION_MAX_ATTEMPTS, 3);
     }
 
+    // ------------------------------------------------------------------
+    // STORAGE policy. Absent key → the running yml value, so moving these to the DB is
+    // behaviour-preserving on an existing deployment (the first seed captures the yml value).
+    // ------------------------------------------------------------------
+
+    /** Largest single upload, in bytes. */
+    public long storageMaxFileSizeBytes() {
+        return longValue(KEY_STORAGE_MAX_FILE_SIZE_BYTES, storageProperties.getMaxFileSizeBytes());
+    }
+
+    /** Presigned upload-ticket validity, in seconds. */
+    public int storageUploadExpirySeconds() {
+        return intValue(KEY_STORAGE_UPLOAD_EXPIRY_SECONDS, storageProperties.getUploadExpirySeconds());
+    }
+
+    /** Presigned download-link validity, in seconds. */
+    public int storageDownloadExpirySeconds() {
+        return intValue(KEY_STORAGE_DOWNLOAD_EXPIRY_SECONDS, storageProperties.getDownloadExpirySeconds());
+    }
+
+    /** Allocation a firm gets on first use, in bytes. 0 = unlimited. */
+    public long storageDefaultQuotaBytes() {
+        return longValue(KEY_STORAGE_DEFAULT_QUOTA_BYTES, storageProperties.getDefaultQuotaBytes());
+    }
+
+    /** Cap on the filename segment stored in an object key. */
+    public int documentMaxFilenameLength() {
+        return intValue(KEY_DOCUMENT_MAX_FILENAME_LENGTH, DEFAULT_DOCUMENT_MAX_FILENAME_LENGTH);
+    }
+
     /** APP_PRODUCTION (Y/N); empty when unset so callers can fall back to application.yml. */
     public Optional<Boolean> productionFlag() {
         return getGlobal(KEY_APP_PRODUCTION)
@@ -239,12 +291,29 @@ public class SystemConfigService {
     // Private helpers
     // ========================================================================
 
-    /** Registry default, except APP_PRODUCTION which follows application.yml. */
+    /**
+     * Registry default, except the two groups whose seed follows the running application.yml:
+     * APP_PRODUCTION and the STORAGE policy values. That keeps a deployment that already tuned
+     * {@code storage.minio.*} from silently reverting to the code defaults on first boot after
+     * this change.
+     */
     private String seedValueFor(SettingDef def) {
-        if (KEY_APP_PRODUCTION.equals(def.key)) {
-            return appProductionFallback ? "Y" : "N";
+        switch (def.key) {
+            case KEY_APP_PRODUCTION:
+                return appProductionFallback ? "Y" : "N";
+            case KEY_STORAGE_MAX_FILE_SIZE_BYTES:
+                return String.valueOf(storageProperties.getMaxFileSizeBytes());
+            case KEY_STORAGE_UPLOAD_EXPIRY_SECONDS:
+                return String.valueOf(storageProperties.getUploadExpirySeconds());
+            case KEY_STORAGE_DOWNLOAD_EXPIRY_SECONDS:
+                return String.valueOf(storageProperties.getDownloadExpirySeconds());
+            case KEY_STORAGE_DEFAULT_QUOTA_BYTES:
+                return String.valueOf(storageProperties.getDefaultQuotaBytes());
+            case KEY_DOCUMENT_MAX_FILENAME_LENGTH:
+                return String.valueOf(DEFAULT_DOCUMENT_MAX_FILENAME_LENGTH);
+            default:
+                return def.defaultValue;
         }
-        return def.defaultValue;
     }
 
     private List<SystemConfigSettingView> toViews(List<SystemConfig> rows) {
@@ -314,6 +383,20 @@ public class SystemConfigService {
             }
         }
         return config.getConfigValue();
+    }
+
+    /** GLOBAL long setting; code default when absent or invalid. */
+    private long longValue(String key, long fallback) {
+        Optional<String> raw = getGlobal(key);
+        if (raw.isEmpty() || raw.get().isBlank()) {
+            return fallback;
+        }
+        try {
+            return Long.parseLong(raw.get().trim());
+        } catch (NumberFormatException e) {
+            log.warn("Config '{}' has non-numeric value '{}' — using default {}", key, raw.get(), fallback);
+            return fallback;
+        }
     }
 
     /** GLOBAL numeric setting; code default when absent or invalid. */

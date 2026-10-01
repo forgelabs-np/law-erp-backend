@@ -30,6 +30,16 @@ public class DocumentResponse {
     private DocumentStatus status;
     private DocumentVisibility visibility;
 
+    /**
+     * Short-lived presigned download link, present only while the document is {@code ACTIVE}.
+     *
+     * <p>It is a bearer credential (like {@code download-url}'s) and it expires, so it must not
+     * be logged, persisted or cached past its lifetime. {@code PENDING_UPLOAD} rows have none
+     * (the object may never have arrived) and {@code ARCHIVED} rows deliberately have none.
+     * Fetch {@code GET /documents/{id}/download-url} for a fresh link at download time.
+     */
+    private String documentUrl;
+
     /** Which case this belongs to — null for a project document. */
     private String matterNumber;
 

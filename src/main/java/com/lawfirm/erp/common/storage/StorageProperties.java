@@ -5,9 +5,16 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Every object-storage knob, declared once. Nothing outside
+ * Object-storage connection settings, declared once. Nothing outside
  * {@code com.lawfirm.erp.common.storage} reads these values, and no feature module talks
  * to MinIO directly — they call {@link StorageService}.
+ *
+ * <p>The connection fields (endpoint, credentials, bucket, region) are environment-bound and
+ * stay here — the MinIO client is built from them at startup. The <em>policy</em> fields
+ * ({@code maxFileSizeBytes}, {@code uploadExpirySeconds}, {@code downloadExpirySeconds},
+ * {@code defaultQuotaBytes}) are now owned by the {@code STORAGE} group in {@code system_config}
+ * and read via {@code SystemConfigService}; the fields below remain only as the pre-seed fallback
+ * and as the value the first seed captures, so an existing deployment keeps its yml settings.
  */
 @Getter
 @Setter

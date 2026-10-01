@@ -8,7 +8,7 @@ import com.lawfirm.erp.common.enums.AuditEntity;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
-import com.lawfirm.erp.common.storage.StorageProperties;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.common.storage.StorageQuotaService;
 import com.lawfirm.erp.common.storage.StorageService;
 import com.lawfirm.erp.common.storage.StorageUsageView;
@@ -79,16 +79,12 @@ public class DocumentServiceImpl implements DocumentService {
     private final MatterTimelineRepository matterTimelineRepository;
     private final StorageService storageService;
     private final StorageQuotaService quotaService;
-    private final StorageProperties storageProperties;
+    private final SystemConfigService systemConfigService;
     private final DocumentScopeGuard documentScopeGuard;
     private final DocumentMapper documentMapper;
     private final ReadScopeGuard readScopeGuard;
     private final MatterScopeGuard matterScopeGuard;
     private final CurrentUserResolver currentUserResolver;
-
-    // ========================================================================
-    // Upload
-    // ========================================================================
 
     @Override
     @Transactional
@@ -143,7 +139,7 @@ public class DocumentServiceImpl implements DocumentService {
             document.setMatterId(matter.getId());
             document.setCourtCaseId(resolveCourtCaseId(request.getCourtCaseRef(), matter, firmId));
             document.setStorageKey(DocumentStoragePath.forCase(
-                    firmId, matter.getMatterNumber(), objectId, request.getFilename()));
+                    firmId, matter.getMatterNumber(), objectId, request.getFilename(), maxFilenameLength()));
         } else {
             Project project = projectRepository
                     .findByProjectCodeAndFirmId(request.getProjectCode(), firmId)
@@ -153,7 +149,7 @@ public class DocumentServiceImpl implements DocumentService {
 
             document.setProjectId(project.getId());
             document.setStorageKey(DocumentStoragePath.forProject(
-                    firmId, project.getProjectCode(), objectId, request.getFilename()));
+                    firmId, project.getProjectCode(), objectId, request.getFilename(), maxFilenameLength()));
         }
 
         Document saved = documentRepository.save(document);
@@ -414,9 +410,9 @@ public class DocumentServiceImpl implements DocumentService {
                         .collect(Collectors.toMap(Project::getId, Project::getProjectCode));
 
         return documents.stream()
-                .map(document -> documentMapper.toResponse(document,
+                .map(document -> withDocumentUrl(document, documentMapper.toResponse(document,
                         lookup(matterNumbers, document.getMatterId()),
-                        lookup(projectCodes, document.getProjectId())))
+                        lookup(projectCodes, document.getProjectId()))))
                 .toList();
     }
 
@@ -427,7 +423,27 @@ public class DocumentServiceImpl implements DocumentService {
         String projectCode = document.getProjectId() == null ? null
                 : projectRepository.findById(document.getProjectId())
                         .map(Project::getProjectCode).orElse(null);
-        return documentMapper.toResponse(document, matterNumber, projectCode);
+        return withDocumentUrl(document,
+                documentMapper.toResponse(document, matterNumber, projectCode));
+    }
+
+    /**
+     * Attaches a presigned link so a caller can download straight from a list response instead of
+     * making one {@code download-url} round trip per row. Only an {@code ACTIVE} document has a
+     * retrievable object: a {@code PENDING_UPLOAD} one may never have arrived, and an
+     * {@code ARCHIVED} one is deliberately not downloadable — both get {@code null}.
+     *
+     * <p>Presigning here does not write a {@code DOCUMENT_DOWNLOADED} audit row, so a download
+     * taken straight from the list is not individually audited. Use the {@code download-url}
+     * endpoint when the audit trail must carry a row per download.
+     */
+    private DocumentResponse withDocumentUrl(Document document, DocumentResponse response) {
+        if (document.getStatus() == DocumentStatus.ACTIVE
+                && StringUtils.hasText(document.getStorageKey())) {
+            response.setDocumentUrl(storageService.presignDownload(
+                    document.getStorageKey(), document.getOriginalFilename(), downloadTtl()));
+        }
+        return response;
     }
 
     /** Never a 403: a document in another firm must not be distinguishable from one that does not exist. */
@@ -499,7 +515,19 @@ public class DocumentServiceImpl implements DocumentService {
         return key == null ? null : map.get(key);
     }
 
+    /**
+     * The caller's firm, or a refusal.
+     *
+     * <p>Every document operation funnels through here, so it is also where a platform
+     * (Super Admin) session is turned away: documents are firm records and the platform has no
+     * business reading a firm's files. {@code PermissionEvaluator} exempts Super Admin from
+     * permission checks, so this cannot be left to the permission layer.
+     */
     private UUID requireFirmId() {
+        if (currentUserResolver.isSuperAdmin()) {
+            throw new ForbiddenException(
+                    "Documents belong to a firm; platform administrators cannot access them");
+        }
         UUID firmId = currentUserResolver.getCurrentFirmId();
         if (firmId == null) {
             throw new ForbiddenException("This request is not associated with a firm");
@@ -507,15 +535,20 @@ public class DocumentServiceImpl implements DocumentService {
         return firmId;
     }
 
+    /** Storage policy is DB-configurable (STORAGE group); see {@link SystemConfigService}. */
     private long maxFileSizeBytes() {
-        return storageProperties.getMaxFileSizeBytes();
+        return systemConfigService.storageMaxFileSizeBytes();
     }
 
     private Duration uploadTtl() {
-        return Duration.ofSeconds(storageProperties.getUploadExpirySeconds());
+        return Duration.ofSeconds(systemConfigService.storageUploadExpirySeconds());
     }
 
     private Duration downloadTtl() {
-        return Duration.ofSeconds(storageProperties.getDownloadExpirySeconds());
+        return Duration.ofSeconds(systemConfigService.storageDownloadExpirySeconds());
+    }
+
+    private int maxFilenameLength() {
+        return systemConfigService.documentMaxFilenameLength();
     }
 }

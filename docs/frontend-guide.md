@@ -338,14 +338,19 @@ Seeded by `DataInitializer`. `FULL` = all actions in the module; `READ_ONLY` / `
 
 | Action | Permission | SUPER_ADMIN | FIRM_ADMIN | ADVOCATE | PARALEGAL | CLIENT |
 |---|---|---|---|---|---|---|
-| Upload (ticket + confirm) | `DOCUMENT_MANAGEMENT:UPLOAD` | ✅ | ✅ | ✅ | ❌ | ❌ |
-| List / view | `DOCUMENT_MANAGEMENT:VIEW` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Download link | `DOCUMENT_MANAGEMENT:VIEW` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Share (visibility) | `DOCUMENT_MANAGEMENT:SHARE` | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Archive | `DOCUMENT_MANAGEMENT:EDIT` | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Storage usage | `DOCUMENT_MANAGEMENT:VIEW` | ✅ | ✅ | ✅ | ✅ | ❌ † |
+| Upload (ticket + confirm) | `DOCUMENT_MANAGEMENT:UPLOAD` | ❌ | ✅ | ✅ | ❌ | ❌ |
+| List / view | `DOCUMENT_MANAGEMENT:VIEW` | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Download link | `DOCUMENT_MANAGEMENT:VIEW` | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Share (visibility) | `DOCUMENT_MANAGEMENT:SHARE` | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Archive | `DOCUMENT_MANAGEMENT:EDIT` | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Storage usage | `DOCUMENT_MANAGEMENT:VIEW` | ❌ | ✅ | ✅ | ✅ | ❌ † |
 
 † Clients use `/api/v1/client/documents`, not the firm endpoints.
+
+> **Super Admin is refused on every document endpoint (403).** Documents are firm records and the
+> platform has no firm context, so this is enforced in the service (`requireFirmId`), not just by the
+> seed matrix — `PermissionEvaluator` exempts Super Admin from permission checks, so a grant removal
+> alone would not have blocked them.
 
 **A permission is necessary but not sufficient.** `:VIEW` gets you into the endpoint; a **scope guard**
 then decides *which rows* you see. Hide the UI for the actions you lack, but never assume the server will
@@ -353,7 +358,8 @@ let you see everything you could have asked for:
 
 | Caller | Sees |
 |---|---|
-| Firm admin / Super Admin | Every document in the firm |
+| Firm admin | Every document in the firm |
+| Super Admin | **Nothing — 403 on every endpoint** (see above) |
 | Advocate, paralegal | Only documents on **cases they are assigned to** and **projects they are a member of** |
 | Client | Only **SHARED + ACTIVE** documents on **their own** cases and projects |
 | Unassigned staff | An **empty page** (200, `content: []`) — not a 403 |
@@ -387,7 +393,10 @@ Results are always sorted by `createdAt` **descending** (newest first). There is
   "responseCode": 200,
   "message": "Documents fetched successfully",
   "data": {
-    "content": [ { "id": 41, "fileName": "petition.pdf", "status": "ACTIVE", "…": "…" } ],
+    "content": [
+      { "id": 41, "fileName": "petition.pdf", "status": "ACTIVE",
+        "documentUrl": "http://localhost:9000/tarikh-documents/firms/…?X-Amz-Algorithm=…", "…": "…" }
+    ],
     "page": 0, "size": 20, "totalElements": 137, "totalPages": 7,
     "first": true, "last": false, "empty": false
   }
@@ -410,9 +419,21 @@ Endpoint-specific behaviour:
 > upload. Either send `status=ACTIVE`, or render them as an in-progress row that hides the download,
 > share and archive actions. Do not offer actions on a pending row — every one of them fails.
 
+**`documentUrl`** — every list item carries a ready-to-use presigned download link, so a row can be
+opened without a second request. It is populated **only for `ACTIVE` documents**; `PENDING_UPLOAD` and
+`ARCHIVED` rows have `null`. Two consequences of it being a presigned bearer credential:
+
+- It **expires with the page** (~15 min). If a user may sit on the list longer than that, call
+  §10's `download-url` at click time instead of trusting a stale `documentUrl`.
+- A download that uses `documentUrl` does **not** write a `DOCUMENT_DOWNLOADED` audit row. When an
+  audited download matters, use the `download-url` endpoint.
+
 ---
 
 ## 10. Downloading
+
+Two ways to get a link: the list above already embeds `documentUrl` per row, or fetch a fresh one
+on demand (audited) from:
 
 `GET /api/v1/firm/documents/{documentId}/download-url`
 `GET /api/v1/client/documents/{documentId}/download-url`
@@ -640,6 +661,7 @@ export interface DocumentResponse {
   projectCode: string | null;     // set for a project document
   courtCaseId: string | null;
   uploadedByUserId: string | null;
+  documentUrl: string | null;     // presigned, ACTIVE-only; a bearer credential — see §10
   createdAt: string;              // LocalDateTime, no timezone offset
   archivedAt: string | null;
 }

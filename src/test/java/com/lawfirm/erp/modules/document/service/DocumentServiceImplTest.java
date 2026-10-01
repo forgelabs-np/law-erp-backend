@@ -4,8 +4,9 @@ import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import com.lawfirm.erp.auth.security.ReadScopeGuard;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ForbiddenException;
+import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
-import com.lawfirm.erp.common.storage.StorageProperties;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.common.storage.StorageQuotaService;
 import com.lawfirm.erp.modules.casemanagement.entity.CourtCase;
 import com.lawfirm.erp.modules.casemanagement.entity.Matter;
@@ -43,6 +44,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.data.domain.PageImpl;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -52,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -78,6 +81,7 @@ class DocumentServiceImplTest {
     @Mock private CourtCaseRepository courtCaseRepository;
     @Mock private MatterTimelineRepository matterTimelineRepository;
     @Mock private StorageQuotaService quotaService;
+    @Mock private SystemConfigService systemConfigService;
     @Mock private ReadScopeGuard readScopeGuard;
     @Mock private CurrentUserResolver currentUserResolver;
     @Mock private MatterScopeGuard matterScopeGuard;
@@ -99,10 +103,11 @@ class DocumentServiceImplTest {
     void setUp() {
         storageService = new FakeStorageService();
 
-        StorageProperties properties = new StorageProperties();
-        properties.setMaxFileSizeBytes(50L * 1024 * 1024);
-        properties.setUploadExpirySeconds(1800);
-        properties.setDownloadExpirySeconds(900);
+        // Storage policy comes from the DB (STORAGE config group); these stub the resolved values.
+        when(systemConfigService.storageMaxFileSizeBytes()).thenReturn(50L * 1024 * 1024);
+        when(systemConfigService.storageUploadExpirySeconds()).thenReturn(1800);
+        when(systemConfigService.storageDownloadExpirySeconds()).thenReturn(900);
+        when(systemConfigService.documentMaxFilenameLength()).thenReturn(120);
 
         DocumentScopeGuard scopeGuard = new DocumentScopeGuard(
                 readScopeGuard, matterScopeGuard, caseAssignmentRepository,
@@ -110,7 +115,7 @@ class DocumentServiceImplTest {
 
         service = new DocumentServiceImpl(
                 documentRepository, matterRepository, projectRepository, courtCaseRepository,
-                matterTimelineRepository, storageService, quotaService, properties,
+                matterTimelineRepository, storageService, quotaService, systemConfigService,
                 scopeGuard, new DocumentMapper(), readScopeGuard, matterScopeGuard,
                 currentUserResolver);
 
@@ -618,6 +623,92 @@ class DocumentServiceImplTest {
     // ═══════════════════════════════════════════════════════════════════════
     // Fixtures
     // ═══════════════════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // listing — the embedded download link
+    // ═══════════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("listing documents")
+    class ListDocuments {
+
+        @Test
+        @DisplayName("an ACTIVE document carries a presigned documentUrl")
+        void activeDocumentCarriesADownloadUrl() {
+            givenPlainFirmAdmin();
+            Document active = activeDocument(DocumentVisibility.PRIVATE);
+            givenListReturns(active);
+
+            PagedResponse<DocumentResponse> page = service.listLibrary(null, null, null, 0, 20);
+
+            assertEquals(1, page.getContent().size());
+            String url = page.getContent().get(0).getDocumentUrl();
+            assertNotNull(url, "an active document must expose a download link in the list");
+            assertTrue(url.contains(active.getStorageKey()), url);
+        }
+
+        @Test
+        @DisplayName("a PENDING_UPLOAD document exposes no link — the object may never have arrived")
+        void pendingDocumentHasNoDownloadUrl() {
+            givenPlainFirmAdmin();
+            givenListReturns(pendingCaseDocument("k1"));
+
+            assertNull(service.listLibrary(null, null, null, 0, 20).getContent().get(0).getDocumentUrl());
+        }
+
+        @Test
+        @DisplayName("an ARCHIVED document exposes no link — archiving is not downloadable")
+        void archivedDocumentHasNoDownloadUrl() {
+            givenPlainFirmAdmin();
+            Document archived = activeDocument(DocumentVisibility.PRIVATE);
+            archived.setStatus(DocumentStatus.ARCHIVED);
+            givenListReturns(archived);
+
+            assertNull(service.listLibrary(null, null, null, 0, 20).getContent().get(0).getDocumentUrl());
+        }
+
+        /** A firm admin's list runs findForFirm; matter numbers are resolved in one batch. */
+        private void givenListReturns(Document document) {
+            when(documentRepository.findForFirm(any(), any(), any(), any(), any(), any(), any()))
+                    .thenReturn(new PageImpl<>(java.util.List.of(document)));
+            when(matterRepository.findAllById(any())).thenReturn(java.util.List.of(matter()));
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Super Admin is kept out — documents are firm records
+    // ═══════════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("a Super Admin cannot touch firm documents")
+    class SuperAdminAccess {
+
+        @Test
+        @DisplayName("the document library is refused")
+        void cannotListTheLibrary() {
+            when(currentUserResolver.isSuperAdmin()).thenReturn(true);
+
+            assertThrows(ForbiddenException.class,
+                    () -> service.listLibrary(null, null, null, 0, 20));
+            verify(documentRepository, never())
+                    .findForFirm(any(), any(), any(), any(), any(), any(), any());
+        }
+
+        @Test
+        void cannotUpload() {
+            when(currentUserResolver.isSuperAdmin()).thenReturn(true);
+
+            assertThrows(ForbiddenException.class,
+                    () -> service.initiateUpload(caseUploadRequest("a.pdf", "application/pdf", 10)));
+        }
+
+        @Test
+        void cannotDownload() {
+            when(currentUserResolver.isSuperAdmin()).thenReturn(true);
+
+            assertThrows(ForbiddenException.class, () -> service.downloadUrl(1L));
+        }
+    }
 
     private static final String DOCX =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document";

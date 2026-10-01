@@ -1,6 +1,30 @@
 # Project State
 
 ## Current Focus
+**2026-10-01 — storage settings are now DB config; Super Admin is refused on every document endpoint;
+the list also embeds a presigned `documentUrl`.** The `STORAGE` config group was added to
+`ConfigKeyRegistry` and is read via `SystemConfigService` runtime helpers, so the tunables live in
+`system_config`, not `application.yml`: `STORAGE_MAX_FILE_SIZE_BYTES`,
+`STORAGE_UPLOAD_EXPIRY_SECONDS`, `STORAGE_DOWNLOAD_EXPIRY_SECONDS`, `STORAGE_DEFAULT_QUOTA_BYTES`,
+`DOCUMENT_MAX_FILENAME_LENGTH`. Consumers were switched over (`DocumentServiceImpl`,
+`StorageQuotaService`, `StorageUsageBootstrap`, `DocumentStoragePath`); the yml value is kept as the
+pre-seed fallback and the first seed captures it. The MinIO connection settings stay in yml (startup +
+infra secrets). **See “Configuration Conventions” below — this is the standing rule for values that
+might change.** Documents are firm records, so a platform (SA) session gets **403** on all document
+paths — enforced in `DocumentServiceImpl.requireFirmId()` because `PermissionEvaluator` exempts SA from
+permission checks (a seed-only change would not have blocked them). The `DOCUMENT_MANAGEMENT` matrix's
+SUPER_ADMIN column moved `FULL → NO_ACCESS` as well. The other 2026-10-01 change: the document list now
+embeds a presigned `documentUrl` per row. The FE reported
+that `GET /api/v1/firm/documents?page=0&size=60` sent no URL — it was metadata-only by design, with
+links coming from `GET /documents/{id}/download-url`. `documentUrl` was added to `DocumentResponse`,
+populated **only for `ACTIVE`** docs (pending/archived → null) in `DocumentServiceImpl.withDocumentUrl`.
+The `download-url` endpoint **stays** — it is still the one that writes a `DOCUMENT_DOWNLOADED` audit
+row; the embedded link is a convenience. Two known consequences, documented in the DTO/service javadoc
+and `docs/frontend-guide.md` §9–§10: the embedded URL expires (~15 min) so a long-lived page should fall
+back to `download-url` on click, and downloads via `documentUrl` are **not audited**. Tests: 3 new in
+`DocumentServiceImplTest.ListDocuments` (39 green) + `DocumentQaTest` 21 green. **Uncommitted on `devG`.**
+
+### Previous focus (2026-09-28) — Phase 1 document store
 **2026-09-28 — Phase 1 document store shipped: MinIO-backed, bound to a case or a project, with a
 per-firm storage allocation. 613 tests green (+125).**
 
@@ -115,6 +139,28 @@ merged into it from `devG`.)
 (`C:\Users\Dev\.jdks\ms-21.0.12`) and works. (The old instruction here pointed at
 `$HOME/.jdks/corretto-21.0.11`, which does not exist on this machine — corrected 2026-09-28.)
 
+## Configuration Conventions
+**Anything that might change at runtime is a config value, not a constant.** Never hardcode a
+threshold, limit, timeout, expiry, quota or filename length in code and never bury a tunable in
+`application.yml` only.
+
+- **GLOBAL (platform-wide)** → `system_config` table, owned by `SystemConfigService`. **FIRM
+  (per-firm override)** → `firm_configs`, owned by `FirmConfigService`.
+- Every key is declared **once** in `ConfigKeyRegistry` (`common/config/ConfigKeyRegistry.java`),
+  with its group, input type, allowed values, default and `seed` flag. `DataInitializer` calls
+  `SystemConfigService.seedGlobalDefaults()` at boot (insert-if-missing — an admin-edited value is
+  never overwritten). There is no separate seeder class; `ConfigKeyRegistry` + `DataInitializer`
+  **are** the seeder.
+- Add a **runtime helper** on the service next to the existing ones (`loginMaxAttempts()`,
+  `storageMaxFileSizeBytes()`, …) that reads the key and falls back to a code default when absent.
+  Callers ask the service, never the repository.
+- **Pre-seed fallback:** when a value used to live in `application.yml`, the service keeps the yml
+  value as the fallback and the first seed captures it, so an existing deployment is unchanged.
+  (See `APP_PRODUCTION` and the `STORAGE` group.)
+- **Connection/infra secrets** (MinIO endpoint/credentials, SMTP host) stay in yml/env — the MinIO
+  client is built at startup and these are environment-bound. Policy values go to the DB.
+- Groups in the DB drive the admin Settings UI; a new group (e.g. `STORAGE`) appears automatically.
+
 ## Tech Stack
 - Spring Boot (Java), PostgreSQL (Supabase), Hibernate `ddl-auto: update` — no Flyway
 - Multi-tenant ERP system
@@ -162,6 +208,11 @@ merged into it from `devG`.)
 - **Postman** — sections 8-11 for all new endpoints
 
 ## Deep History Index
+- `memory/2026-10-01.md` — document list gains an embedded presigned `documentUrl` (ACTIVE-only); why
+  `download-url` is kept alongside it, and the expiry + no-audit-row trade-offs; **Super Admin refused
+  on every document endpoint** (docs are firm records — enforced in `requireFirmId`, since SA bypasses
+  permission checks); the "remove the assignment check" idea considered and rejected (per-case
+  assignment stays)
 - `memory/2026-09-25.md` — firm Edit POSTed to create ("Admin password is required"): new
   `PUT /super-admin/firms/{firmId}` + `UpdateFirmRequest`; why the immutables are rejected rather
   than ignored, null-vs-blank field semantics, and the "oldest FIRM_ADMIN is primary" rule

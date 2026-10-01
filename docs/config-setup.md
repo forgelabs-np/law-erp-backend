@@ -6,7 +6,7 @@ The ERP uses a **two-table config system** for all platform and per-firm setting
 
 | Table | Scope | Entity | Service | Purpose |
 |-------|-------|--------|---------|---------|
-| `system_config` | GLOBAL | `SystemConfig` | `SystemConfigService` | Platform-wide settings (SMTP, MFA, trial, app name, production flag) |
+| `system_config` | GLOBAL | `SystemConfig` | `SystemConfigService` | Platform-wide settings (SMTP, MFA, trial, app name, production flag, storage policy) |
 | `firm_configs` | FIRM | `FirmConfig` | `FirmConfigService` | Per-firm settings (brand colors, email footer, timezone) |
 
 **Why two tables?**
@@ -92,6 +92,11 @@ Each `SettingDef` carries:
 | `TRIAL_DEFAULT_DAYS` | TRIAL | NUMBER | `14` | ✅ | Default trial length for new firms |
 | `TRIAL_WARNING_DAYS` | TRIAL | NUMBER | `3` | ✅ | Days before expiry to send warning |
 | `NOTIFICATION_MAX_ATTEMPTS` | NOTIFICATION | NUMBER | `3` | ✅ | Delivery attempts before DEAD |
+| `STORAGE_MAX_FILE_SIZE_BYTES` | STORAGE | NUMBER | `52428800` (50 MB) | ✅ | Largest single upload. Seeded from `storage.minio.max-file-size-bytes` |
+| `STORAGE_UPLOAD_EXPIRY_SECONDS` | STORAGE | NUMBER | `1800` | ✅ | Presigned upload-ticket validity. Seeded from yml |
+| `STORAGE_DOWNLOAD_EXPIRY_SECONDS` | STORAGE | NUMBER | `900` | ✅ | Presigned download-link validity. Seeded from yml |
+| `STORAGE_DEFAULT_QUOTA_BYTES` | STORAGE | NUMBER | `5368709120` (5 GiB) | ✅ | Allocation a firm gets on first use (`0` = unlimited). Seeded from yml |
+| `DOCUMENT_MAX_FILENAME_LENGTH` | STORAGE | NUMBER | `120` | ✅ | Max filename segment stored in an object key |
 | `SMTP_HOST` | EMAIL | TEXT | `null` | ❌ | SMTP host (metadata only, no seed) |
 | `SMTP_PORT` | EMAIL | NUMBER | `null` | ❌ | SMTP port |
 | `SMTP_USERNAME` | EMAIL | TEXT | `null` | ❌ | SMTP username |

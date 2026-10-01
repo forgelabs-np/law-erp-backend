@@ -2,6 +2,7 @@ package com.lawfirm.erp.common.storage;
 
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,6 +32,7 @@ class StorageQuotaServiceTest {
 
     @Mock private FirmStorageUsageRepository repository;
     @Mock private FirmRepository firmRepository;
+    @Mock private SystemConfigService systemConfigService;
 
     private StorageQuotaService service;
     private final UUID firmId = UUID.randomUUID();
@@ -41,9 +43,9 @@ class StorageQuotaServiceTest {
 
     @BeforeEach
     void setUp() {
-        StorageProperties properties = new StorageProperties();
-        properties.setDefaultQuotaBytes(5 * GB);
-        service = new StorageQuotaService(repository, firmRepository, properties);
+        // The default allocation is now DB-configurable — the service reads it from the config.
+        when(systemConfigService.storageDefaultQuotaBytes()).thenReturn(5 * GB);
+        service = new StorageQuotaService(repository, firmRepository, systemConfigService);
         when(firmRepository.existsById(any())).thenReturn(true);
         when(repository.save(any(FirmStorageUsage.class))).thenAnswer(invocation -> {
             storedRow.set(invocation.getArgument(0));

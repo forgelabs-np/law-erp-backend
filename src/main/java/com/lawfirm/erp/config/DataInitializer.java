@@ -310,7 +310,7 @@ public class DataInitializer implements CommandLineRunner {
         // { moduleCode, SUPER_ADMIN, FIRM_ADMIN, ADVOCATE, PARALEGAL, CLIENT }
         String[][] matrix = {
                 {"CASE_MANAGEMENT",     FULL, FULL, FULL,      READ_ONLY, OWN},
-                {"DOCUMENT_MANAGEMENT", FULL, FULL, FULL,      READ_ONLY, OWN},
+                {"DOCUMENT_MANAGEMENT", NO_ACCESS, FULL, FULL, READ_ONLY, OWN},
                 {"CLIENT_MANAGEMENT",   FULL, FULL, READ_ONLY, READ_ONLY, NO_ACCESS},
                 {"BILLING",             FULL, FULL, READ_ONLY, NO_ACCESS, OWN},
                 {"CALENDAR",            FULL, FULL, FULL,      READ_ONLY, OWN},

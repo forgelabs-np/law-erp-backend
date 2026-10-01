@@ -88,4 +88,18 @@ class DocumentStoragePathTest {
     void blankFilenameFallsBack() {
         assertEquals("file", DocumentStoragePath.safeFilename("..."));
     }
+
+    @Test
+    @DisplayName("the truncation length is caller-supplied (system_config-driven), not fixed")
+    void maxFilenameLengthIsConfigurable() {
+        String longName = "y".repeat(300) + ".pdf";
+
+        String shortPath = DocumentStoragePath.forCase(FIRM, "MT-1", OBJECT, longName, 40);
+        String shortName = shortPath.substring(shortPath.lastIndexOf('/') + 1);
+
+        assertTrue(shortName.length() <= 40);
+        assertTrue(shortName.endsWith(".pdf"));
+        assertEquals(DocumentStoragePath.DEFAULT_MAX_FILENAME_LENGTH,
+                DocumentStoragePath.safeFilename(longName).length());
+    }
 }

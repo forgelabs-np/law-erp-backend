@@ -1,5 +1,6 @@
 package com.lawfirm.erp.common.storage;
 
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +26,7 @@ public class StorageUsageBootstrap implements ApplicationRunner {
 
     private final FirmRepository firmRepository;
     private final FirmStorageUsageRepository repository;
-    private final StorageProperties properties;
+    private final SystemConfigService systemConfigService;
 
     @Override
     @Transactional
@@ -38,7 +39,7 @@ public class StorageUsageBootstrap implements ApplicationRunner {
             repository.save(FirmStorageUsage.builder()
                     .firmId(firm.getId())
                     .usedBytes(0L)
-                    .quotaBytes(properties.getDefaultQuotaBytes())
+                    .quotaBytes(systemConfigService.storageDefaultQuotaBytes())
                     .updatedAt(LocalDateTime.now())
                     .build());
             created++;

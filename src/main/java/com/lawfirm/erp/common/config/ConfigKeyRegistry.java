@@ -24,6 +24,7 @@ public final class ConfigKeyRegistry {
     public static final String GROUP_TRIAL = "TRIAL";
     public static final String GROUP_NOTIFICATION = "NOTIFICATION";
     public static final String GROUP_BRAND = "BRAND";
+    public static final String GROUP_STORAGE = "STORAGE";
 
     public static final List<SettingDef> GLOBAL = List.of(
             // APP
@@ -59,6 +60,26 @@ public final class ConfigKeyRegistry {
             // NOTIFICATION
             SettingDef.def(SystemConfigService.KEY_NOTIFICATION_MAX_ATTEMPTS, GROUP_NOTIFICATION, "NUMBER", null,
                     "3", true, "Delivery attempts before a notification is marked DEAD", true),
+
+            // STORAGE — object-storage policy. Connection values (endpoint/credentials/bucket/region)
+            // stay in application.yml: they are environment secrets read when the MinIO client is
+            // built at startup. Defaults here mirror StorageProperties; the first seed captures the
+            // running yml value so an existing deployment keeps its settings.
+            SettingDef.def(SystemConfigService.KEY_STORAGE_MAX_FILE_SIZE_BYTES, GROUP_STORAGE, "NUMBER", null,
+                    String.valueOf(SystemConfigService.DEFAULT_STORAGE_MAX_FILE_SIZE_BYTES), true,
+                    "Maximum size of a single uploaded file, in bytes", true),
+            SettingDef.def(SystemConfigService.KEY_STORAGE_UPLOAD_EXPIRY_SECONDS, GROUP_STORAGE, "NUMBER", null,
+                    String.valueOf(SystemConfigService.DEFAULT_STORAGE_UPLOAD_EXPIRY_SECONDS), true,
+                    "How long an upload ticket stays valid, in seconds", true),
+            SettingDef.def(SystemConfigService.KEY_STORAGE_DOWNLOAD_EXPIRY_SECONDS, GROUP_STORAGE, "NUMBER", null,
+                    String.valueOf(SystemConfigService.DEFAULT_STORAGE_DOWNLOAD_EXPIRY_SECONDS), true,
+                    "How long a download link stays valid, in seconds", true),
+            SettingDef.def(SystemConfigService.KEY_STORAGE_DEFAULT_QUOTA_BYTES, GROUP_STORAGE, "NUMBER", null,
+                    String.valueOf(SystemConfigService.DEFAULT_STORAGE_QUOTA_BYTES), true,
+                    "Storage given to a firm on first use, in bytes (0 = unlimited)", true),
+            SettingDef.def(SystemConfigService.KEY_DOCUMENT_MAX_FILENAME_LENGTH, GROUP_STORAGE, "NUMBER", null,
+                    String.valueOf(SystemConfigService.DEFAULT_DOCUMENT_MAX_FILENAME_LENGTH), true,
+                    "Maximum length of the filename segment stored in the object key", true),
 
             // EMAIL — metadata only, no boot seed so empty SMTP keys never shadow the yml fallback
             SettingDef.def(SystemConfigService.KEY_SMTP_HOST, GROUP_EMAIL, "TEXT", null,

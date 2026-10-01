@@ -2,6 +2,7 @@ package com.lawfirm.erp.common.storage;
 
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +29,7 @@ public class StorageQuotaService {
 
     private final FirmStorageUsageRepository repository;
     private final FirmRepository firmRepository;
-    private final StorageProperties properties;
+    private final SystemConfigService systemConfigService;
 
     @Transactional(readOnly = true)
     public StorageUsageView usage(UUID firmId) {
@@ -114,7 +115,7 @@ public class StorageQuotaService {
     }
 
     private long defaultQuota() {
-        return properties.getDefaultQuotaBytes();
+        return systemConfigService.storageDefaultQuotaBytes();
     }
 
     /** "5 GB" rather than "5368709120", for messages a human reads. */
