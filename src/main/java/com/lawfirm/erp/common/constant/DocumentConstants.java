@@ -3,17 +3,12 @@ package com.lawfirm.erp.common.constant;
 /** Swagger summaries and descriptions for the document endpoints. */
 public final class DocumentConstants {
 
-    public static final String REQUEST_UPLOAD_SUMMARY = "Request an upload ticket";
-    public static final String REQUEST_UPLOAD_DESCRIPTION =
-            "Creates a PENDING_UPLOAD record and returns a presigned POST policy. POST the returned "
-            + "fields plus the file to uploadUrl, then call confirm. Supply matterNumber for a case "
+    public static final String UPLOAD_SUMMARY = "Upload a document";
+    public static final String UPLOAD_DESCRIPTION =
+            "multipart/form-data. Send the file as the `file` part, plus matterNumber for a case "
             + "document or projectCode for a project document — exactly one. Optional courtCaseRef "
-            + "tags a specific court instance of the matter.";
-
-    public static final String CONFIRM_UPLOAD_SUMMARY = "Confirm an upload";
-    public static final String CONFIRM_UPLOAD_DESCRIPTION =
-            "Verifies the object exists in storage, checks its real size and file signature against "
-            + "the declared type, reserves the firm's storage and activates the document.";
+            + "tags a specific court instance of the matter. The file is stored and the document is "
+            + "ACTIVE in this single call — there is no separate confirm step.";
 
     public static final String LIST_LIBRARY_SUMMARY = "Browse the document library";
     public static final String LIST_LIBRARY_DESCRIPTION =

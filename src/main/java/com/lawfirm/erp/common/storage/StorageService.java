@@ -1,5 +1,6 @@
 package com.lawfirm.erp.common.storage;
 
+import java.io.InputStream;
 import java.time.Duration;
 
 /**
@@ -13,11 +14,13 @@ import java.time.Duration;
 public interface StorageService {
 
     /**
-     * A presigned POST policy for one key. Storage itself enforces the maximum size and the
-     * exact {@code contentType} — an oversized or mislabelled upload is refused before it is
-     * stored, which a presigned PUT could not do.
+     * Stores one object and returns what storage recorded for it (size + etag).
+     *
+     * <p>Bytes are written by the application rather than by the browser, so the caller
+     * already holds the file: it is responsible for the size and content-type checks. Storage
+     * is only the durable target here.
      */
-    UploadTicket presignUpload(String key, String contentType, long maxBytes, Duration ttl);
+    StoredObject put(String key, InputStream data, long sizeBytes, String contentType);
 
     /** A presigned GET for one key, forcing a browser download instead of inline rendering. */
     String presignDownload(String key, String downloadFilename, Duration ttl);

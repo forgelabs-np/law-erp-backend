@@ -7,12 +7,9 @@ import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.common.storage.StorageUsageView;
-import com.lawfirm.erp.modules.document.dto.request.ConfirmUploadRequest;
-import com.lawfirm.erp.modules.document.dto.request.InitiateUploadRequest;
 import com.lawfirm.erp.modules.document.dto.request.UpdateVisibilityRequest;
 import com.lawfirm.erp.modules.document.dto.response.DocumentResponse;
 import com.lawfirm.erp.modules.document.dto.response.DownloadUrlResponse;
-import com.lawfirm.erp.modules.document.dto.response.UploadTicketResponse;
 import com.lawfirm.erp.modules.document.enums.DocumentStatus;
 import com.lawfirm.erp.modules.document.enums.DocumentVisibility;
 import com.lawfirm.erp.modules.document.service.DocumentService;
@@ -20,6 +17,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,6 +28,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 
 /**
  * Firm-side document API.
@@ -53,25 +54,18 @@ public class DocumentController {
     private final PermissionEvaluator permissionEvaluator;
     private final ResponseHandler responseHandler;
 
-    @PostMapping("/documents/upload-ticket")
-    @Operation(summary = DocumentConstants.REQUEST_UPLOAD_SUMMARY,
-            description = DocumentConstants.REQUEST_UPLOAD_DESCRIPTION)
-    public ResponseEntity<ApiResponse<UploadTicketResponse>> requestUploadTicket(
-            @Valid @RequestBody ApiRequest<InitiateUploadRequest> request) {
+    @PostMapping(value = "/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = DocumentConstants.UPLOAD_SUMMARY,
+            description = DocumentConstants.UPLOAD_DESCRIPTION)
+    public ResponseEntity<ApiResponse<DocumentResponse>> upload(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) String matterNumber,
+            @RequestParam(required = false) String projectCode,
+            @RequestParam(required = false) String courtCaseRef) throws IOException {
         permissionEvaluator.require(UPLOAD);
-        return responseHandler.ok(documentService.initiateUpload(request.getData()),
-                "Upload ticket issued successfully");
-    }
-
-    @PostMapping("/documents/{documentId}/confirm")
-    @Operation(summary = DocumentConstants.CONFIRM_UPLOAD_SUMMARY,
-            description = DocumentConstants.CONFIRM_UPLOAD_DESCRIPTION)
-    public ResponseEntity<ApiResponse<DocumentResponse>> confirmUpload(
-            @PathVariable Long documentId,
-            @RequestBody(required = false) ApiRequest<ConfirmUploadRequest> request) {
-        permissionEvaluator.require(UPLOAD);
-        ConfirmUploadRequest body = request != null ? request.getData() : null;
-        return responseHandler.ok(documentService.confirmUpload(documentId, body),
+        return responseHandler.ok(documentService.upload(matterNumber, projectCode, courtCaseRef,
+                        file.getOriginalFilename(), file.getContentType(), file.getSize(),
+                        file.getInputStream()),
                 "Document uploaded successfully");
     }
 

@@ -13,7 +13,6 @@ import com.lawfirm.erp.common.storage.StorageQuotaService;
 import com.lawfirm.erp.common.storage.StorageService;
 import com.lawfirm.erp.common.storage.StorageUsageView;
 import com.lawfirm.erp.common.storage.StoredObject;
-import com.lawfirm.erp.common.storage.UploadTicket;
 import com.lawfirm.erp.modules.audit.annotation.Audit;
 import com.lawfirm.erp.modules.casemanagement.entity.Matter;
 import com.lawfirm.erp.modules.casemanagement.entity.MatterTimelineEvent;
@@ -22,11 +21,8 @@ import com.lawfirm.erp.modules.casemanagement.repository.CourtCaseRepository;
 import com.lawfirm.erp.modules.casemanagement.repository.MatterRepository;
 import com.lawfirm.erp.modules.casemanagement.repository.MatterTimelineRepository;
 import com.lawfirm.erp.modules.casemanagement.service.MatterScopeGuard;
-import com.lawfirm.erp.modules.document.dto.request.ConfirmUploadRequest;
-import com.lawfirm.erp.modules.document.dto.request.InitiateUploadRequest;
 import com.lawfirm.erp.modules.document.dto.response.DocumentResponse;
 import com.lawfirm.erp.modules.document.dto.response.DownloadUrlResponse;
-import com.lawfirm.erp.modules.document.dto.response.UploadTicketResponse;
 import com.lawfirm.erp.modules.document.entity.Document;
 import com.lawfirm.erp.modules.document.enums.DocumentStatus;
 import com.lawfirm.erp.modules.document.enums.DocumentVisibility;
@@ -45,6 +41,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -56,11 +53,11 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Document lifecycle: ticket → confirm → read/share → archive.
+ * Document lifecycle: upload → read/share → archive.
  *
- * <p>Bytes never pass through this application. The client POSTs straight to storage against a
- * policy that caps the size and pins the content type, and this service only ever sees
- * metadata — which is why confirm re-reads the object rather than trusting the request.
+ * <p>The bytes are written by this service on the way in — one multipart request stores the file
+ * and activates the document together, so there is no ticket to issue and nothing for the client
+ * to confirm. The default mode of failure is "nothing happened", never a half-stored document.
  */
 @Service
 @RequiredArgsConstructor
@@ -87,29 +84,36 @@ public class DocumentServiceImpl implements DocumentService {
     private final CurrentUserResolver currentUserResolver;
 
     @Override
+    // audit_logs.entity_id is a UUID, so the audit trail references the document's uuid — its
+    // numeric primary key could not be stored there.
+    @Audit(action = AuditAction.DOCUMENT_UPLOADED, entity = AuditEntity.DOCUMENT,
+            entityId = "#result.uuid", summary = "'Document uploaded: ' + #result.fileName",
+            skipIfNullResult = true)
     @Transactional
-    public UploadTicketResponse initiateUpload(InitiateUploadRequest request) {
+    public DocumentResponse upload(String matterNumber, String projectCode, String courtCaseRef,
+                                   String originalFilename, String contentType, long sizeBytes,
+                                   InputStream content) {
         UUID firmId = requireFirmId();
-        long sizeBytes = request.getSizeBytes();
 
-        DocumentTypePolicy.validateFilename(request.getFilename());
-        String contentType = DocumentTypePolicy.normalizeContentType(request.getContentType());
-        DocumentTypePolicy.requireAllowedContentType(contentType);
+        DocumentTypePolicy.validateFilename(originalFilename);
+        String normalizedType = DocumentTypePolicy.normalizeContentType(contentType);
+        DocumentTypePolicy.requireAllowedContentType(normalizedType);
 
+        if (sizeBytes <= 0) {
+            throw new BusinessRuleException("The file is empty");
+        }
         if (sizeBytes > maxFileSizeBytes()) {
             throw new BusinessRuleException("A file may be at most "
                     + StorageQuotaService.humanReadable(maxFileSizeBytes()));
         }
 
-        boolean hasMatter = StringUtils.hasText(request.getMatterNumber());
-        boolean hasProject = StringUtils.hasText(request.getProjectCode());
+        boolean hasMatter = StringUtils.hasText(matterNumber);
+        boolean hasProject = StringUtils.hasText(projectCode);
         if (hasMatter == hasProject) {
             throw new BusinessRuleException(
                     "Provide either a case (matterNumber) or a project (projectCode) — exactly one");
         }
 
-        // Checked again under lock at confirm; this one exists so an over-quota upload is
-        // refused before the client bothers sending the bytes.
         if (!quotaService.canFit(firmId, sizeBytes)) {
             throw new BusinessRuleException("This file does not fit in your firm's remaining storage allocation");
         }
@@ -120,110 +124,62 @@ public class DocumentServiceImpl implements DocumentService {
 
         Document document = Document.builder()
                 .firmId(firmId)
-                .originalFilename(request.getFilename())
-                .contentType(contentType)
-                .extension(DocumentTypePolicy.extensionFor(contentType))
+                .originalFilename(originalFilename)
+                .contentType(normalizedType)
+                .extension(DocumentTypePolicy.extensionFor(normalizedType))
                 .sizeBytes(sizeBytes)
                 .visibility(DocumentVisibility.PRIVATE)
-                .status(DocumentStatus.PENDING_UPLOAD)
-                .uploadExpiresAt(LocalDateTime.now().plus(uploadTtl()))
+                .status(DocumentStatus.ACTIVE)
                 .build();
 
         if (hasMatter) {
             Matter matter = matterRepository
-                    .findByMatterNumberAndFirmId(request.getMatterNumber(), firmId)
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            "Matter not found: " + request.getMatterNumber()));
+                    .findByMatterNumberAndFirmId(matterNumber, firmId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Matter not found: " + matterNumber));
             documentScopeGuard.requireUploadAllowed(matter);
 
             document.setMatterId(matter.getId());
-            document.setCourtCaseId(resolveCourtCaseId(request.getCourtCaseRef(), matter, firmId));
+            document.setCourtCaseId(resolveCourtCaseId(courtCaseRef, matter, firmId));
             document.setStorageKey(DocumentStoragePath.forCase(
-                    firmId, matter.getMatterNumber(), objectId, request.getFilename(), maxFilenameLength()));
+                    firmId, matter.getMatterNumber(), objectId, originalFilename, maxFilenameLength()));
         } else {
             Project project = projectRepository
-                    .findByProjectCodeAndFirmId(request.getProjectCode(), firmId)
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            "Project not found: " + request.getProjectCode()));
+                    .findByProjectCodeAndFirmId(projectCode, firmId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: " + projectCode));
             documentScopeGuard.requireUploadAllowed(project);
 
             document.setProjectId(project.getId());
             document.setStorageKey(DocumentStoragePath.forProject(
-                    firmId, project.getProjectCode(), objectId, request.getFilename(), maxFilenameLength()));
+                    firmId, project.getProjectCode(), objectId, originalFilename, maxFilenameLength()));
         }
 
-        Document saved = documentRepository.save(document);
-        UploadTicket ticket = storageService.presignUpload(
-                saved.getStorageKey(), saved.getContentType(), maxFileSizeBytes(), uploadTtl());
+        // From here on the object exists in storage: any failure below must remove it again,
+        // or the bucket keeps bytes nothing points at.
+        StoredObject stored = storageService.put(
+                document.getStorageKey(), content, sizeBytes, normalizedType);
 
-        log.debug("Upload ticket issued for document {} (firm {})", saved.getId(), firmId);
-        return new UploadTicketResponse(saved.getId(), saved.getOriginalFilename(),
-                ticket.url(), ticket.fields(), ticket.expiresAt());
-    }
-
-    @Override
-    // audit_logs.entity_id is a UUID, so the audit trail references the document's uuid — its
-    // numeric primary key could not be stored there.
-    @Audit(action = AuditAction.DOCUMENT_UPLOADED, entity = AuditEntity.DOCUMENT,
-            entityId = "#result.uuid", summary = "'Document uploaded: ' + #result.fileName",
-            skipIfNullResult = true)
-    @Transactional
-    public DocumentResponse confirmUpload(Long documentId, ConfirmUploadRequest request) {
-        UUID firmId = requireFirmId();
-        Document document = loadForFirm(documentId, firmId);
-
-        if (document.getStatus() != DocumentStatus.PENDING_UPLOAD) {
-            throw new BusinessRuleException("This upload is no longer awaiting confirmation");
-        }
-        if (document.getUploadExpiresAt() != null
-                && document.getUploadExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new BusinessRuleException("The upload window expired. Please upload the file again.");
-        }
-        documentScopeGuard.requireStaffAction(document);
-
-        StoredObject stored = storageService.stat(document.getStorageKey());
-        if (!stored.exists()) {
-            throw new BusinessRuleException("The file was not found in storage — the upload may have failed");
-        }
-
-        // An oversized write should have been refused by the policy; if a client was ever able
-        // to get past it, the object must not be left behind.
-        if (stored.size() > maxFileSizeBytes()) {
+        if (!stored.exists() || stored.size() != sizeBytes) {
             discard(document.getStorageKey());
-            throw new BusinessRuleException("The uploaded file is larger than the "
-                    + StorageQuotaService.humanReadable(maxFileSizeBytes()) + " limit");
+            throw new BusinessRuleException("The file could not be stored completely. Please try again.");
         }
 
-        // The declared size is what the client asked for; a mismatch means they uploaded
-        // something other than what they described.
-        if (stored.size() != document.getSizeBytes()) {
-            discard(document.getStorageKey());
-            throw new BusinessRuleException("The uploaded file (" + stored.size()
-                    + " bytes) does not match the declared size (" + document.getSizeBytes() + " bytes)");
-        }
-
+        // The declared content type is attacker-controlled; the file's own leading bytes are not.
         byte[] head = storageService.readHead(document.getStorageKey(), MAGIC_BYTE_PROBE);
-        if (!DocumentTypePolicy.matchesContent(document.getContentType(), head)) {
+        if (!DocumentTypePolicy.matchesContent(normalizedType, head)) {
             discard(document.getStorageKey());
             throw new BusinessRuleException("The file content does not match its declared type ('"
-                    + document.getContentType() + "')");
+                    + normalizedType + "')");
         }
 
         try {
-            quotaService.reserve(firmId, stored.size());
+            quotaService.reserve(firmId, sizeBytes);
         } catch (RuntimeException e) {
-            // The bytes are already in the bucket, so the space has to be handed back rather
-            // than left as an orphan nothing points at.
             discard(document.getStorageKey());
             throw e;
         }
 
-        document.setStatus(DocumentStatus.ACTIVE);
         document.setUploadedByUserId(currentUserResolver.getCurrentUserId());
-        // The client may echo an etag back, but it is untrusted input from a free-text body, so
-        // it is normalised before it reaches a 64-character column.
-        document.setEtag(normalizeEtag(StringUtils.hasText(safeEtag(request))
-                ? safeEtag(request) : stored.etag()));
+        document.setEtag(normalizeEtag(stored.etag()));
         Document saved = documentRepository.save(document);
 
         recordTimeline(saved);
@@ -430,8 +386,8 @@ public class DocumentServiceImpl implements DocumentService {
     /**
      * Attaches a presigned link so a caller can download straight from a list response instead of
      * making one {@code download-url} round trip per row. Only an {@code ACTIVE} document has a
-     * retrievable object: a {@code PENDING_UPLOAD} one may never have arrived, and an
-     * {@code ARCHIVED} one is deliberately not downloadable — both get {@code null}.
+     * retrievable object: an {@code ARCHIVED} one is deliberately not downloadable and gets
+     * {@code null}.
      *
      * <p>Presigning here does not write a {@code DOCUMENT_DOWNLOADED} audit row, so a download
      * taken straight from the list is not individually audited. Use the {@code download-url}
@@ -488,10 +444,6 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
-    private static String safeEtag(ConfirmUploadRequest request) {
-        return request == null ? null : request.getEtag();
-    }
-
     /**
      * S3 returns an unquoted hex etag; some clients send it quoted. Anything that is still not
      * a plausible etag afterwards is discarded rather than truncated, since a partial etag would
@@ -538,10 +490,6 @@ public class DocumentServiceImpl implements DocumentService {
     /** Storage policy is DB-configurable (STORAGE group); see {@link SystemConfigService}. */
     private long maxFileSizeBytes() {
         return systemConfigService.storageMaxFileSizeBytes();
-    }
-
-    private Duration uploadTtl() {
-        return Duration.ofSeconds(systemConfigService.storageUploadExpirySeconds());
     }
 
     private Duration downloadTtl() {

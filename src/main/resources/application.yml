@@ -3,6 +3,15 @@ spring:
   application:
     name: NepalCRM
 
+  # Document upload is one multipart request now, so Tomcat must accept the body. This is the
+  # transport ceiling only, set above the STORAGE_MAX_FILE_SIZE_BYTES policy (50 MiB default) so
+  # the service — not the container — decides what is acceptable. To change the real limit, change
+  # the policy, not this.
+  servlet:
+    multipart:
+      max-file-size: 60MB
+      max-request-size: 64MB
+
   # Set which profile is active
   profiles:
     active: dev

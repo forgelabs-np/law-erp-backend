@@ -6,29 +6,29 @@ Full implementation write-up: `docs/document-store-module.pdf` (13 sections, inc
 
 ---
 
+> ⚠️ **2026-10-03 — upload is now a single call.** The three-step flow (`upload-ticket` → POST to
+> storage → `confirm`) and the `PENDING_UPLOAD` state were **removed**. A document is now created with
+> one `multipart/form-data` POST to `POST /api/v1/firm/documents` and comes back `ACTIVE` immediately.
+> Any section below that still describes `upload-ticket`, the storage POST, or `confirm` is superseded.
+
 ## 1. What was built, on one page
 
 A firm can upload files against **a case (Matter) or a project (Project)** — exactly one of the two.
-The bytes **never travel through the API**: the client uploads straight to object storage
-(MinIO/S3) using a short-lived signed policy, then tells the API it is done.
+Upload is **one request**: the bytes go to the API, which stores them and returns the document
+**`ACTIVE`** immediately. There is no ticket and no confirm step.
 
 ```
-① ASK           POST /api/v1/firm/documents/upload-ticket        { matterNumber | projectCode, filename, contentType, sizeBytes }
-                └─> creates a PENDING_UPLOAD row + returns { documentId, uploadUrl, fields, expiresAt }
-                    (also refuses up front if the file is too big, the type is not allowed, or the firm is out of space)
-
-② POST TO STORAGE   multipart/form-data → uploadUrl
-                    every entry of `fields` verbatim, then the file, field name `file`, LAST
-                └─> the storage server itself enforces the size ceiling and the content type
-
-③ CONFIRM       POST /api/v1/firm/documents/{documentId}/confirm    (body optional)
-                └─> API re-reads the object, checks real size + file signature, reserves the firm's
-                    storage and flips the document to ACTIVE. Only now is it a document.
+POST /api/v1/firm/documents     multipart/form-data
+  file           the bytes
+  matterNumber   ┐ exactly one
+  projectCode    ┘
+  courtCaseRef   optional
+→ 200 { id, uuid, status: "ACTIVE", fileName, sizeBytes, documentUrl, ... }
 ```
 
-**Nothing is readable until step ③ succeeds.** An abandoned upload leaves a `PENDING_UPLOAD` row that
-a background sweeper removes once the 30-minute upload window has passed (the sweeper runs every
-15 minutes) — along with any bytes that did land.
+The server validates the filename and declared content type, enforces the size policy and the firm's
+quota, stores the file, checks the file signature, and saves the document — all in that one call. If
+anything is rejected, nothing is stored and no document row is created.
 
 Everything else is ordinary CRUD-shaped: list, download-link, share, archive, storage usage.
 
@@ -42,8 +42,7 @@ Base URL is whatever you already use for the API. Two body conventions apply —
 
 | # | Method | Path | Permission | Purpose |
 |---|---|---|---|---|
-| 1 | POST | `/documents/upload-ticket` | `DOCUMENT_MANAGEMENT:UPLOAD` | Step 1 of the upload |
-| 2 | POST | `/documents/{documentId}/confirm` | `DOCUMENT_MANAGEMENT:UPLOAD` | Step 3 of the upload |
+| 1 | POST | `/documents` (**multipart/form-data**) | `DOCUMENT_MANAGEMENT:UPLOAD` | Upload a file — creates the document `ACTIVE` in one call |
 | 3 | GET | `/documents` | `DOCUMENT_MANAGEMENT:VIEW` | Firm-wide library |
 | 4 | GET | `/matters/{matterNumber}/documents` | `DOCUMENT_MANAGEMENT:VIEW` | Documents on one case |
 | 5 | GET | `/projects/{projectCode}/documents` | `DOCUMENT_MANAGEMENT:VIEW` | Documents on one project |
@@ -92,29 +91,28 @@ Every response, success or failure:
 `responseCode` mirrors the HTTP status. On an error `success` is `false`, `responseCode` is the status,
 `message` is human-readable, and **`data` is absent** — never render an error path from `data`.
 
-There are **two body conventions**, and mixing them up is the most common integration mistake:
+Two shapes now, and mixing them up is the most common integration mistake:
 
 | Style | Endpoints | Body |
 |---|---|---|
-| **Enveloped** (the `data` key is required) | 1, 7, 12 | `{ "data": { …fields… } }` |
-| **Enveloped but optional** | 2 | `{ "data": { "etag": "…" } }`, `{}`, or omit the body entirely |
+| **Multipart form** | 1 (upload) | `FormData` with the `file` part plus `matterNumber`/`projectCode` params |
+| **Enveloped** (the `data` key is required) | 7, 12 | `{ "data": { …fields… } }` |
 
-Endpoints 1 and 7 declare `@NotNull @Valid` on the envelope, so a bare object is a **400**:
+Endpoint 7 declares `@NotNull @Valid` on the envelope, so a bare object is a **400**:
 
 ```json
-// WRONG for POST /documents/upload-ticket
-{ "filename": "petition.pdf", "contentType": "application/pdf", "sizeBytes": 1000 }
+// WRONG for PATCH /documents/{id}/visibility
+{ "visibility": "SHARED" }
 
 // RIGHT
-{ "data": { "matterNumber": "CASE-2026-001", "filename": "petition.pdf",
-            "contentType": "application/pdf", "sizeBytes": 1000 } }
+{ "data": { "visibility": "SHARED" } }
 ```
 
 GET and DELETE endpoints take no body. All list endpoints take **query parameters only**.
 
 ---
 
-## 4. Step ① — request an upload ticket
+## 4. Step ① — request an upload ticket  ⚠️ superseded — just call `POST /documents` (§1)
 
 `POST /api/v1/firm/documents/upload-ticket`
 
@@ -176,7 +174,7 @@ Notes:
 
 ---
 
-## 5. Step ② — POST the bytes to storage
+## 5. Step ② — POST the bytes to storage  ⚠️ superseded — send the file part in the single-call upload instead (§1)
 
 This is a **plain HTML form POST**, not a `fetch` with a JSON body, and not a PUT.
 
@@ -233,7 +231,7 @@ not need to parse it — move straight to step ③. Do not show "uploaded" to th
 
 ---
 
-## 6. Step ③ — confirm
+## 6. Step ③ — confirm  ⚠️ superseded — the upload is `ACTIVE` on its own now (§1)
 
 `POST /api/v1/firm/documents/{documentId}/confirm` — body optional.
 
@@ -466,7 +464,7 @@ Errors:
 
 | Status | `message` | Cause |
 |---|---|---|
-| 400 | `This document is not available for download` | document is `PENDING_UPLOAD` or `ARCHIVED` |
+| 400 | `This document is not available for download` | document is `ARCHIVED` |
 | 403 | `This document has not been shared with you` | client asking for a `PRIVATE` document |
 | 403 | `You are not assigned to this case` | staff member not on the document's case |
 | 403 | `You are not a member of this project` | staff member not on the document's project |
@@ -598,7 +596,7 @@ endpoint with its own review — the current design has no notion of a client-au
 | 400 | `The uploaded file (…) does not match the declared size (… bytes)` | ② sent a different file | restart from ① |
 | 400 | `The file content does not match its declared type ('application/pdf')` | renamed / spoofed file | "This file isn't a real PDF" |
 | 400 | `This upload is no longer awaiting confirmation` | confirm called twice | treat as success if you already have the document |
-| 400 | `This document is not available for download` | document is pending or archived | refresh the list |
+| 400 | `This document is not available for download` | document is archived | refresh the list |
 | 400 | `An archived document cannot be shared` | share after archive | refresh the list |
 | 400 | `The uploaded file is larger than the 50.0 MB limit` | oversized write slipped past the policy | restart from ① |
 | 400 | `quotaBytes cannot be negative` / `quotaBytes is required` | Super Admin form | inline |

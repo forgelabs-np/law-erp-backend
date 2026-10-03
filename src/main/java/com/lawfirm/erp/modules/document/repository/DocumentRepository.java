@@ -10,7 +10,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -81,7 +80,4 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
                                       @Param("projectId") UUID projectId,
                                       @Param("search") String search,
                                       Pageable pageable);
-
-    /** Abandoned uploads for the sweeper. */
-    List<Document> findByStatusAndUploadExpiresAtBefore(DocumentStatus status, java.time.LocalDateTime cutoff);
 }

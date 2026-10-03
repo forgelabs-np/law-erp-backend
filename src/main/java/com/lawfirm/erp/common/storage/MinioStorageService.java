@@ -6,7 +6,8 @@ import io.minio.GetObjectArgs;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
-import io.minio.PostPolicy;
+import io.minio.ObjectWriteResponse;
+import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.StatObjectArgs;
 import io.minio.StatObjectResponse;
@@ -19,8 +20,6 @@ import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
 import java.time.Duration;
-import java.time.Instant;
-import java.time.ZonedDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -36,32 +35,21 @@ import java.util.Map;
 @Slf4j
 public class MinioStorageService implements StorageService {
 
-    private static final String KEY_FIELD = "key";
-    private static final String CONTENT_TYPE_FIELD = "Content-Type";
-
     private final ObjectProvider<MinioClient> minioClientProvider;
     private final StorageProperties properties;
 
     @Override
-    public UploadTicket presignUpload(String key, String contentType, long maxBytes, Duration ttl) {
-        MinioClient client = client();
+    public StoredObject put(String key, InputStream data, long sizeBytes, String contentType) {
         try {
-            PostPolicy policy = new PostPolicy(properties.getBucket(),
-                    ZonedDateTime.now().plus(ttl));
-            policy.addContentLengthRangeCondition(1L, maxBytes);
-            // Exact key and exact content type — both are signed, so neither can be tampered with.
-            policy.addEqualsCondition(KEY_FIELD, key);
-            policy.addEqualsCondition(CONTENT_TYPE_FIELD, contentType);
-
-            Map<String, String> fields = new LinkedHashMap<>(client.getPresignedPostFormData(policy));
-            // The SDK returns only the signature fields. These two are policy conditions the
-            // client must echo back, so they travel with the ticket.
-            fields.put(KEY_FIELD, key);
-            fields.put(CONTENT_TYPE_FIELD, contentType);
-
-            return new UploadTicket(key, postUrl(), fields, Instant.now().plus(ttl));
+            ObjectWriteResponse response = client().putObject(PutObjectArgs.builder()
+                    .bucket(properties.getBucket())
+                    .object(key)
+                    .stream(data, sizeBytes, -1)
+                    .contentType(contentType)
+                    .build());
+            return new StoredObject(true, sizeBytes, response.etag(), contentType);
         } catch (Exception e) {
-            throw new StorageOperationException("Could not create an upload ticket", e);
+            throw new StorageOperationException("Could not store the uploaded file", e);
         }
     }
 
@@ -155,11 +143,6 @@ public class MinioStorageService implements StorageService {
                     "Object storage is not configured (storage.minio.endpoint is empty)");
         }
         return client;
-    }
-
-    /** POST target for form uploads: {@code {endpoint}/{bucket}}. */
-    private String postUrl() {
-        return properties.getEndpoint().replaceAll("/+$", "") + "/" + properties.getBucket();
     }
 
     /** Keeps a filename out of the Content-Disposition header structure (CRLF/quote injection). */

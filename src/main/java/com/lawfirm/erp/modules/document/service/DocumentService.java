@@ -2,19 +2,25 @@ package com.lawfirm.erp.modules.document.service;
 
 import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.storage.StorageUsageView;
-import com.lawfirm.erp.modules.document.dto.request.ConfirmUploadRequest;
-import com.lawfirm.erp.modules.document.dto.request.InitiateUploadRequest;
 import com.lawfirm.erp.modules.document.dto.response.DocumentResponse;
 import com.lawfirm.erp.modules.document.dto.response.DownloadUrlResponse;
-import com.lawfirm.erp.modules.document.dto.response.UploadTicketResponse;
 import com.lawfirm.erp.modules.document.enums.DocumentStatus;
 import com.lawfirm.erp.modules.document.enums.DocumentVisibility;
 
+import java.io.InputStream;
+
 public interface DocumentService {
 
-    UploadTicketResponse initiateUpload(InitiateUploadRequest request);
-
-    DocumentResponse confirmUpload(Long documentId, ConfirmUploadRequest request);
+    /**
+     * Stores one file and returns the finished, {@code ACTIVE} document in a single call.
+     *
+     * <p>The bytes are handed to the service rather than presigned straight to storage, so the
+     * document is never observable in a half-uploaded state and the client has nothing to
+     * confirm afterwards.
+     */
+    DocumentResponse upload(String matterNumber, String projectCode, String courtCaseRef,
+                            String originalFilename, String contentType, long sizeBytes,
+                            InputStream content);
 
     PagedResponse<DocumentResponse> listLibrary(DocumentStatus status, DocumentVisibility visibility,
                                                 String search, int page, int size);

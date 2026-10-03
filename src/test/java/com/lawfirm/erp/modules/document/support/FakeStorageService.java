@@ -1,16 +1,16 @@
 package com.lawfirm.erp.modules.document.support;
 
+import com.lawfirm.erp.common.exception.StorageOperationException;
 import com.lawfirm.erp.common.storage.StorageService;
 import com.lawfirm.erp.common.storage.StoredObject;
-import com.lawfirm.erp.common.storage.UploadTicket;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,10 +18,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * In-memory stand-in for object storage, so no test needs a running MinIO.
  *
- * <p>{@link #put} simulates the browser completing the presigned POST: the test reads the
- * generated key out of the upload ticket and stores the exact bytes it wants confirm to see.
- * That keeps the confirm-time size and signature checks genuinely under test rather than
- * stubbed away.
+ * <p>{@link #put} consumes the caller's stream exactly as storage would, so the upload-time size
+ * and signature checks stay genuinely under test. {@link #seed} pre-fills an object without going
+ * through the upload path.
  */
 public class FakeStorageService implements StorageService {
 
@@ -34,7 +33,11 @@ public class FakeStorageService implements StorageService {
     /** Set false to simulate storage never being configured. */
     public boolean configured = true;
 
-    public void put(String key, byte[] content) {
+    /** Set true to make {@link #put} fail, as an unreachable store would. */
+    public boolean failingWrites = false;
+
+    /** Pre-fills an object without exercising the upload path. */
+    public void seed(String key, byte[] content) {
         objects.put(key, content);
     }
 
@@ -43,13 +46,18 @@ public class FakeStorageService implements StorageService {
     }
 
     @Override
-    public UploadTicket presignUpload(String key, String contentType, long maxBytes, Duration ttl) {
-        Map<String, String> fields = new LinkedHashMap<>();
-        fields.put("key", key);
-        fields.put("Content-Type", contentType);
-        fields.put("policy", "fake-" + maxBytes);
-        fields.put("x-amz-signature", "fake-signature");
-        return new UploadTicket(key, "http://fake-storage/" + key, fields, Instant.now().plus(ttl));
+    public StoredObject put(String key, InputStream data, long sizeBytes, String contentType) {
+        if (failingWrites) {
+            throw new StorageOperationException("Could not store the uploaded file");
+        }
+        byte[] bytes;
+        try {
+            bytes = data.readAllBytes();
+        } catch (IOException e) {
+            throw new StorageOperationException("Could not store the uploaded file", e);
+        }
+        objects.put(key, bytes);
+        return new StoredObject(true, bytes.length, md5Hex(bytes), contentType);
     }
 
     @Override

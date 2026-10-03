@@ -1,6 +1,46 @@
 # Project State
 
 ## Current Focus
+**2026-10-03 — the document upload flow is now ONE call; there is no confirm and no PENDING_UPLOAD.**
+`POST /api/v1/firm/documents` (multipart: `file` + `matterNumber`/`projectCode` + optional
+`courtCaseRef`) stores the file and returns the document **ACTIVE** immediately. The 3-step flow only
+existed because bytes went straight to storage and only the browser knew when the upload finished; to
+finish it server-side the API now receives the file, so bytes pass through the app (ok at the 50 MiB
+cap). `StorageService.presignUpload` → `put`; `initiateUpload`/`confirmUpload` → `upload`. Deleted
+`UploadTicket`, `InitiateUploadRequest`, `ConfirmUploadRequest`, `UploadTicketResponse`,
+`PendingUploadSweeper`, `DocumentStatus.PENDING_UPLOAD`, `Document.uploadExpiresAt` and the sweeper
+query; added multipart limits in `application.yml`. Chosen scope: **full replacement**. 616 tests
+green. Legacy `PENDING_UPLOAD` dev rows deleted. **The running app still serves the old build and
+needs a restart.** Full detail in `memory/2026-10-03.md`.
+
+### Same day — local object storage restored; MinIO's upstream distribution is gone. MinIO pulled
+its distribution on 2026-09-11: `minio/minio` is 404 on Docker Hub, the quay.io mirror now 401s, and
+the official binaries at `dl.min.io` return **410 Gone**. `docker-compose.yml` now uses the **Bitnami
+legacy image** `bitnamilegacy/minio:2025.7.23-debian-12-r5` (still ships the real MinIO server,
+`RELEASE.2025-07-23`) as a **local-only stopgap** — same `MINIO_ROOT_USER/PASSWORD`, same ports, volume
+moved to `/bitnami/minio/data`. Docker Desktop was started, container `tarikh-minio` is healthy on
+`:9000`, and the `tarikh-documents` bucket was created by hand (the app's startup bootstrap had already
+run while storage was down). **Production still needs a maintained S3-compatible backend** — Bitnami
+legacy is frozen (last push 2025-08-19). **No `isProduction` storage branch was added** — the user
+chose to keep local MinIO, so dev/server stays Spring-profile-driven (the `APP_PRODUCTION` flag only
+drives the MFA dev-bypass and nothing in `common/storage/**` reads it). Handover written:
+**`docs/minioConfiguration.md`** (architecture, 3-step upload, config layers, prod env vars, local
+Docker setup + data path, key layout, quota, dev-vs-prod table, troubleshooting). The MinIO data dir
+was then switched from the hidden Docker named volume to a **bind mount** `./data/minio` (git-ignored)
+so the tree is visible on disk. Two things corrected along the way: this MinIO build has **no web
+console** (`:9001` is mapped but nothing listens — API only), and **objects are not plain files** even
+when bind-mounted (each object is a directory with `xl.meta`), so real bytes still need `mc cp`/a
+presigned URL/the app.
+
+### Same day — `download-url` 400 diagnosis
+**2026-10-03 — `GET /firm/documents/13/download-url` returning 400 was diagnosed, not a bug.**
+Document 13 is `PENDING_UPLOAD` (never confirmed: `etag`/`uploaded_by_user_id` null), so
+`downloadUrl` correctly refuses it. Live dev Postgres confirms it is the only document row; object
+storage is down (`localhost:9000` refused, Docker daemon off), so the upload could not have landed.
+`PendingUploadSweeper` will delete the row ~15 min after `upload_expires_at`. **Diagnosis only — no
+code change.** Full detail in `memory/2026-10-03.md`.
+
+### Previous focus (2026-10-01)
 **2026-10-01 — storage settings are now DB config; Super Admin is refused on every document endpoint;
 the list also embeds a presigned `documentUrl`.** The `STORAGE` config group was added to
 `ConfigKeyRegistry` and is read via `SystemConfigService` runtime helpers, so the tunables live in
@@ -208,6 +248,8 @@ threshold, limit, timeout, expiry, quota or filename length in code and never bu
 - **Postman** — sections 8-11 for all new endpoints
 
 ## Deep History Index
+- `memory/2026-10-03.md` — doc 13 `download-url` 400 explained: row is `PENDING_UPLOAD` (never
+  confirmed), object storage down; the endpoint is behaving as designed. No code change.
 - `memory/2026-10-01.md` — document list gains an embedded presigned `documentUrl` (ACTIVE-only); why
   `download-url` is kept alongside it, and the expiry + no-audit-row trade-offs; **Super Admin refused
   on every document endpoint** (docs are firm records — enforced in `requireFirmId`, since SA bypasses

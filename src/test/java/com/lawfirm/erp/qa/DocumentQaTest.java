@@ -34,10 +34,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -46,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 
 /**
  * End-to-end document store behaviour over real HTTP with real security, backed by an
@@ -126,28 +128,29 @@ class DocumentQaTest extends QaBaseTest {
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("a case document uploads, lands in the case folder and can be downloaded")
+    @DisplayName("a case document uploads and comes back ACTIVE in one call")
     void caseDocumentRoundTrip() throws Exception {
         byte[] pdf = DocumentTestFiles.pdf("petition body");
 
-        JsonNode confirmed = uploadDocument(adminAToken, matter.getMatterNumber(), null,
+        JsonNode document = uploadDocument(adminAToken, matter.getMatterNumber(), null,
                 "petition.pdf", "application/pdf", pdf);
 
-        assertEquals("ACTIVE", confirmed.path("status").asText());
-        assertEquals("PRIVATE", confirmed.path("visibility").asText(), "uploads start firm-only");
-        assertEquals(matter.getMatterNumber(), confirmed.path("matterNumber").asText());
-        assertEquals(pdf.length, confirmed.path("sizeBytes").asLong());
-        assertFalse(confirmed.path("uuid").asText().isBlank(),
+        assertEquals("ACTIVE", document.path("status").asText(),
+                "a single upload must finish the document — there is no confirm step");
+        assertEquals("PRIVATE", document.path("visibility").asText(), "uploads start firm-only");
+        assertEquals(matter.getMatterNumber(), document.path("matterNumber").asText());
+        assertEquals(pdf.length, document.path("sizeBytes").asLong());
+        assertFalse(document.path("uuid").asText().isBlank(),
                 "the document needs a uuid for the audit trail");
 
-        String storageKey = documentRepository.findById(confirmed.path("id").asLong())
+        String storageKey = documentRepository.findById(document.path("id").asLong())
                 .orElseThrow().getStorageKey();
         assertTrue(storageKey.startsWith("firms/" + firmA.getId() + "/cases/"
                 + matter.getMatterNumber() + "/"), storageKey);
         assertTrue(storageKey.endsWith("/petition.pdf"), storageKey);
 
         MvcResult download = authGet(adminAToken,
-                "/api/v1/firm/documents/" + confirmed.path("id").asLong() + "/download-url");
+                "/api/v1/firm/documents/" + document.path("id").asLong() + "/download-url");
         assertAllowed(download, "download a document");
         assertTrue(json(download).path("data").path("downloadUrl").asText().contains("fake-storage"));
 
@@ -158,16 +161,14 @@ class DocumentQaTest extends QaBaseTest {
     @Test
     @DisplayName("a project document is filed under its project code")
     void projectDocumentRoundTrip() throws Exception {
-        MvcResult ticket = requestUploadTicket(adminAToken, Map.of(
-                "projectCode", project.getProjectCode(),
-                "filename", "agreement.docx",
-                "contentType", DOCX,
-                "sizeBytes", 64));
-        assertAllowed(ticket, "request a project upload ticket");
+        JsonNode document = uploadDocument(adminAToken, null, project.getProjectCode(),
+                "agreement.docx", DOCX, DocumentTestFiles.zip("word/document.xml"));
 
-        String storageKey = ticketKey(ticket);
+        String storageKey = documentRepository.findById(document.path("id").asLong())
+                .orElseThrow().getStorageKey();
         assertTrue(storageKey.startsWith("firms/" + firmA.getId() + "/projects/"
                 + project.getProjectCode() + "/"), storageKey);
+        assertTrue(storageKey.endsWith("/agreement.docx"), storageKey);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -230,11 +231,9 @@ class DocumentQaTest extends QaBaseTest {
         assertEquals(0, json(projectDocs).path("data").path("totalElements").asInt(),
                 "an unassigned project shows no documents");
 
-        assertDenied(requestUploadTicket(advocateToken, Map.of(
-                "projectCode", project.getProjectCode(),
-                "filename", "sneaky.pdf",
-                "contentType", "application/pdf",
-                "sizeBytes", 32)), "upload to an unassigned project");
+        assertDenied(uploadMultipart(advocateToken, null, project.getProjectCode(), null,
+                "sneaky.pdf", "application/pdf", DocumentTestFiles.pdf("x")),
+                "upload to an unassigned project");
     }
 
     @Test
@@ -270,11 +269,9 @@ class DocumentQaTest extends QaBaseTest {
         assertAllowed(library, "project member library");
         assertEquals(1, json(library).path("data").path("totalElements").asInt());
 
-        assertAllowed(requestUploadTicket(advocateToken, Map.of(
-                "projectCode", project.getProjectCode(),
-                "filename", "draft.pdf",
-                "contentType", "application/pdf",
-                "sizeBytes", 32)), "upload into a project the user belongs to");
+        assertAllowed(uploadMultipart(advocateToken, null, project.getProjectCode(), null,
+                "draft.pdf", "application/pdf", DocumentTestFiles.pdf("x")),
+                "upload into a project the user belongs to");
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -319,11 +316,8 @@ class DocumentQaTest extends QaBaseTest {
         matter = linkMatterToClient(matter, clientA);
         String clientToken = freshToken(clientA);
 
-        assertDenied(requestUploadTicket(clientToken, Map.of(
-                "matterNumber", matter.getMatterNumber(),
-                "filename", "mine.pdf",
-                "contentType", "application/pdf",
-                "sizeBytes", 32)), "client upload");
+        assertDenied(uploadMultipart(clientToken, matter.getMatterNumber(), null, null,
+                "mine.pdf", "application/pdf", DocumentTestFiles.pdf("x")), "client upload");
 
         assertDenied(authPatch(clientToken, "/api/v1/firm/documents/" + documentId + "/visibility",
                 apiRequest(Map.of("visibility", "SHARED"))), "client visibility change");
@@ -393,74 +387,50 @@ class DocumentQaTest extends QaBaseTest {
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("an executable renamed to .pdf is rejected and the object is discarded")
+    @DisplayName("an executable renamed to .pdf is rejected and nothing is stored")
     void disguisedExecutableIsRejected() throws Exception {
         byte[] exe = DocumentTestFiles.windowsExecutable();
+        int storedBefore = storageService.objects.size();
 
-        JsonNode ticket = json(requestUploadTicket(adminAToken, Map.of(
-                "matterNumber", matter.getMatterNumber(),
-                "filename", "petition.pdf",
-                "contentType", "application/pdf",
-                "sizeBytes", exe.length))).path("data");
-        long documentId = ticket.path("documentId").asLong();
-        String key = ticket.path("fields").path("key").asText();
+        assertRejected(uploadMultipart(adminAToken, matter.getMatterNumber(), null, null,
+                "petition.pdf", "application/pdf", exe), "uploading a disguised executable");
 
-        // The browser "uploads" an executable under the PDF label.
-        storageService.put(key, exe);
-
-        assertRejected(authPost(adminAToken, "/api/v1/firm/documents/" + documentId + "/confirm",
-                apiRequest(Map.of())), "confirming a disguised executable");
-
-        assertFalse(storageService.has(key), "the rejected object must be removed from storage");
-        assertEquals(DocumentStatus.PENDING_UPLOAD,
-                documentRepository.findById(documentId).orElseThrow().getStatus(),
-                "the document must not become ACTIVE");
+        assertEquals(storedBefore, storageService.objects.size(),
+                "the rejected object must be removed from storage");
     }
 
     @Test
-    @DisplayName("a file bigger than the limit is refused before any upload starts")
-    void oversizedDeclaredFileIsRefusedUpFront() throws Exception {
-        assertRejected(requestUploadTicket(adminAToken, Map.of(
-                "matterNumber", matter.getMatterNumber(),
-                "filename", "huge.pdf",
-                "contentType", "application/pdf",
-                "sizeBytes", 51L * 1024 * 1024)), "declared size above the limit");
+    @DisplayName("a file bigger than the policy is refused and nothing is stored")
+    void oversizedFileIsRefused() throws Exception {
+        // Lower the policy to 1 KB, then try to store 2 KB.
+        assertAllowed(authPut(saToken, "/api/v1/super-admin/config",
+                Map.of("STORAGE_MAX_FILE_SIZE_BYTES", "1024")), "lower the storage policy");
+
+        byte[] tooBig = DocumentTestFiles.pdf("x".repeat(2000));
+        int storedBefore = storageService.objects.size();
+        assertRejected(uploadMultipart(adminAToken, matter.getMatterNumber(), null, null,
+                "huge.pdf", "application/pdf", tooBig), "upload above the size policy");
+        assertEquals(storedBefore, storageService.objects.size(),
+                "a refused upload must not store anything");
     }
 
     @Test
-    @DisplayName("an unsupported file type is refused before any upload starts")
-    void unlistedFileTypeIsRefusedUpFront() throws Exception {
-        assertRejected(requestUploadTicket(adminAToken, Map.of(
-                "matterNumber", matter.getMatterNumber(),
-                "filename", "script.sh",
-                "contentType", "application/x-sh",
-                "sizeBytes", 128)), "unsupported file type");
+    @DisplayName("an unsupported file type is refused and nothing is stored")
+    void unlistedFileTypeIsRefused() throws Exception {
+        int storedBefore = storageService.objects.size();
+        assertRejected(uploadMultipart(adminAToken, matter.getMatterNumber(), null, null,
+                "script.sh", "application/x-sh", "#!/bin/sh".getBytes()),
+                "unsupported file type");
+        assertEquals(storedBefore, storageService.objects.size(),
+                "a refused upload must not store anything");
     }
 
     @Test
-    @DisplayName("a file that never arrived cannot be confirmed")
-    void confirmWithoutStoredObjectIsRejected() throws Exception {
-        JsonNode ticket = json(requestUploadTicket(adminAToken, Map.of(
-                "matterNumber", matter.getMatterNumber(),
-                "filename", "petition.pdf",
-                "contentType", "application/pdf",
-                "sizeBytes", 100))).path("data");
-
-        // No storageService.put — the browser never completed the upload.
-        assertRejected(authPost(adminAToken,
-                "/api/v1/firm/documents/" + ticket.path("documentId").asLong() + "/confirm",
-                apiRequest(Map.of())), "confirm with a missing object");
-    }
-
-    @Test
-    @DisplayName("a document cannot be confirmed twice")
-    void confirmIsNotRepeatable() throws Exception {
-        JsonNode document = uploadDocument(adminAToken, matter.getMatterNumber(), null,
-                "petition.pdf", "application/pdf", DocumentTestFiles.pdf("case doc"));
-
-        assertRejected(authPost(adminAToken,
-                "/api/v1/firm/documents/" + document.path("id").asLong() + "/confirm",
-                apiRequest(Map.of())), "second confirm of the same document");
+    @DisplayName("a filename without an allowed extension is refused")
+    void extensionlessFilenameIsRefused() throws Exception {
+        assertRejected(uploadMultipart(adminAToken, matter.getMatterNumber(), null, null,
+                "noextension", "application/pdf", DocumentTestFiles.pdf("x")),
+                "filename without an allowed extension");
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -487,14 +457,11 @@ class DocumentQaTest extends QaBaseTest {
         assertTrue(used > 0, "usage should count the stored bytes");
         assertTrue(used <= 1024, "usage must stay within the allocation");
 
-        // A file that does not fit is refused before the upload starts.
-        assertRejected(requestUploadTicket(adminAToken, Map.of(
-                "matterNumber", matter.getMatterNumber(),
-                "filename", "big.pdf",
-                "contentType", "application/pdf",
-                "sizeBytes", 4096)), "upload beyond the allocation");
-
-        assertEquals(used, usageBytesInDb(), "a refused upload must not change the counter");
+        // A file that does not fit is refused.
+        assertRejected(uploadMultipart(adminAToken, matter.getMatterNumber(), null, null,
+                "big.pdf", "application/pdf", DocumentTestFiles.pdf("x".repeat(2000))),
+                "upload beyond the allocation");
+        assertFalse(storageService.objects.isEmpty(), "the earlier upload should still be there");
     }
 
     @Test
@@ -544,11 +511,9 @@ class DocumentQaTest extends QaBaseTest {
 
         assertAllowed(authGet(paralegalToken, "/api/v1/firm/documents"), "read without UPLOAD");
 
-        assertDenied(requestUploadTicket(paralegalToken, Map.of(
-                "matterNumber", matter.getMatterNumber(),
-                "filename", "sneaky.pdf",
-                "contentType", "application/pdf",
-                "sizeBytes", 32)), "upload without DOCUMENT_MANAGEMENT:UPLOAD");
+        assertDenied(uploadMultipart(paralegalToken, matter.getMatterNumber(), null, null,
+                "sneaky.pdf", "application/pdf", DocumentTestFiles.pdf("x")),
+                "upload without DOCUMENT_MANAGEMENT:UPLOAD");
     }
 
     @Test
@@ -605,39 +570,31 @@ class DocumentQaTest extends QaBaseTest {
     // Helpers
     // ═══════════════════════════════════════════════════════════════════════
 
-    /** Drives the real two-step flow: request a ticket, "upload" to storage, then confirm. */
+    /** One multipart POST to the API: the bytes go through the server, so it finishes at once. */
     private JsonNode uploadDocument(String token, String matterNumber, String projectCode,
                                     String filename, String contentType, byte[] content) throws Exception {
-        Map<String, Object> body = new LinkedHashMap<>();
+        MvcResult result = uploadMultipart(token, matterNumber, projectCode, null,
+                filename, contentType, content);
+        assertAllowed(result, "upload " + filename);
+        return json(result).path("data");
+    }
+
+    private MvcResult uploadMultipart(String token, String matterNumber, String projectCode,
+                                      String courtCaseRef, String filename, String contentType,
+                                      byte[] content) throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", filename, contentType, content);
+        MockMultipartHttpServletRequestBuilder request =
+                multipart("/api/v1/firm/documents").file(file);
         if (matterNumber != null) {
-            body.put("matterNumber", matterNumber);
+            request.param("matterNumber", matterNumber);
         }
         if (projectCode != null) {
-            body.put("projectCode", projectCode);
+            request.param("projectCode", projectCode);
         }
-        body.put("filename", filename);
-        body.put("contentType", contentType);
-        body.put("sizeBytes", content.length);
-
-        MvcResult ticket = requestUploadTicket(token, body);
-        assertAllowed(ticket, "request an upload ticket for " + filename);
-
-        JsonNode data = json(ticket).path("data");
-        storageService.put(data.path("fields").path("key").asText(), content);
-
-        MvcResult confirm = authPost(token,
-                "/api/v1/firm/documents/" + data.path("documentId").asLong() + "/confirm",
-                apiRequest(Map.of()));
-        assertAllowed(confirm, "confirm the upload of " + filename);
-        return json(confirm).path("data");
-    }
-
-    private MvcResult requestUploadTicket(String token, Map<String, Object> body) throws Exception {
-        return authPost(token, "/api/v1/firm/documents/upload-ticket", apiRequest(body));
-    }
-
-    private String ticketKey(MvcResult ticket) throws Exception {
-        return json(ticket).path("data").path("fields").path("key").asText();
+        if (courtCaseRef != null) {
+            request.param("courtCaseRef", courtCaseRef);
+        }
+        return mockMvc.perform(request.header("Authorization", "Bearer " + token)).andReturn();
     }
 
     private User advocateAssignedTo(Matter target) {

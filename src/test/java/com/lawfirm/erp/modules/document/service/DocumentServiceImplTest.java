@@ -6,6 +6,7 @@ import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.dto.PagedResponse;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
+import com.lawfirm.erp.common.exception.StorageOperationException;
 import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.common.storage.StorageQuotaService;
 import com.lawfirm.erp.modules.casemanagement.entity.CourtCase;
@@ -19,11 +20,8 @@ import com.lawfirm.erp.modules.casemanagement.repository.CourtCaseRepository;
 import com.lawfirm.erp.modules.casemanagement.repository.MatterRepository;
 import com.lawfirm.erp.modules.casemanagement.repository.MatterTimelineRepository;
 import com.lawfirm.erp.modules.casemanagement.service.MatterScopeGuard;
-import com.lawfirm.erp.modules.document.dto.request.ConfirmUploadRequest;
-import com.lawfirm.erp.modules.document.dto.request.InitiateUploadRequest;
 import com.lawfirm.erp.modules.document.dto.response.DocumentResponse;
 import com.lawfirm.erp.modules.document.dto.response.DownloadUrlResponse;
-import com.lawfirm.erp.modules.document.dto.response.UploadTicketResponse;
 import com.lawfirm.erp.modules.document.entity.Document;
 import com.lawfirm.erp.modules.document.enums.DocumentStatus;
 import com.lawfirm.erp.modules.document.enums.DocumentVisibility;
@@ -46,11 +44,10 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.data.domain.PageImpl;
 
-import java.time.LocalDateTime;
+import java.io.ByteArrayInputStream;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -98,6 +95,8 @@ class DocumentServiceImplTest {
     private static final UUID COURT_CASE_ID = UUID.randomUUID();
     private static final String MATTER_NUMBER = "MT-2026-00041";
     private static final String PROJECT_CODE = "ABC-PRJ-2026-00007";
+    private static final String DOCX =
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
     @BeforeEach
     void setUp() {
@@ -105,7 +104,6 @@ class DocumentServiceImplTest {
 
         // Storage policy comes from the DB (STORAGE config group); these stub the resolved values.
         when(systemConfigService.storageMaxFileSizeBytes()).thenReturn(50L * 1024 * 1024);
-        when(systemConfigService.storageUploadExpirySeconds()).thenReturn(1800);
         when(systemConfigService.storageDownloadExpirySeconds()).thenReturn(900);
         when(systemConfigService.documentMaxFilenameLength()).thenReturn(120);
 
@@ -128,12 +126,12 @@ class DocumentServiceImplTest {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // initiateUpload — authorization
+    // upload — authorization
     // ═══════════════════════════════════════════════════════════════════════
 
     @Nested
-    @DisplayName("requesting an upload ticket")
-    class InitiateUpload {
+    @DisplayName("uploading — authorization")
+    class UploadAuthorization {
 
         @Test
         @DisplayName("a client account can never upload")
@@ -143,7 +141,7 @@ class DocumentServiceImplTest {
                     .thenReturn(Optional.of(matter()));
 
             assertThrows(ForbiddenException.class,
-                    () -> service.initiateUpload(caseUploadRequest("petition.pdf", "application/pdf", 1000)));
+                    () -> uploadCase("petition.pdf", "application/pdf", DocumentTestFiles.pdf("x")));
         }
 
         @Test
@@ -154,7 +152,7 @@ class DocumentServiceImplTest {
                     .thenReturn(false);
 
             assertThrows(ForbiddenException.class,
-                    () -> service.initiateUpload(caseUploadRequest("petition.pdf", "application/pdf", 1000)));
+                    () -> uploadCase("petition.pdf", "application/pdf", DocumentTestFiles.pdf("x")));
         }
 
         @Test
@@ -164,7 +162,7 @@ class DocumentServiceImplTest {
             when(projectMemberRepository.existsByProjectIdAndUserId(PROJECT_ID, USER_ID)).thenReturn(false);
 
             assertThrows(ForbiddenException.class,
-                    () -> service.initiateUpload(projectUploadRequest("spec.docx", DOCX, 1000)));
+                    () -> uploadProject("spec.docx", DOCX, DocumentTestFiles.zip("word/document.xml")));
         }
 
         @Test
@@ -174,11 +172,10 @@ class DocumentServiceImplTest {
             when(caseAssignmentRepository.existsByMatterIdAndUserIdAndFirmId(MATTER_ID, USER_ID, FIRM_ID))
                     .thenReturn(true);
 
-            UploadTicketResponse ticket = service.initiateUpload(
-                    caseUploadRequest("petition.pdf", "application/pdf", 1024));
+            DocumentResponse response = uploadCase("petition.pdf", "application/pdf", DocumentTestFiles.pdf("x"));
 
-            assertNotNull(ticket);
-            assertEquals("petition.pdf", ticket.fileName());
+            assertNotNull(response);
+            assertEquals("petition.pdf", response.getFileName());
         }
 
         @Test
@@ -186,14 +183,14 @@ class DocumentServiceImplTest {
         void firmAdminIsNotAssignmentScoped() {
             givenPlainFirmAdmin();
 
-            assertNotNull(service.initiateUpload(caseUploadRequest("petition.pdf", "application/pdf", 1024)));
+            assertNotNull(uploadCase("petition.pdf", "application/pdf", DocumentTestFiles.pdf("x")));
             verify(caseAssignmentRepository, never())
                     .existsByMatterIdAndUserIdAndFirmId(any(), any(), any());
         }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // initiateUpload — validation
+    // upload — validation
     // ═══════════════════════════════════════════════════════════════════════
 
     @Nested
@@ -203,48 +200,56 @@ class DocumentServiceImplTest {
         @Test
         @DisplayName("exactly one owner must be supplied")
         void requiresExactlyOneOwner() {
-            InitiateUploadRequest both = caseUploadRequest("a.pdf", "application/pdf", 10);
-            both.setProjectCode(PROJECT_CODE);
-            assertThrows(BusinessRuleException.class, () -> service.initiateUpload(both));
+            givenPlainFirmAdmin();
+            byte[] pdf = DocumentTestFiles.pdf("x");
 
-            InitiateUploadRequest neither = caseUploadRequest("a.pdf", "application/pdf", 10);
-            neither.setMatterNumber(null);
-            assertThrows(BusinessRuleException.class, () -> service.initiateUpload(neither));
+            assertThrows(BusinessRuleException.class, () -> service.upload(
+                    MATTER_NUMBER, PROJECT_CODE, null, "a.pdf", "application/pdf", pdf.length,
+                    new ByteArrayInputStream(pdf)));
+            assertThrows(BusinessRuleException.class, () -> service.upload(
+                    null, null, null, "a.pdf", "application/pdf", pdf.length,
+                    new ByteArrayInputStream(pdf)));
         }
 
         @Test
         void rejectsAnUnsupportedContentType() {
             givenPlainFirmAdmin();
+            byte[] bytes = "hello".getBytes();
 
-            assertThrows(BusinessRuleException.class, () -> service.initiateUpload(
-                    caseUploadRequest("payload.bin", "application/x-msdownload", 10)));
+            assertThrows(BusinessRuleException.class, () -> service.upload(
+                    MATTER_NUMBER, null, null, "payload.bin", "application/x-msdownload",
+                    bytes.length, new ByteArrayInputStream(bytes)));
         }
 
         @Test
-        @DisplayName("an executable filename is refused before anything is created")
+        @DisplayName("an executable filename is refused before anything is stored")
         void rejectsAnExecutableFilename() {
             givenPlainFirmAdmin();
 
-            assertThrows(BusinessRuleException.class, () -> service.initiateUpload(
-                    caseUploadRequest("invoice.exe", "application/pdf", 10)));
+            assertThrows(BusinessRuleException.class,
+                    () -> uploadCase("invoice.exe", "application/pdf", DocumentTestFiles.pdf("x")));
+            verify(documentRepository, never()).save(any(Document.class));
         }
 
         @Test
         void rejectsAFileLargerThanTheLimit() {
             givenPlainFirmAdmin();
+            byte[] small = DocumentTestFiles.pdf("x");
 
-            assertThrows(BusinessRuleException.class, () -> service.initiateUpload(
-                    caseUploadRequest("big.pdf", "application/pdf", 51L * 1024 * 1024)));
+            assertThrows(BusinessRuleException.class, () -> service.upload(
+                    MATTER_NUMBER, null, null, "big.pdf", "application/pdf", 51L * 1024 * 1024,
+                    new ByteArrayInputStream(small)));
         }
 
         @Test
-        @DisplayName("an over-quota upload is refused before the client sends any bytes")
+        @DisplayName("an over-quota upload is refused before anything is stored")
         void refusesWhenTheFirmHasNoSpaceLeft() {
             givenPlainFirmAdmin();
             when(quotaService.canFit(FIRM_ID, 10L)).thenReturn(false);
+            byte[] ten = "0123456789".getBytes();
 
-            assertThrows(BusinessRuleException.class, () -> service.initiateUpload(
-                    caseUploadRequest("a.pdf", "application/pdf", 10)));
+            assertThrows(BusinessRuleException.class, () -> service.upload(
+                    MATTER_NUMBER, null, null, "a.pdf", "application/pdf", 10, new ByteArrayInputStream(ten)));
             verify(documentRepository, never()).save(any(Document.class));
         }
 
@@ -257,11 +262,11 @@ class DocumentServiceImplTest {
             foreign.setMatterId(UUID.randomUUID());
             when(courtCaseRepository.findByOurCourtCaseRefAndFirmId("MT-1-D1", FIRM_ID))
                     .thenReturn(Optional.of(foreign));
+            byte[] pdf = DocumentTestFiles.pdf("x");
 
-            InitiateUploadRequest request = caseUploadRequest("a.pdf", "application/pdf", 10);
-            request.setCourtCaseRef("MT-1-D1");
-
-            assertThrows(ResourceNotFoundException.class, () -> service.initiateUpload(request));
+            assertThrows(ResourceNotFoundException.class, () -> service.upload(
+                    MATTER_NUMBER, null, "MT-1-D1", "a.pdf", "application/pdf", pdf.length,
+                    new ByteArrayInputStream(pdf)));
         }
     }
 
@@ -277,11 +282,9 @@ class DocumentServiceImplTest {
         @DisplayName("a case document lands inside the case folder, named by case number")
         void caseDocumentLandsInItsCaseFolder() {
             givenPlainFirmAdmin();
+            uploadCase("petition.pdf", "application/pdf", DocumentTestFiles.pdf("x"));
 
-            UploadTicketResponse ticket = service.initiateUpload(
-                    caseUploadRequest("petition.pdf", "application/pdf", 2048));
-            String key = ticket.fields().get("key");
-
+            String key = onlyStoredKey();
             assertTrue(key.startsWith("firms/" + FIRM_ID + "/cases/" + MATTER_NUMBER + "/"), key);
             assertTrue(key.endsWith("/petition.pdf"), key);
         }
@@ -290,78 +293,48 @@ class DocumentServiceImplTest {
         @DisplayName("a project document lands inside the project folder, named by project code")
         void projectDocumentLandsInItsProjectFolder() {
             givenPlainFirmAdmin();
+            uploadProject("agreement.docx", DOCX, DocumentTestFiles.zip("word/document.xml"));
 
-            UploadTicketResponse ticket = service.initiateUpload(
-                    projectUploadRequest("agreement.docx", DOCX, 2048));
-            String key = ticket.fields().get("key");
-
+            String key = onlyStoredKey();
             assertTrue(key.startsWith("firms/" + FIRM_ID + "/projects/" + PROJECT_CODE + "/"), key);
             assertTrue(key.endsWith("/agreement.docx"), key);
         }
 
         @Test
-        @DisplayName("the ticket pins the exact key and content type")
-        void ticketPinsKeyAndContentType() {
+        @DisplayName("the key has firm/cases/<matterNumber>/<generatedId>/<filename> shape")
+        void keyHasTheExpectedShape() {
             givenPlainFirmAdmin();
+            uploadCase("petition.pdf", "application/pdf", DocumentTestFiles.pdf("x"));
 
-            UploadTicketResponse ticket = service.initiateUpload(
-                    caseUploadRequest("petition.pdf", "application/pdf", 2048));
-
-            // The policy conditions are echoed back so the client sends exactly what was signed.
-            String[] parts = ticket.fields().get("key").split("/");
+            String[] parts = onlyStoredKey().split("/");
             assertEquals("firms", parts[0]);
             assertEquals(FIRM_ID.toString(), parts[1]);
             assertEquals("cases", parts[2]);
             assertEquals(MATTER_NUMBER, parts[3]);
-            assertDoesNotThrow(() -> UUID.fromString(parts[4]), "the folder should be a generated id");
+            UUID.fromString(parts[4]);
             assertEquals("petition.pdf", parts[5]);
-            assertEquals("application/pdf", ticket.fields().get("Content-Type"));
         }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // confirmUpload
+    // upload — storage behaviour
     // ═══════════════════════════════════════════════════════════════════════
 
     @Nested
-    @DisplayName("confirming an upload")
-    class ConfirmUpload {
-
-        @Test
-        @DisplayName("an object that never arrived cannot be activated")
-        void rejectsWhenTheObjectIsMissing() {
-            givenPlainFirmAdmin();
-            when(documentRepository.findByIdAndFirmId(1L, FIRM_ID)).thenReturn(Optional.of(pendingCaseDocument("k1")));
-
-            assertThrows(BusinessRuleException.class, () -> service.confirmUpload(1L, null));
-        }
-
-        @Test
-        @DisplayName("a file whose real size differs from the declared size is discarded")
-        void discardsWhenTheSizeDoesNotMatch() {
-            givenPlainFirmAdmin();
-            when(documentRepository.findByIdAndFirmId(1L, FIRM_ID)).thenReturn(Optional.of(pendingCaseDocument("k1")));
-            storageService.put("k1", DocumentTestFiles.pdf("bigger than declared"));
-
-            assertThrows(BusinessRuleException.class, () -> service.confirmUpload(1L, null));
-            assertEquals(1, storageService.deletedKeys.size());
-            assertTrue(!storageService.has("k1"));
-        }
+    @DisplayName("storing the file")
+    class UploadStorage {
 
         @Test
         @DisplayName("an executable wearing a PDF content type is discarded")
         void discardsWhenTheSignatureDoesNotMatch() {
             givenPlainFirmAdmin();
             byte[] exe = DocumentTestFiles.windowsExecutable();
-            Document document = pendingCaseDocument("k1");
-            document.setSizeBytes(exe.length);
-            when(documentRepository.findByIdAndFirmId(1L, FIRM_ID)).thenReturn(Optional.of(document));
-            storageService.put("k1", exe);
 
-            assertThrows(BusinessRuleException.class, () -> service.confirmUpload(1L, null));
+            assertThrows(BusinessRuleException.class,
+                    () -> uploadCase("petition.pdf", "application/pdf", exe));
             verify(quotaService, never()).reserve(any(), any(Long.class));
-            assertFalse(storageService.has("k1"), "the rejected object must be removed");
-            assertTrue(storageService.deletedKeys.contains("k1"));
+            assertTrue(storageService.objects.isEmpty(), "the rejected object must be removed");
+            assertFalse(storageService.deletedKeys.isEmpty());
         }
 
         @Test
@@ -369,15 +342,23 @@ class DocumentServiceImplTest {
         void discardsWhenQuotaReservationFails() {
             givenPlainFirmAdmin();
             byte[] pdf = DocumentTestFiles.pdf("content");
-            Document document = pendingCaseDocument("k1");
-            document.setSizeBytes(pdf.length);
-            when(documentRepository.findByIdAndFirmId(1L, FIRM_ID)).thenReturn(Optional.of(document));
-            storageService.put("k1", pdf);
             doThrow(new BusinessRuleException("Storage allocation exceeded"))
                     .when(quotaService).reserve(FIRM_ID, pdf.length);
 
-            assertThrows(BusinessRuleException.class, () -> service.confirmUpload(1L, null));
-            assertTrue(!storageService.has("k1"), "the rejected object must not be left behind");
+            assertThrows(BusinessRuleException.class,
+                    () -> uploadCase("petition.pdf", "application/pdf", pdf));
+            assertTrue(storageService.objects.isEmpty(), "the rejected object must not be left behind");
+        }
+
+        @Test
+        @DisplayName("a storage failure leaves no document row behind")
+        void storageFailureLeavesNoRow() {
+            givenPlainFirmAdmin();
+            storageService.failingWrites = true;
+
+            assertThrows(StorageOperationException.class,
+                    () -> uploadCase("petition.pdf", "application/pdf", DocumentTestFiles.pdf("x")));
+            verify(documentRepository, never()).save(any(Document.class));
         }
 
         @Test
@@ -385,12 +366,8 @@ class DocumentServiceImplTest {
         void activatesAndRecordsTheTimelineEvent() {
             givenPlainFirmAdmin();
             byte[] pdf = DocumentTestFiles.pdf("content");
-            Document document = pendingCaseDocument("k1");
-            document.setSizeBytes(pdf.length);
-            when(documentRepository.findByIdAndFirmId(1L, FIRM_ID)).thenReturn(Optional.of(document));
-            storageService.put("k1", pdf);
 
-            DocumentResponse response = service.confirmUpload(1L, null);
+            DocumentResponse response = uploadCase("petition.pdf", "application/pdf", pdf);
 
             assertEquals(DocumentStatus.ACTIVE, response.getStatus());
             assertEquals(USER_ID, response.getUploadedByUserId());
@@ -407,54 +384,12 @@ class DocumentServiceImplTest {
         @DisplayName("projects have no timeline, so a project document records no event")
         void doesNotRecordATimelineEventForProjects() {
             givenPlainFirmAdmin();
-            byte[] docx = DocumentTestFiles.zip("word/document.xml");
-            Document document = pendingProjectDocument("k2");
-            document.setSizeBytes(docx.length);
-            when(documentRepository.findByIdAndFirmId(2L, FIRM_ID)).thenReturn(Optional.of(document));
-            storageService.put("k2", docx);
 
-            DocumentResponse response = service.confirmUpload(2L, null);
+            DocumentResponse response = uploadProject(
+                    "agreement.docx", DOCX, DocumentTestFiles.zip("word/document.xml"));
 
             assertEquals(DocumentStatus.ACTIVE, response.getStatus());
             verify(matterTimelineRepository, never()).save(any());
-        }
-
-        @Test
-        void rejectsAnExpiredUploadWindow() {
-            givenPlainFirmAdmin();
-            Document document = pendingCaseDocument("k1");
-            document.setUploadExpiresAt(LocalDateTime.now().minusMinutes(1));
-            when(documentRepository.findByIdAndFirmId(1L, FIRM_ID)).thenReturn(Optional.of(document));
-
-            assertThrows(BusinessRuleException.class, () -> service.confirmUpload(1L, null));
-        }
-
-        @Test
-        void rejectsADocumentThatIsAlreadyActive() {
-            givenPlainFirmAdmin();
-            Document document = pendingCaseDocument("k1");
-            document.setStatus(DocumentStatus.ACTIVE);
-            when(documentRepository.findByIdAndFirmId(1L, FIRM_ID)).thenReturn(Optional.of(document));
-
-            assertThrows(BusinessRuleException.class, () -> service.confirmUpload(1L, null));
-        }
-
-        @Test
-        @DisplayName("another firm's document is indistinguishable from a missing one")
-        void rejectsADocumentFromAnotherFirm() {
-            givenPlainFirmAdmin();
-            when(documentRepository.findByIdAndFirmId(99L, FIRM_ID)).thenReturn(Optional.empty());
-
-            assertThrows(ResourceNotFoundException.class, () -> service.confirmUpload(99L, null));
-        }
-
-        @Test
-        @DisplayName("a client can never confirm an upload")
-        void rejectsClients() {
-            when(readScopeGuard.isClientScope()).thenReturn(true);
-            when(documentRepository.findByIdAndFirmId(1L, FIRM_ID)).thenReturn(Optional.of(pendingCaseDocument("k1")));
-
-            assertThrows(ForbiddenException.class, () -> service.confirmUpload(1L, null));
         }
     }
 
@@ -540,7 +475,7 @@ class DocumentServiceImplTest {
             Document document = activeDocument(DocumentVisibility.PRIVATE);
             document.setSizeBytes(4096L);
             when(documentRepository.findByIdAndFirmId(1L, FIRM_ID)).thenReturn(Optional.of(document));
-            storageService.put(document.getStorageKey(), new byte[4096]);
+            storageService.seed(document.getStorageKey(), new byte[4096]);
 
             DocumentResponse response = service.archive(1L);
 
@@ -621,10 +556,6 @@ class DocumentServiceImplTest {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Fixtures
-    // ═══════════════════════════════════════════════════════════════════════
-
-    // ═══════════════════════════════════════════════════════════════════════
     // listing — the embedded download link
     // ═══════════════════════════════════════════════════════════════════════
 
@@ -645,15 +576,6 @@ class DocumentServiceImplTest {
             String url = page.getContent().get(0).getDocumentUrl();
             assertNotNull(url, "an active document must expose a download link in the list");
             assertTrue(url.contains(active.getStorageKey()), url);
-        }
-
-        @Test
-        @DisplayName("a PENDING_UPLOAD document exposes no link — the object may never have arrived")
-        void pendingDocumentHasNoDownloadUrl() {
-            givenPlainFirmAdmin();
-            givenListReturns(pendingCaseDocument("k1"));
-
-            assertNull(service.listLibrary(null, null, null, 0, 20).getContent().get(0).getDocumentUrl());
         }
 
         @Test
@@ -699,7 +621,7 @@ class DocumentServiceImplTest {
             when(currentUserResolver.isSuperAdmin()).thenReturn(true);
 
             assertThrows(ForbiddenException.class,
-                    () -> service.initiateUpload(caseUploadRequest("a.pdf", "application/pdf", 10)));
+                    () -> uploadCase("a.pdf", "application/pdf", DocumentTestFiles.pdf("x")));
         }
 
         @Test
@@ -710,8 +632,33 @@ class DocumentServiceImplTest {
         }
     }
 
-    private static final String DOCX =
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    @Test
+    @DisplayName("a document belonging to another firm is never returned")
+    void crossFirmDocumentsAreNotVisible() {
+        // The lookup is scoped by the caller's own firm, so another firm's row simply is not found.
+        when(documentRepository.findByIdAndFirmId(5L, FIRM_ID)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> service.archive(5L));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Fixtures
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private DocumentResponse uploadCase(String filename, String contentType, byte[] content) {
+        return service.upload(MATTER_NUMBER, null, null, filename, contentType, content.length,
+                new ByteArrayInputStream(content));
+    }
+
+    private DocumentResponse uploadProject(String filename, String contentType, byte[] content) {
+        return service.upload(null, PROJECT_CODE, null, filename, contentType, content.length,
+                new ByteArrayInputStream(content));
+    }
+
+    private String onlyStoredKey() {
+        assertEquals(1, storageService.objects.size(), "expected exactly one stored object");
+        return storageService.objects.keySet().iterator().next();
+    }
 
     private void givenPlainFirmAdmin() {
         when(readScopeGuard.isClientScope()).thenReturn(false);
@@ -759,25 +706,7 @@ class DocumentServiceImplTest {
         return project;
     }
 
-    private InitiateUploadRequest caseUploadRequest(String filename, String contentType, long sizeBytes) {
-        InitiateUploadRequest request = new InitiateUploadRequest();
-        request.setMatterNumber(MATTER_NUMBER);
-        request.setFilename(filename);
-        request.setContentType(contentType);
-        request.setSizeBytes(sizeBytes);
-        return request;
-    }
-
-    private InitiateUploadRequest projectUploadRequest(String filename, String contentType, long sizeBytes) {
-        InitiateUploadRequest request = new InitiateUploadRequest();
-        request.setProjectCode(PROJECT_CODE);
-        request.setFilename(filename);
-        request.setContentType(contentType);
-        request.setSizeBytes(sizeBytes);
-        return request;
-    }
-
-    private Document pendingCaseDocument(String storageKey) {
+    private Document activeDocument(DocumentVisibility visibility) {
         return Document.builder()
                 .id(1L)
                 .uuid(UUID.randomUUID())
@@ -787,44 +716,10 @@ class DocumentServiceImplTest {
                 .contentType("application/pdf")
                 .extension("pdf")
                 .sizeBytes(100)
-                .storageKey(storageKey)
-                .status(DocumentStatus.PENDING_UPLOAD)
-                .visibility(DocumentVisibility.PRIVATE)
-                .uploadExpiresAt(LocalDateTime.now().plusMinutes(30))
+                .storageKey("k1")
+                .status(DocumentStatus.ACTIVE)
+                .visibility(visibility)
+                .uploadedByUserId(USER_ID)
                 .build();
-    }
-
-    private Document pendingProjectDocument(String storageKey) {
-        return Document.builder()
-                .id(2L)
-                .uuid(UUID.randomUUID())
-                .firmId(FIRM_ID)
-                .projectId(PROJECT_ID)
-                .originalFilename("agreement.docx")
-                .contentType(DOCX)
-                .extension("docx")
-                .sizeBytes(100)
-                .storageKey(storageKey)
-                .status(DocumentStatus.PENDING_UPLOAD)
-                .visibility(DocumentVisibility.PRIVATE)
-                .uploadExpiresAt(LocalDateTime.now().plusMinutes(30))
-                .build();
-    }
-
-    private Document activeDocument(DocumentVisibility visibility) {
-        Document document = pendingCaseDocument("k1");
-        document.setStatus(DocumentStatus.ACTIVE);
-        document.setVisibility(visibility);
-        document.setUploadedByUserId(USER_ID);
-        return document;
-    }
-
-    @Test
-    @DisplayName("a document belonging to another firm is never returned")
-    void crossFirmDocumentsAreNotVisible() {
-        // The lookup is scoped by the caller's own firm, so another firm's row simply is not found.
-        when(documentRepository.findByIdAndFirmId(5L, FIRM_ID)).thenReturn(Optional.empty());
-
-        assertThrows(ResourceNotFoundException.class, () -> service.archive(5L));
     }
 }

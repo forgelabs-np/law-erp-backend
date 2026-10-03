@@ -103,14 +103,10 @@ public class Document {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
-    private DocumentStatus status = DocumentStatus.PENDING_UPLOAD;
+    private DocumentStatus status = DocumentStatus.ACTIVE;
 
     @Column(name = "uploaded_by_user_id")
     private UUID uploadedByUserId;
-
-    /** After this moment an unconfirmed upload is considered abandoned. */
-    @Column(name = "upload_expires_at")
-    private LocalDateTime uploadExpiresAt;
 
     @Column(name = "archived_at")
     private LocalDateTime archivedAt;
