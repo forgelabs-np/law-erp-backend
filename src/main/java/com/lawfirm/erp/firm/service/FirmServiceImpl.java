@@ -80,8 +80,6 @@ public class FirmServiceImpl implements FirmService {
                 .build();
 
         if (isTrial) {
-            // Without a fallback a trial firm could be created with no expiry, and
-            // TrialExpiryScheduler skips null expiry — so the trial would never end.
             int trialDays = request.getTrialDays() != null && request.getTrialDays() > 0
                     ? request.getTrialDays()
                     : systemConfigService.trialDefaultDays();
@@ -100,8 +98,6 @@ public class FirmServiceImpl implements FirmService {
                 .orElseThrow(() -> new BusinessRuleException(
                         "Firm-scoped " + RoleCode.FIRM_ADMIN + " role not found after cloning — check DataInitializer seeded " + RoleCode.FIRM_ADMIN + " system role"));
 
-        // DB-driven MFA policy: force MFA on the new firm admin only while enforcement
-        // is on and FIRM_ADMIN is in the required roles (default: on).
         boolean adminMfaRequired = systemConfigService.isMfaEnabled()
                 && systemConfigService.mfaRequiredRoleCodes().contains(RoleCode.FIRM_ADMIN);
 
@@ -181,13 +177,6 @@ public class FirmServiceImpl implements FirmService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Updates a firm's own details and, optionally, its FIRM_ADMIN contact details.
-     *
-     * <p>Null/blank fields are skipped rather than written, so a partially filled edit form cannot
-     * wipe the columns it left empty. The firm code, the admin username and the admin password are
-     * immutable here — see {@link #rejectImmutableChanges}.
-     */
     @Override
     @Transactional
     public FirmListResponse updateFirm(UUID firmId, UpdateFirmRequest request) {
@@ -223,11 +212,6 @@ public class FirmServiceImpl implements FirmService {
         return toListResponse(firm);
     }
 
-    /**
-     * Rejects attempts to change the three fields this endpoint does not own. The console replays
-     * the whole create body, so an <i>unchanged</i> value must pass — only a different one is an
-     * error. A dropped password change would look exactly like a successful update.
-     */
     private void rejectImmutableChanges(Firm firm, User admin, UpdateFirmRequest request) {
         if (hasText(request.getLawFirmCode())
                 && !firm.getLawFirmCode().equalsIgnoreCase(request.getLawFirmCode().trim())) {
@@ -246,7 +230,6 @@ public class FirmServiceImpl implements FirmService {
         }
     }
 
-    /** Admin contact details only; a no-op when the payload carries none of them. */
     private void applyAdminDetails(Firm firm, User admin, UpdateFirmRequest request) {
         boolean detailsSent = hasText(request.getAdminFullName())
                 || hasText(request.getAdminEmail())
@@ -266,7 +249,6 @@ public class FirmServiceImpl implements FirmService {
         if (hasText(request.getAdminEmail())) {
             String email = request.getAdminEmail().trim();
             if (!email.equalsIgnoreCase(admin.getEmail())) {
-                // Same firm scope as employee creation: the checks exclude nobody, so they run only
                 // when the value actually changes (otherwise an unchanged email collides with itself).
                 if (userRepository.existsByEmailAndFirmId(email, admin.getFirmId())) {
                     throw new DuplicateResourceException("Admin email already exists in this firm");
@@ -288,11 +270,6 @@ public class FirmServiceImpl implements FirmService {
         log.info("Firm admin {} contact details updated", admin.getUsername());
     }
 
-    /**
-     * The firm's FIRM_ADMIN account — the one created alongside the firm. More than one user can
-     * hold FIRM_ADMIN (an employee promoted to it), so the oldest wins: repeated edits keep hitting
-     * the same account. Null when the firm has none.
-     */
     private User primaryFirmAdmin(UUID firmId) {
         return userRepository.findFirmAdminsByFirmId(firmId).stream()
                 .min(Comparator.comparing(User::getCreatedAt,
@@ -323,7 +300,6 @@ public class FirmServiceImpl implements FirmService {
         return value != null && !value.isBlank();
     }
 
-    /** Blank input clears the column (the console sends "" when the operator empties a field). */
     private String trimToNull(String value) {
         String trimmed = value == null ? null : value.trim();
         return trimmed == null || trimmed.isEmpty() ? null : trimmed;
@@ -349,7 +325,6 @@ public class FirmServiceImpl implements FirmService {
     public void activateFirm(UUID firmId) {
         Firm firm = firmRepository.findById(firmId)
                 .orElseThrow(() -> new ResourceNotFoundException("Firm not found"));
-        // Restore to ACTIVE (or TRIAL if still within trial window)
         if (Boolean.TRUE.equals(firm.getIsTrial()) && firm.getTrialExpiresAt() != null
                 && firm.getTrialExpiresAt().isAfter(LocalDateTime.now())) {
             firm.setStatus(FirmStatus.TRIAL);
@@ -381,7 +356,6 @@ public class FirmServiceImpl implements FirmService {
                 : LocalDateTime.now().plusDays(additionalDays);
         firm.setTrialExpiresAt(newExpiry);
         firm.setTrialDays((firm.getTrialDays() != null ? firm.getTrialDays() : 0) + additionalDays);
-        // If firm was suspended due to trial expiry, reactivate
         if (firm.getStatus() == FirmStatus.SUSPENDED || firm.getStatus() == FirmStatus.EXPIRED) {
             firm.setStatus(FirmStatus.TRIAL);
         }
@@ -402,7 +376,6 @@ public class FirmServiceImpl implements FirmService {
                 .orElseThrow(() -> new ResourceNotFoundException("Firm not found"));
         firm.setIsTrial(false);
         firm.setTrialExpiresAt(null);
-        // Keep trialStartedAt and trialDays for audit trail
         firm.setStatus(FirmStatus.ACTIVE);
         firmRepository.save(firm);
         auditService.logExplicit(

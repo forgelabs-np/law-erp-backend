@@ -15,11 +15,6 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.UUID;
 
-/**
- * Unified event record covering both Tarik (administrative date) and Peshi (actual hearing).
- * The Tarik/Peshi loop is a chained stream: when an event is marked HELD, the form records
- * what the court gave next and creates the next CourtEvent row — the digital diary entry.
- */
 @Entity
 @Table(name = "court_events", indexes = {
         @Index(name = "idx_ce_court_case", columnList = "courtCaseId"),
@@ -43,7 +38,6 @@ public class CourtEvent extends ActiveAuditableEntity {
     @Column(length = 10, nullable = false)
     private CourtEventType eventType;
 
-    /** Ordering within the CourtCase (1, 2, 3, ...). */
     @Column(nullable = false)
     private int sequenceNo;
 
@@ -65,12 +59,10 @@ public class CourtEvent extends ActiveAuditableEntity {
     @Column(length = 25)
     private OutcomeType outcomeType;
 
-    /** What got scheduled next: TARIK, PESHI, JUDGMENT, or NONE (closed at this event). */
     @Enumerated(EnumType.STRING)
     @Column(length = 10)
     private NextEventType nextEventType;
 
-    /** Forward pointer once the next event is created — renders the loop as a chain. */
     private UUID nextEventId;
 
     private UUID attendingAdvocateId;

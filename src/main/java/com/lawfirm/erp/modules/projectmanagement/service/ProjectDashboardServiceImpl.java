@@ -39,7 +39,6 @@ public class ProjectDashboardServiceImpl implements ProjectDashboardService {
         long onHoldProjects = projectRepository.countByFirmIdAndStatus(firmId, ProjectStatus.ON_HOLD);
         long completedProjects = projectRepository.countByFirmIdAndStatus(firmId, ProjectStatus.COMPLETED);
 
-        // Count credentials across all projects
         List<UUID> allProjectIds = projectRepository.findByFirmId(firmId, PageRequest.of(0, 1000))
                 .getContent().stream().map(p -> p.getId()).collect(Collectors.toList());
         long totalCredentials = allProjectIds.stream()
@@ -49,13 +48,11 @@ public class ProjectDashboardServiceImpl implements ProjectDashboardService {
                 .mapToLong(pid -> renewalRepository.countByProjectIdAndActive(pid, true))
                 .sum();
 
-        // Overdue and upcoming
         List<ProjectDashboardResponse.OverdueItem> overdueItems = new ArrayList<>();
         List<ProjectDashboardResponse.UpcomingItem> upcomingItems = new ArrayList<>();
         LocalDate today = LocalDate.now();
         LocalDate threeMonthsAhead = today.plusMonths(3);
 
-        // Batch-load project info for all projects
         Map<UUID, Project> projectMap = projectRepository.findAllById(allProjectIds).stream()
                 .collect(Collectors.toMap(Project::getId, p -> p));
 

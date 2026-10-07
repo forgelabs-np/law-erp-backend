@@ -45,6 +45,7 @@ public class ScraperAdminController {
     @Operation(summary = "All courts",
             description = "Returns every active court in the scraper database (district, high, supreme) with courtId, courtName and courtType.")
     public ResponseEntity<ApiResponse<List<CourtDto>>> getAllCourts() {
+        permissionEvaluator.require("SCRAPER_MANAGEMENT:VIEW");
         List<Court> courts = scraperService.getAllCourts();
         List<CourtDto> dtos = courts.stream()
                 .map(this::toDto)
@@ -57,6 +58,7 @@ public class ScraperAdminController {
             description = "Returns courts filtered by type: DISTRICT, HIGH_COURT, SUPREME_COURT.")
     public ResponseEntity<ApiResponse<List<CourtDto>>> getCourtsByType(
             @PathVariable String courtType) {
+        permissionEvaluator.require("SCRAPER_MANAGEMENT:VIEW");
         List<Court> courts = scraperService.getCourtsByType(courtType);
         List<CourtDto> dtos = courts.stream()
                 .map(this::toDto)
@@ -87,7 +89,8 @@ public class ScraperAdminController {
     public ResponseEntity<ApiResponse<String>> exportLastWeek() {
         permissionEvaluator.require("SCRAPER_MANAGEMENT:EXPORT");
         Path file = exportService.exportLastWeek();
-        return responseHandler.ok(file.toAbsolutePath().toString(), "Weekly export written");
+        // Never leak the server's absolute filesystem path back to the client.
+        return responseHandler.ok(file.getFileName().toString(), "Weekly export written");
     }
 
     @PostMapping("/link-court-case")
@@ -96,40 +99,40 @@ public class ScraperAdminController {
     public ResponseEntity<ApiResponse<ClientCase>> linkCourtCase(
             @RequestBody Map<String, Object> request) {
         permissionEvaluator.require("SCRAPER_MANAGEMENT:CREATE");
-        
+
         Object courtIdObj = request.get("courtId");
         Object courtCaseNumberObj = request.get("courtCaseNumber");
         Object caseNoInternalObj = request.get("caseNoInternal");
         Object clientIdObj = request.get("clientId");
-        
+
         if (courtIdObj == null || courtCaseNumberObj == null || caseNoInternalObj == null || clientIdObj == null) {
             throw new BusinessRuleException("Missing required fields: courtId, courtCaseNumber, caseNoInternal, clientId");
         }
-        
+
         Integer courtId;
         try {
             courtId = (courtIdObj instanceof Integer) ? (Integer) courtIdObj : Integer.valueOf(courtIdObj.toString());
         } catch (NumberFormatException e) {
             throw new BusinessRuleException("courtId must be a valid integer");
         }
-        
+
         String courtCaseNumber = courtCaseNumberObj.toString().trim();
         String caseNoInternal = caseNoInternalObj.toString().trim();
-        
+
         if (courtCaseNumber.isBlank() || caseNoInternal.isBlank()) {
             throw new BusinessRuleException("courtCaseNumber and caseNoInternal must not be empty");
         }
-        
+
         UUID clientId;
         try {
             clientId = UUID.fromString(clientIdObj.toString());
         } catch (IllegalArgumentException e) {
             throw new BusinessRuleException("clientId must be a valid UUID");
         }
-        
+
         ClientCase clientCase = scraperService.linkCourtCaseToScraper(
                 courtId, courtCaseNumber, caseNoInternal, clientId);
-        
+
         return responseHandler.ok(clientCase, "Court case linked to scraper successfully");
     }
 

@@ -23,13 +23,6 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * The only class in the codebase that imports {@code io.minio}.
- *
- * <p>The client is resolved lazily through {@link ObjectProvider} so the application (and the
- * test suite) boots with no storage configured; any attempt to actually use storage then
- * fails with a clear {@link StorageOperationException} instead of a startup error.
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -145,7 +138,6 @@ public class MinioStorageService implements StorageService {
         return client;
     }
 
-    /** Keeps a filename out of the Content-Disposition header structure (CRLF/quote injection). */
     private String headerSafe(String value) {
         return value.replaceAll("[\\r\\n\"]", "_");
     }

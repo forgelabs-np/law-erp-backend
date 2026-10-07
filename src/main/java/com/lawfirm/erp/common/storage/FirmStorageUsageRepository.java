@@ -15,10 +15,6 @@ public interface FirmStorageUsageRepository extends JpaRepository<FirmStorageUsa
 
     Optional<FirmStorageUsage> findByFirmId(UUID firmId);
 
-    /**
-     * Row lock held for the rest of the transaction — the serialization point that stops two
-     * concurrent uploads from both fitting into the same remaining space.
-     */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT u FROM FirmStorageUsage u WHERE u.firmId = :firmId")
     Optional<FirmStorageUsage> findForUpdate(@Param("firmId") UUID firmId);

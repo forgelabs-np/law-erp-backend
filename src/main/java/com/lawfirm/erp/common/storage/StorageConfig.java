@@ -12,11 +12,6 @@ import org.springframework.context.annotation.Configuration;
 @Slf4j
 public class StorageConfig {
 
-    /**
-     * Only built when an endpoint is configured, so the app and the test suite start with no
-     * object storage present. {@link MinioStorageService} resolves it lazily and reports a
-     * clear error on use.
-     */
     @Bean
     @ConditionalOnProperty(prefix = "storage.minio", name = "endpoint")
     public MinioClient minioClient(StorageProperties properties) {

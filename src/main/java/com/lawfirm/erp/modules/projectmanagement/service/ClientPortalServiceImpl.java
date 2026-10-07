@@ -36,11 +36,6 @@ public class ClientPortalServiceImpl implements ClientPortalService {
     private final ProjectMapper projectMapper;
     private final UserRepository userRepository;
 
-    /**
-     * The portal is only reachable by an enabled client account. The login path
-     * already enforces this; re-checking here means a live session that outlived
-     * a portal-access revocation is still refused on its very next call.
-     */
     private UUID requirePortalAccess() {
         UUID clientId = currentUserResolver.getCurrentUserId();
         User user = clientId == null ? null : userRepository.findById(clientId).orElse(null);
@@ -86,7 +81,6 @@ public class ClientPortalServiceImpl implements ClientPortalService {
                 .collect(Collectors.toList());
     }
 
-    // ─── Helpers ───────────────────────────────────────────────────────────
 
     private List<RenewalInstance> getUpcomingInstances(java.util.UUID projectId) {
         List<Renewal> renewals = renewalRepository.findByProjectIdAndActive(projectId, true);
@@ -101,7 +95,6 @@ public class ClientPortalServiceImpl implements ClientPortalService {
     }
 
     private Project findByClientAndCode(UUID clientId, String projectCode) {
-        // Find project by client user ID, then verify project code matches
         List<Project> projects = projectRepository.findByClientUserIdAndActive(clientId, true);
         return projects.stream()
                 .filter(p -> p.getProjectCode().equals(projectCode))

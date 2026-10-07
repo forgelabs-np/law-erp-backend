@@ -15,19 +15,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
-/**
- * The one place that answers "may the caller see or act on this document?".
- *
- * <p>Mirrors {@link MatterScopeGuard}: the login identity is the scope, so callers ask this
- * guard and reject accordingly rather than inventing a second permission set.
- *
- * <ul>
- *   <li><b>Firm admin / Super Admin</b> — the whole firm, no narrowing.</li>
- *   <li><b>Firm staff</b> — only cases they are assigned to and projects they belong to;
- *       which <em>actions</em> they may take is the role permission the firm admin granted.</li>
- *   <li><b>Client</b> — own case or project, {@code SHARED} documents only, never uploads.</li>
- * </ul>
- */
 @Component
 @RequiredArgsConstructor
 public class DocumentScopeGuard {
@@ -38,32 +25,27 @@ public class DocumentScopeGuard {
     private final ProjectMemberRepository projectMemberRepository;
     private final ProjectRepository projectRepository;
 
-    /** Uploading into a case. */
     public void requireUploadAllowed(Matter matter) {
         refuseClients();
         requireMatterAssigned(matter.getId(), matter.getFirmId());
     }
 
-    /** Uploading into a project. */
     public void requireUploadAllowed(Project project) {
         refuseClients();
         requireProjectMember(project.getId());
     }
 
-    /** Confirming or changing a document — same rules as uploading it. */
     public void requireStaffAction(Document document) {
         refuseClients();
         requireOwnerAccess(document);
     }
 
-    /** Reading a document (including issuing a download link). */
     public void requireVisible(Document document) {
         if (readScopeGuard.isClientScope()) {
             if (document.getVisibility() != DocumentVisibility.SHARED) {
                 throw new ForbiddenException("This document has not been shared with you");
             }
             if (document.getMatterId() != null) {
-                // Resolves the client link from the matter column or a legacy party row.
                 matterScopeGuard.requireVisible(document.getMatterId(), document.getFirmId(), "this document");
             } else {
                 requireProjectOwnedByClient(document.getProjectId());
@@ -73,14 +55,6 @@ public class DocumentScopeGuard {
         requireOwnerAccess(document);
     }
 
-    /**
-     * Opening a project's document panel.
-     *
-     * <p>A client must own the project. For staff this is deliberately not a membership test:
-     * the listing query is already narrowed to their memberships, so a non-member simply gets an
-     * empty page — matching how a case panel behaves for someone who is not assigned to it.
-     * Uploads and changes still require membership ({@link #requireUploadAllowed(Project)}).
-     */
     public void requireProjectReadable(Project project) {
         if (readScopeGuard.isClientScope()) {
             UUID me = readScopeGuard.currentUserId();
@@ -104,7 +78,6 @@ public class DocumentScopeGuard {
         }
     }
 
-    /** A firm admin owns the whole book; everyone else works a caseload. */
     private void requireMatterAssigned(UUID matterId, UUID firmId) {
         if (!readScopeGuard.isAssignmentScope()) {
             return;

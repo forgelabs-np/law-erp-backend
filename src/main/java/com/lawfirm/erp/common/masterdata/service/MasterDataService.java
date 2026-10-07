@@ -21,10 +21,6 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/**
- * Read-mostly reference data. Every read is cache-aside through the {@code masterData}
- * Ehcache (24h TTL); {@link #evictCache()} drops everything when the data is re-seeded.
- */
 @Service
 @RequiredArgsConstructor
 public class MasterDataService {
@@ -66,17 +62,10 @@ public class MasterDataService {
                 .collect(Collectors.toList());
     }
 
-    /** Drops every entry — call after re-seeding so clients never see stale reference data. */
     @CacheEvict(cacheNames = CacheConfig.MASTER_DATA_CACHE, allEntries = true)
     public void evictCache() {
-        // no-op body; the annotation does the eviction
     }
 
-    /**
-     * Cache telemetry for ops: current size vs configured capacity and TTL tell you
-     * whether the cache is being used and how fresh it is. (Fine-grained hit/miss
-     * counters live in the JSR-107 provider; hook Micrometer's cache metrics if needed.)
-     */
     public Map<String, Object> cacheStats() {
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("cacheName", CacheConfig.MASTER_DATA_CACHE);

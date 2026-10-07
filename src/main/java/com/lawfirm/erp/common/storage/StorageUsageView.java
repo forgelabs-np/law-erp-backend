@@ -1,6 +1,5 @@
 package com.lawfirm.erp.common.storage;
 
-/** How much space a firm has used, how much it was given, and how much is left. */
 public record StorageUsageView(
         long usedBytes,
         long quotaBytes,

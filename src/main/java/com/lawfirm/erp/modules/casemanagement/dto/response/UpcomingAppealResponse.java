@@ -7,10 +7,6 @@ import lombok.Data;
 import java.time.LocalDate;
 import java.util.UUID;
 
-/**
- * One row of the appeal-deadline watch: a decided case whose statutory appeal
- * window closes soon and no appeal has been filed yet.
- */
 @Data
 @Builder
 public class UpcomingAppealResponse {
@@ -29,7 +25,6 @@ public class UpcomingAppealResponse {
 
     private boolean partyIsState;
 
-    /** True for High Court judgments — the further appeal needs a leave petition first. */
     private boolean appealRequiresLeave;
 
     private String matterNumber;

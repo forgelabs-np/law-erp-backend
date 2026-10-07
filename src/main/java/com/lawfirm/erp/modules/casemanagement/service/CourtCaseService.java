@@ -31,9 +31,5 @@ public interface CourtCaseService {
 
     List<UpcomingAppealResponse> listUpcomingAppealDeadlines(int withinDays);
 
-    /**
-     * Get all courts where the firm has active cases.
-     * Returns court info with case counts for scraper integration.
-     */
     List<FirmCourtResponse> getFirmCourts();
 }

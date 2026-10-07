@@ -8,8 +8,6 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 
-// One row of the weekly cause list (per-date tables, no benches/outcome). Same normalized
-// schema as DailyHearing so both feeds flow through the same matcher.
 @Entity
 @Table(name = "scraper_weekly_hearings", uniqueConstraints = {
         @UniqueConstraint(name = "uq_scraper_weekly_key",
@@ -39,7 +37,6 @@ public class WeeklyHearing {
     @Column(length = 60, nullable = false)
     private String caseNoInternal;
 
-    // Weekly feed has no per-bench grouping — always null.
     @Column(length = 10)
     private String bench;
 
@@ -58,7 +55,6 @@ public class WeeklyHearing {
     @Column(length = 500)
     private String defendant;
 
-    // Weekly feed has no outcome column — always null, kept for schema uniformity.
     @Column(length = 200)
     private String orderType;
 

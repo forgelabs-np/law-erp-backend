@@ -58,7 +58,6 @@ public class ModuleServiceImpl implements ModuleService {
             log.info("Module updated: {} by admin: {}", existingModule.getCode(), adminId);
             module = moduleRepository.save(existingModule);
 
-            // ✅ AUDIT: Module updated
             auditService.log(
                     AuditAction.MODULE_UPDATED,
                     AuditEntity.MODULE,
@@ -71,7 +70,6 @@ public class ModuleServiceImpl implements ModuleService {
             log.info("Module created: {} by admin: {}", newModule.getCode(), adminId);
             module = moduleRepository.save(newModule);
 
-            // ✅ AUDIT: Module created
             auditService.log(
                     AuditAction.MODULE_CREATED,
                     AuditEntity.MODULE,
@@ -80,7 +78,6 @@ public class ModuleServiceImpl implements ModuleService {
             );
         }
 
-        // Handle permission assignments using junction table
         if (request.getPermissionIds() != null) {
             modulePermissionRepository.deleteByModuleId(module.getId());
 
@@ -134,7 +131,6 @@ public class ModuleServiceImpl implements ModuleService {
             modulePermissionRepository.saveAll(modulePermissions);
             log.info("Assigned {} permissions to module: {}", permissions.size(), module.getCode());
 
-            // ✅ AUDIT: Permissions assigned to module
             auditService.log(
                     AuditAction.ROLE_PERMISSION_CHANGED,
                     AuditEntity.MODULE,
@@ -204,22 +200,18 @@ public class ModuleServiceImpl implements ModuleService {
 
         validateNotSystemModule(module, "delete");
 
-        // Collect all module IDs (parent + descendants) for batch cleanup
         List<UUID> allModuleIds = new ArrayList<>();
         collectModuleIds(module, allModuleIds);
 
-        // Clean up FK references for all modules in the tree
         for (UUID id : allModuleIds) {
             modulePermissionRepository.deleteByModuleId(id);
             firmModuleRepository.deleteByModuleId(id);
         }
 
-        // JPA CascadeType.ALL on subModules handles recursive child deletion
         moduleRepository.delete(module);
         log.info("Module deleted: {} (+ {} sub-modules) by admin: {}",
                 module.getCode(), allModuleIds.size() - 1, adminId);
 
-        // ✅ AUDIT: Module deleted
         auditService.log(
                 AuditAction.MODULE_DELETED,
                 AuditEntity.MODULE,
@@ -264,7 +256,6 @@ public class ModuleServiceImpl implements ModuleService {
             log.info("Disabled {} child modules of {}", module.getSubModules().size(), module.getCode());
         }
 
-        // ✅ AUDIT: Module status toggled
         auditService.log(
                 newStatus ? AuditAction.MODULE_ACTIVATED : AuditAction.MODULE_DEACTIVATED,
                 AuditEntity.MODULE,
@@ -275,7 +266,6 @@ public class ModuleServiceImpl implements ModuleService {
         return convertToCompleteResponse(module);
     }
 
-    // ─── Private Methods ─────────────────────────────────────────────────────
 
     private Module findExistingModule(ModuleRequest request) {
         if (request.getId() != null) {

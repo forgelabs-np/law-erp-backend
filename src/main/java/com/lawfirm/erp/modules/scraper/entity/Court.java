@@ -10,8 +10,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-// courtId matches the site's URL path segment (39 = Kathmandu) and is the natural id.
-// Nepali name is the site's exact link text; English name is our translation for display.
 @Entity
 @Table(name = "scraper_courts")
 @Getter
@@ -34,7 +32,6 @@ public class Court {
     @Column(length = 30)
     private String courtType;
 
-    /** Manual override to stop scraping a court even if client cases reference it. */
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 }

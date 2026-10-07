@@ -49,7 +49,6 @@ public class SuperAdminDashboardServiceImpl implements SuperAdminDashboardServic
                 .build();
     }
 
-    /** 5 COUNT queries, zero rows loaded. */
     private SuperAdminDashboardResponse.FirmStats buildFirmStats() {
         long total = firmRepository.countFirmsWithFirmAdmin();
         long active = firmRepository.countActiveFirmsWithFirmAdmin();
@@ -66,7 +65,6 @@ public class SuperAdminDashboardServiceImpl implements SuperAdminDashboardServic
                 .build();
     }
 
-    /** 5 COUNT queries, zero rows loaded. */
     private SuperAdminDashboardResponse.UserStats buildUserStats() {
         long total = userRepository.count();
         long superAdmins = userRepository.countByUserType(UserType.SUPER_ADMIN);
@@ -87,7 +85,6 @@ public class SuperAdminDashboardServiceImpl implements SuperAdminDashboardServic
                 .build();
     }
 
-    /** 3 COUNT queries via repository, zero rows loaded. */
     private SuperAdminDashboardResponse.CaseStats buildCaseStats() {
         long total = matterRepository.count();
         long active = matterRepository.countByStatus(MatterStatus.ACTIVE);
@@ -100,7 +97,6 @@ public class SuperAdminDashboardServiceImpl implements SuperAdminDashboardServic
                 .build();
     }
 
-    /** 3 COUNT queries + 1 scalar, zero rows loaded. */
     private SuperAdminDashboardResponse.ScraperStats buildScraperStats() {
         return SuperAdminDashboardResponse.ScraperStats.builder()
                 .courtsTracked(courtRepository.count())
@@ -111,7 +107,6 @@ public class SuperAdminDashboardServiceImpl implements SuperAdminDashboardServic
                 .build();
     }
 
-    /** 2 COUNT queries with WHERE filters, zero rows loaded. */
     private SuperAdminDashboardResponse.TrialAlerts buildTrialAlerts() {
         LocalDateTime now = LocalDateTime.now();
         long expiring = firmRepository.countTrialExpiringBetween(now, now.plusDays(7));
@@ -123,7 +118,6 @@ public class SuperAdminDashboardServiceImpl implements SuperAdminDashboardServic
                 .build();
     }
 
-    /** 1 query for logs + 1 batch user lookup. */
     private List<SuperAdminDashboardResponse.RecentActivity> buildRecentActivity() {
         List<AuditLog> logs = auditLogRepository.findRecent(PageRequest.of(0, 10)).getContent();
         if (logs.isEmpty()) return List.of();
@@ -141,7 +135,6 @@ public class SuperAdminDashboardServiceImpl implements SuperAdminDashboardServic
                 .build()).collect(Collectors.toList());
     }
 
-    /** 1 GROUP BY query for daily counts. */
     private List<SuperAdminDashboardResponse.MatterTrend> buildMatterTrends(LocalDateTime now) {
         int days = 30;
         LocalDateTime from = now.toLocalDate().minusDays(days).atStartOfDay();

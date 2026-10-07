@@ -19,15 +19,6 @@ public interface MatterTimelineRepository extends JpaRepository<MatterTimelineEv
 
     List<MatterTimelineEvent> findByMatterIdAndFirmIdOrderByCreatedAtDesc(UUID matterId, UUID firmId);
 
-    /**
-     * Firm-wide activity feed across all matters — the "overall timeline".
-     * Optional filters: matter type, matter status, and createdAt window.
-     */
-    /**
-     * from/to are always non-null — the service substitutes sentinel bounds when
-     * the caller left the filter open. (Hibernate 7 + Postgres: "? IS NULL" on a
-     * LocalDateTime parameter throws 42P18 because the type cannot be inferred.)
-     */
     @Query("SELECT e FROM MatterTimelineEvent e JOIN Matter m ON m.id = e.matterId " +
            "WHERE e.firmId = :firmId " +
            "AND (:matterType IS NULL OR m.matterType = :matterType) " +

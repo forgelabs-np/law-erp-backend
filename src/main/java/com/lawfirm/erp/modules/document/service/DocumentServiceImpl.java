@@ -52,13 +52,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/**
- * Document lifecycle: upload → read/share → archive.
- *
- * <p>The bytes are written by this service on the way in — one multipart request stores the file
- * and activates the document together, so there is no ticket to issue and nothing for the client
- * to confirm. The default mode of failure is "nothing happened", never a half-stored document.
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -66,7 +59,6 @@ public class DocumentServiceImpl implements DocumentService {
 
     private static final int MAGIC_BYTE_PROBE = 4096;
 
-    /** Matches the etag column width. A longer value is dropped rather than failing the insert. */
     private static final int ETAG_MAX_LENGTH = 64;
 
     private final DocumentRepository documentRepository;
@@ -84,8 +76,6 @@ public class DocumentServiceImpl implements DocumentService {
     private final CurrentUserResolver currentUserResolver;
 
     @Override
-    // audit_logs.entity_id is a UUID, so the audit trail references the document's uuid — its
-    // numeric primary key could not be stored there.
     @Audit(action = AuditAction.DOCUMENT_UPLOADED, entity = AuditEntity.DOCUMENT,
             entityId = "#result.uuid", summary = "'Document uploaded: ' + #result.fileName",
             skipIfNullResult = true)
@@ -118,8 +108,6 @@ public class DocumentServiceImpl implements DocumentService {
             throw new BusinessRuleException("This file does not fit in your firm's remaining storage allocation");
         }
 
-        // The row needs its key before it is inserted, so the per-document segment is a
-        // generated id rather than the database id of the row being created.
         String objectId = UUID.randomUUID().toString();
 
         Document document = Document.builder()
@@ -153,8 +141,6 @@ public class DocumentServiceImpl implements DocumentService {
                     firmId, project.getProjectCode(), objectId, originalFilename, maxFilenameLength()));
         }
 
-        // From here on the object exists in storage: any failure below must remove it again,
-        // or the bucket keeps bytes nothing points at.
         StoredObject stored = storageService.put(
                 document.getStorageKey(), content, sizeBytes, normalizedType);
 
@@ -163,7 +149,6 @@ public class DocumentServiceImpl implements DocumentService {
             throw new BusinessRuleException("The file could not be stored completely. Please try again.");
         }
 
-        // The declared content type is attacker-controlled; the file's own leading bytes are not.
         byte[] head = storageService.readHead(document.getStorageKey(), MAGIC_BYTE_PROBE);
         if (!DocumentTypePolicy.matchesContent(normalizedType, head)) {
             discard(document.getStorageKey());
@@ -180,15 +165,18 @@ public class DocumentServiceImpl implements DocumentService {
 
         document.setUploadedByUserId(currentUserResolver.getCurrentUserId());
         document.setEtag(normalizeEtag(stored.etag()));
-        Document saved = documentRepository.save(document);
 
-        recordTimeline(saved);
-        return toResponse(saved);
+        // otherwise leave the object behind, uncounted by the quota — so hand it back here.
+        try {
+            Document saved = documentRepository.save(document);
+            recordTimeline(saved);
+            return toResponse(saved);
+        } catch (RuntimeException e) {
+            discard(document.getStorageKey());
+            throw e;
+        }
     }
 
-    // ========================================================================
-    // Read
-    // ========================================================================
 
     @Override
     @Transactional(readOnly = true)
@@ -206,7 +194,6 @@ public class DocumentServiceImpl implements DocumentService {
         UUID firmId = requireFirmId();
         Matter matter = matterRepository.findByMatterNumberAndFirmId(matterNumber, firmId)
                 .orElseThrow(() -> new ResourceNotFoundException("Matter not found: " + matterNumber));
-        // A client may only open a case that is theirs.
         matterScopeGuard.requireVisible(matter);
         return list(firmId, matter.getId(), null, status, visibility, search, page, size);
     }
@@ -244,7 +231,6 @@ public class DocumentServiceImpl implements DocumentService {
             documentScopeGuard.requireProjectReadable(project);
             projectId = project.getId();
         }
-        // The client query ignores the requested visibility and status entirely.
         return list(firmId, matterId, projectId, null, null, search, page, size);
     }
 
@@ -261,7 +247,6 @@ public class DocumentServiceImpl implements DocumentService {
         documentScopeGuard.requireVisible(document);
 
         Duration ttl = downloadTtl();
-        // The generated URL is a bearer credential: it is returned and never logged. The audit
         // summary above deliberately carries only the filename.
         String url = storageService.presignDownload(
                 document.getStorageKey(), document.getOriginalFilename(), ttl);
@@ -269,9 +254,6 @@ public class DocumentServiceImpl implements DocumentService {
                 document.getOriginalFilename(), Instant.now().plus(ttl));
     }
 
-    // ========================================================================
-    // Mutate
-    // ========================================================================
 
     @Override
     @Audit(action = AuditAction.DOCUMENT_SHARED, entity = AuditEntity.DOCUMENT,
@@ -314,7 +296,6 @@ public class DocumentServiceImpl implements DocumentService {
             quotaService.release(firmId, document.getSizeBytes());
         }
         // The stored object is deliberately NOT deleted: legal documents are never destroyed
-        // here, only hidden. Purging is a separate, explicitly authorised operation.
         return toResponse(saved);
     }
 
@@ -324,9 +305,6 @@ public class DocumentServiceImpl implements DocumentService {
         return quotaService.usage(requireFirmId());
     }
 
-    // ========================================================================
-    // Internals
-    // ========================================================================
 
     private PagedResponse<DocumentResponse> list(UUID firmId, UUID matterId, UUID projectId,
                                                  DocumentStatus status, DocumentVisibility visibility,
@@ -348,7 +326,6 @@ public class DocumentServiceImpl implements DocumentService {
         return PagedResponse.of(documents, toResponses(documents.getContent()));
     }
 
-    /** Owner references are resolved in two batched lookups rather than one per row. */
     private List<DocumentResponse> toResponses(List<Document> documents) {
         if (documents.isEmpty()) {
             return List.of();
@@ -383,16 +360,6 @@ public class DocumentServiceImpl implements DocumentService {
                 documentMapper.toResponse(document, matterNumber, projectCode));
     }
 
-    /**
-     * Attaches a presigned link so a caller can download straight from a list response instead of
-     * making one {@code download-url} round trip per row. Only an {@code ACTIVE} document has a
-     * retrievable object: an {@code ARCHIVED} one is deliberately not downloadable and gets
-     * {@code null}.
-     *
-     * <p>Presigning here does not write a {@code DOCUMENT_DOWNLOADED} audit row, so a download
-     * taken straight from the list is not individually audited. Use the {@code download-url}
-     * endpoint when the audit trail must carry a row per download.
-     */
     private DocumentResponse withDocumentUrl(Document document, DocumentResponse response) {
         if (document.getStatus() == DocumentStatus.ACTIVE
                 && StringUtils.hasText(document.getStorageKey())) {
@@ -402,7 +369,6 @@ public class DocumentServiceImpl implements DocumentService {
         return response;
     }
 
-    /** Never a 403: a document in another firm must not be distinguishable from one that does not exist. */
     private Document loadForFirm(Long documentId, UUID firmId) {
         return documentRepository.findByIdAndFirmId(documentId, firmId)
                 .orElseThrow(() -> new ResourceNotFoundException("Document not found: " + documentId));
@@ -419,7 +385,6 @@ public class DocumentServiceImpl implements DocumentService {
                         "Court case not found on this matter: " + courtCaseRef));
     }
 
-    /** Only case documents reach the matter timeline; projects have no timeline. */
     private void recordTimeline(Document document) {
         if (document.getMatterId() == null) {
             return;
@@ -435,7 +400,6 @@ public class DocumentServiceImpl implements DocumentService {
         matterTimelineRepository.save(event);
     }
 
-    /** Best-effort cleanup — a failure here must not mask the original error. */
     private void discard(String storageKey) {
         try {
             storageService.delete(storageKey);
@@ -444,11 +408,6 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
-    /**
-     * S3 returns an unquoted hex etag; some clients send it quoted. Anything that is still not
-     * a plausible etag afterwards is discarded rather than truncated, since a partial etag would
-     * be misleading in the audit trail.
-     */
     private static String normalizeEtag(String raw) {
         if (raw == null) {
             return null;
@@ -467,14 +426,6 @@ public class DocumentServiceImpl implements DocumentService {
         return key == null ? null : map.get(key);
     }
 
-    /**
-     * The caller's firm, or a refusal.
-     *
-     * <p>Every document operation funnels through here, so it is also where a platform
-     * (Super Admin) session is turned away: documents are firm records and the platform has no
-     * business reading a firm's files. {@code PermissionEvaluator} exempts Super Admin from
-     * permission checks, so this cannot be left to the permission layer.
-     */
     private UUID requireFirmId() {
         if (currentUserResolver.isSuperAdmin()) {
             throw new ForbiddenException(
@@ -487,7 +438,6 @@ public class DocumentServiceImpl implements DocumentService {
         return firmId;
     }
 
-    /** Storage policy is DB-configurable (STORAGE group); see {@link SystemConfigService}. */
     private long maxFileSizeBytes() {
         return systemConfigService.storageMaxFileSizeBytes();
     }

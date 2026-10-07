@@ -14,10 +14,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Comprehensive dashboard response for lawyers combining case management and scraper data.
- * Designed to make lawyers' lives easier by providing all important information in one place.
- */
 @Getter
 @Setter
 @Builder
@@ -25,29 +21,14 @@ import java.util.UUID;
 @NoArgsConstructor
 public class LawyerDashboardResponse {
 
-    /**
-     * Summary statistics for the lawyer
-     */
     private DashboardStats stats;
 
-    /**
-     * Cases requiring immediate attention
-     */
     private List<CriticalCase> criticalCases;
 
-    /**
-     * Upcoming hearings from both scraper and internal court events
-     */
     private List<UpcomingHearing> upcomingHearings;
 
-    /**
-     * Upcoming deadlines
-     */
     private List<UpcomingDeadline> upcomingDeadlines;
 
-    /**
-     * Recent case status updates
-     */
     private List<CaseUpdate> recentUpdates;
 
     @Getter
@@ -138,7 +119,6 @@ public class LawyerDashboardResponse {
         private boolean requiresAttention;
     }
 
-    // Additional response DTOs for specific endpoints
     @Getter
     @Setter
     @Builder

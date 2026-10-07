@@ -11,13 +11,6 @@ import java.io.InputStream;
 
 public interface DocumentService {
 
-    /**
-     * Stores one file and returns the finished, {@code ACTIVE} document in a single call.
-     *
-     * <p>The bytes are handed to the service rather than presigned straight to storage, so the
-     * document is never observable in a half-uploaded state and the client has nothing to
-     * confirm afterwards.
-     */
     DocumentResponse upload(String matterNumber, String projectCode, String courtCaseRef,
                             String originalFilename, String contentType, long sizeBytes,
                             InputStream content);
@@ -33,7 +26,6 @@ public interface DocumentService {
                                                   DocumentVisibility visibility, String search,
                                                   int page, int size);
 
-    /** Client portal: own case/project, shared and active only. */
     PagedResponse<DocumentResponse> listForClient(String matterNumber, String projectCode,
                                                   String search, int page, int size);
 

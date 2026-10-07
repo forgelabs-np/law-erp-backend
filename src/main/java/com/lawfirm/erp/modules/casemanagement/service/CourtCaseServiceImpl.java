@@ -119,13 +119,12 @@ public class CourtCaseServiceImpl implements CourtCaseService {
             case CLOSED -> cc.setStatus(CourtCaseStatus.CLOSED);
             case EXECUTION -> {
                 cc.setStatus(CourtCaseStatus.ACTIVE);
-                cc.setAppealLapsed(false); // firm started enforcement — judgment no longer "lapsed"
+                cc.setAppealLapsed(false);
             }
             default -> { }
         }
         cc = courtCaseRepository.save(cc);
 
-        // Mediation lifecycle events
         if (oldStage == CourtCaseStage.MEDIATION && newStage != CourtCaseStage.MEDIATION) {
             recordTimeline(matter, cc.getId(),
                     newStage == CourtCaseStage.CLOSED
@@ -156,15 +155,6 @@ public class CourtCaseServiceImpl implements CourtCaseService {
         return toResponse(cc, matter);
     }
 
-    /**
-     * THE one place a CourtCase becomes DECIDED with a judgment on record.
-     * Used by the judgment endpoint AND by marking a CourtEvent held with
-     * outcomeType=JUDGMENT_DELIVERED — the two paths can never get out of sync:
-     * a DECIDED case always carries judgment fields and a computed appeal deadline.
-     *
-     * partyIsState is recorded once at court-case creation; the deadline engine
-     * always trusts the stored value, never a per-call flag.
-     */
     public void recordJudgmentInternal(CourtCase cc, Matter matter, LocalDate judgmentDate,
                                 String judgmentSummary, UUID decisionInFavorOfPartyId) {
         if (CourtCaseStage.isTerminal(cc.getStage())) {
@@ -196,10 +186,6 @@ public class CourtCaseServiceImpl implements CourtCaseService {
                         + (Boolean.TRUE.equals(cc.getAppealRequiresLeave()) ? " (leave to appeal required)" : ""));
     }
 
-    /**
-     * Legal next moves from the current stage, filtered by court level / matter type /
-     * relation — so the frontend never duplicates the state machine.
-     */
     public List<CourtCaseStage> getAllowedStages(String ourCourtCaseRef) {
         UUID firmId = getRequiredFirmId();
         CourtCase cc = findCourtCase(ourCourtCaseRef, firmId);
@@ -211,10 +197,6 @@ public class CourtCaseServiceImpl implements CourtCaseService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Decided cases whose statutory appeal window closes within N days and no appeal
-     * has been filed yet — the proactive watch list.
-     */
     public List<UpcomingAppealResponse> listUpcomingAppealDeadlines(int withinDays) {
         UUID firmId = getRequiredFirmId();
         LocalDate today = LocalDate.now();
@@ -225,7 +207,6 @@ public class CourtCaseServiceImpl implements CourtCaseService {
                 .filter(cc -> cc.getStage() == CourtCaseStage.JUDGMENT_DELIVERED)
                 .collect(Collectors.toList());
 
-        // Batch: find which cases already have children (single query, no N+1)
         if (!due.isEmpty()) {
             Set<UUID> parentIdsWithChildren = courtCaseRepository.findParentIdsWithChildren(
                     due.stream().map(CourtCase::getId).collect(Collectors.toSet()));
@@ -256,20 +237,16 @@ public class CourtCaseServiceImpl implements CourtCaseService {
         }).collect(Collectors.toList());
     }
 
-    /**
-     * Get all courts where the firm has active cases.
-     * Returns court info with case counts for scraper integration.
-     */
     public List<FirmCourtResponse> getFirmCourts() {
         UUID firmId = getRequiredFirmId();
         List<Object[]> courtData = courtCaseRepository.findDistinctActiveCourtsByFirmId(firmId);
-        
+
         return courtData.stream()
                 .map(row -> {
                     String courtName = (String) row[0];
                     CourtLevel courtLevel = (CourtLevel) row[1];
                     Long caseCount = (Long) row[2];
-                    
+
                     return FirmCourtResponse.builder()
                             .courtName(courtName)
                             .courtLevel(courtLevel)
@@ -288,8 +265,6 @@ public class CourtCaseServiceImpl implements CourtCaseService {
     private CourtCase findCourtCase(String ourCourtCaseRef, UUID firmId) {
         CourtCase cc = courtCaseRepository.findByOurCourtCaseRefAndFirmId(ourCourtCaseRef, firmId)
                 .orElseThrow(() -> new ResourceNotFoundException("Court case not found: " + ourCourtCaseRef));
-        // Every court-case read/write funnels through here, so a client account can only
-        // reach proceedings that belong to one of its own matters.
         if (matterScopeGuard.isClientScope()) {
             Matter matter = matterRepository.findById(cc.getMatterId())
                     .orElseThrow(() -> new ResourceNotFoundException("Matter not found for court case"));

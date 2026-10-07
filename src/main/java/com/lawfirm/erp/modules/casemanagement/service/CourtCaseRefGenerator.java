@@ -7,11 +7,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.UUID;
 
-/**
- * Internal CourtCase reference: {matterNumber}-{levelCode}{n} where n counts
- * instances at that level for the matter (DC1, HC1, DC2 after remand, SC1...).
- * Always populated — the official court number may lag by days.
- */
 @Service
 @RequiredArgsConstructor
 public class CourtCaseRefGenerator {

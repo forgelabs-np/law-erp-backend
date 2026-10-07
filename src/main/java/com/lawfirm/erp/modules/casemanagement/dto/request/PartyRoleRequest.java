@@ -8,10 +8,6 @@ import lombok.Data;
 
 import java.util.UUID;
 
-/**
- * A party's role in one specific CourtCase. References an existing MatterParty
- * (by id) or carries inline identity to create/link one.
- */
 @Data
 public class PartyRoleRequest {
 

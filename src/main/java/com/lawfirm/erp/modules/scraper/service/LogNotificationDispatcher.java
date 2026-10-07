@@ -3,7 +3,6 @@ package com.lawfirm.erp.modules.scraper.service;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-// Stub channel; swap for a real email/SMS/webhook dispatcher behind the interface.
 @Slf4j
 @Component
 public class LogNotificationDispatcher implements NotificationDispatcher {

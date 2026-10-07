@@ -45,7 +45,6 @@ public class RenewalServiceImpl implements RenewalService {
         UUID firmId = getRequiredFirmId();
         Project project = findProject(projectCode, firmId);
 
-        // Validate renewal type exists
         RenewalType renewalType = renewalTypeRepository.findById(request.getRenewalTypeId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         ProjectManagementConstants.RENEWAL_TYPE_NOT_FOUND));
@@ -64,7 +63,6 @@ public class RenewalServiceImpl implements RenewalService {
                 .build();
         renewal = renewalRepository.save(renewal);
 
-        // Auto-generate instances for recurring renewals
         List<RenewalInstance> instances = generateInstances(renewal);
 
         auditService.log(AuditAction.PROJECT_UPDATED, AuditEntity.PROJECT, project.getId(),
@@ -154,7 +152,6 @@ public class RenewalServiceImpl implements RenewalService {
         return projectMapper.toInstanceResponse(instance);
     }
 
-    // ─── Recurrence Engine ─────────────────────────────────────────────────
 
     private List<RenewalInstance> generateInstances(Renewal renewal) {
         if (renewal.getRecurrence() == RenewalRecurrence.ONE_TIME) {
@@ -193,7 +190,6 @@ public class RenewalServiceImpl implements RenewalService {
         };
     }
 
-    // ─── Helpers ───────────────────────────────────────────────────────────
 
     private Project findProject(String projectCode, UUID firmId) {
         return projectRepository.findByProjectCodeAndFirmId(projectCode, firmId)

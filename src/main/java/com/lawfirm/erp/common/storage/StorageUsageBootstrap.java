@@ -12,13 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
-/**
- * Gives every existing firm a storage row and the default allocation on startup.
- *
- * <p>Firms predating the document store would otherwise have no row, and the first-upload
- * creation path would then be the only thing standing between them and an empty usage
- * screen. Runs once per boot and only inserts what is missing.
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j

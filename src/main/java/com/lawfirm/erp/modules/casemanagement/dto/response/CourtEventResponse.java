@@ -54,7 +54,6 @@ public class CourtEventResponse {
 
     private String notes;
 
-    /** Populated when a Tarik event was scheduled despite an advocate overlap (Peshi hard-blocks). */
     private String conflictWarning;
 
     private LocalDateTime createdAt;

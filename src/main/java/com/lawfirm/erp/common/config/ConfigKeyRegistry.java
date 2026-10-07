@@ -7,15 +7,6 @@ import com.lawfirm.erp.common.service.SystemConfigService;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Every configurable key, declared once and split the same way the storage is:
- * {@link #GLOBAL} keys live in {@code system_config}, {@link #FIRM} keys in
- * {@code firm_configs}.
- *
- * Metadata here drives both the admin settings UI and server-side validation, so a key
- * can only be written by the scope that owns it — {@link #requireGlobal}/{@link #requireFirm}
- * reject anything else.
- */
 public final class ConfigKeyRegistry {
 
     public static final String GROUP_APP = "APP";
@@ -27,7 +18,6 @@ public final class ConfigKeyRegistry {
     public static final String GROUP_STORAGE = "STORAGE";
 
     public static final List<SettingDef> GLOBAL = List.of(
-            // APP
             SettingDef.def(SystemConfigService.KEY_APP_NAME, GROUP_APP, "TEXT", null,
                     "NepalCRM", true, "Platform display name", true),
             SettingDef.def(SystemConfigService.KEY_APP_PRODUCTION, GROUP_APP, "RADIO", "Y,N",
@@ -44,27 +34,28 @@ public final class ConfigKeyRegistry {
             SettingDef.def(SystemConfigService.KEY_MFA_REQUIRED_ROLES, GROUP_SECURITY, "TEXT", null,
                     "SUPER_ADMIN,FIRM_ADMIN", true,
                     "Comma-separated roles that must have MFA enabled", true),
+            // Not seeded: the yml app.security.mfa-dev-bypass value is the fallback, so a dev
+            // database keeps the bypass with no row. Production mode blocks it regardless.
+            SettingDef.def(SystemConfigService.KEY_MFA_DEV_BYPASS, GROUP_SECURITY, "RADIO", "Y,N",
+                    "N", true, "Dev TOTP bypass — never effective while production mode is on", false),
             SettingDef.def(SystemConfigService.KEY_REGISTRATION_SECRET, GROUP_SECURITY, "PASSWORD", null,
                     "", false, "Secret required to register the first super admin. Leave empty to keep registration disabled.", true),
             SettingDef.def(SystemConfigService.KEY_LOGIN_MAX_ATTEMPTS, GROUP_SECURITY, "NUMBER", null,
                     "5", true, "Failed logins allowed before the account is locked", true),
             SettingDef.def(SystemConfigService.KEY_LOGIN_LOCK_MINUTES, GROUP_SECURITY, "NUMBER", null,
                     "30", true, "Minutes an account stays locked after too many failed logins", true),
+            // Not seeded: blank means "use jwt.access-expiry from yml", so the value stays optional.
+            SettingDef.def(SystemConfigService.KEY_ACCESS_TOKEN_EXPIRY_MINUTES, GROUP_SECURITY, "NUMBER", null,
+                    "1440", true, "Access-token lifetime in minutes (unset → jwt.access-expiry)", false),
 
-            // TRIAL
             SettingDef.def(SystemConfigService.KEY_TRIAL_DEFAULT_DAYS, GROUP_TRIAL, "NUMBER", null,
                     "14", true, "Trial length used when a firm is created without explicit trial days", true),
             SettingDef.def(SystemConfigService.KEY_TRIAL_WARNING_DAYS, GROUP_TRIAL, "NUMBER", null,
                     "3", true, "Days before trial expiry that the warning notification is sent", true),
 
-            // NOTIFICATION
             SettingDef.def(SystemConfigService.KEY_NOTIFICATION_MAX_ATTEMPTS, GROUP_NOTIFICATION, "NUMBER", null,
                     "3", true, "Delivery attempts before a notification is marked DEAD", true),
 
-            // STORAGE — object-storage policy. Connection values (endpoint/credentials/bucket/region)
-            // stay in application.yml: they are environment secrets read when the MinIO client is
-            // built at startup. Defaults here mirror StorageProperties; the first seed captures the
-            // running yml value so an existing deployment keeps its settings.
             SettingDef.def(SystemConfigService.KEY_STORAGE_MAX_FILE_SIZE_BYTES, GROUP_STORAGE, "NUMBER", null,
                     String.valueOf(SystemConfigService.DEFAULT_STORAGE_MAX_FILE_SIZE_BYTES), true,
                     "Maximum size of a single uploaded file, in bytes", true),
@@ -81,7 +72,6 @@ public final class ConfigKeyRegistry {
                     String.valueOf(SystemConfigService.DEFAULT_DOCUMENT_MAX_FILENAME_LENGTH), true,
                     "Maximum length of the filename segment stored in the object key", true),
 
-            // EMAIL — metadata only, no boot seed so empty SMTP keys never shadow the yml fallback
             SettingDef.def(SystemConfigService.KEY_SMTP_HOST, GROUP_EMAIL, "TEXT", null,
                     null, true, "SMTP host", false),
             SettingDef.def(SystemConfigService.KEY_SMTP_PORT, GROUP_EMAIL, "NUMBER", null,
@@ -132,7 +122,6 @@ public final class ConfigKeyRegistry {
         return "PASSWORD".equals(inputType);
     }
 
-    /** Throws when the value does not satisfy the key's declared input type. */
     public static void validate(SettingDef def, String key, String value) {
         String trimmed = value.trim();
         if (("RADIO".equals(def.inputType) || "DROPDOWN".equals(def.inputType))
@@ -174,7 +163,6 @@ public final class ConfigKeyRegistry {
         return def;
     }
 
-    /** Immutable definition of one known config key. */
     public static final class SettingDef {
         public final String key;
         public final String group;

@@ -1,10 +1,7 @@
 package com.lawfirm.erp.modules.casemanagement.enums;
 
-/**
- * What actually happened at a held Peshi/Tarik — drives what happens next.
- */
 public enum OutcomeType {
-    PART_HEARD,           // peshi continues next time — no progress boundary
+    PART_HEARD,
     ARGUMENTS_COMPLETE,
     EVIDENCE_TAKEN,
     ADJOURNED_NO_PROGRESS,

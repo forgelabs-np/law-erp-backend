@@ -12,19 +12,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Allocates storage per firm and keeps its usage counter honest.
- *
- * <p>Every mutation goes through the row lock in {@link FirmStorageUsageRepository#findForUpdate},
- * so concurrent uploads against the same firm serialize instead of double-spending the last
- * of the allocation.
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class StorageQuotaService {
 
-    /** Sentinel allocation meaning "no limit enforced". */
     public static final long UNLIMITED = 0L;
 
     private final FirmStorageUsageRepository repository;
@@ -38,7 +30,6 @@ public class StorageQuotaService {
                 .orElseGet(() -> StorageUsageView.of(0L, defaultQuota()));
     }
 
-    /** Cheap pre-flight check for the upload-ticket step, so an over-quota upload is refused before it starts. */
     @Transactional(readOnly = true)
     public boolean canFit(UUID firmId, long bytes) {
         return repository.findByFirmId(firmId)
@@ -46,10 +37,6 @@ public class StorageQuotaService {
                 .orElse(true);
     }
 
-    /**
-     * Reserves {@code bytes} for the firm. Throws when that would exceed the allocation.
-     * The caller must already hold the bytes in storage and clean them up if this throws.
-     */
     @Transactional
     public void reserve(UUID firmId, long bytes) {
         FirmStorageUsage usage = lockOrCreate(firmId);
@@ -66,7 +53,6 @@ public class StorageQuotaService {
         repository.save(usage);
     }
 
-    /** Gives bytes back — called when a document is archived. */
     @Transactional
     public void release(UUID firmId, long bytes) {
         FirmStorageUsage usage = lockOrCreate(firmId);
@@ -75,7 +61,6 @@ public class StorageQuotaService {
         repository.save(usage);
     }
 
-    /** Platform-side allocation change: firm A 5 GB, firm B 10 GB. */
     @Transactional
     public StorageUsageView setQuota(UUID firmId, long quotaBytes) {
         if (quotaBytes < 0) {
@@ -92,13 +77,6 @@ public class StorageQuotaService {
         return StorageUsageView.of(saved.getUsedBytes(), saved.getQuotaBytes());
     }
 
-    /**
-     * Creates the firm's row on first use.
-     *
-     * <p>Existing firms are backfilled at startup by {@link StorageUsageBootstrap}, so in
-     * practice this only covers a firm created after boot, whose first upload is a single
-     * admin action rather than a concurrent burst.
-     */
     private FirmStorageUsage lockOrCreate(UUID firmId) {
         return repository.findForUpdate(firmId).orElseGet(() -> repository.save(
                 FirmStorageUsage.builder()
@@ -118,7 +96,6 @@ public class StorageQuotaService {
         return systemConfigService.storageDefaultQuotaBytes();
     }
 
-    /** "5 GB" rather than "5368709120", for messages a human reads. */
     public static String humanReadable(long bytes) {
         if (bytes <= 0) {
             return "unlimited";

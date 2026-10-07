@@ -13,8 +13,6 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Weekly page: one response for the Sun–Fri window, grouped by "पेशी मिति :<date>", flat table
-// per date, no benches/outcome. Parties share a "पक्ष || विपक्ष" column split on "||"/"‖".
 @Component
 public class WeeklyTableParser {
 
@@ -43,7 +41,7 @@ public class WeeklyTableParser {
 
     private void parseRows(Element table, Integer courtId, String dateBs, List<HearingRecord> out) {
         for (Element tr : table.select("tr")) {
-            if (tr.select("th").size() > 0) continue; // header row
+            if (tr.select("th").size() > 0) continue;
             List<Element> cells = tr.select("td");
             if (cells.size() < 5) continue;
 

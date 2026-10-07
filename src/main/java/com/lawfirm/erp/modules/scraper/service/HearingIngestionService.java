@@ -13,8 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 
-// Idempotent upsert keyed on (courtId, caseNoInternal, hearingDateBs) — re-scraping a day
-// replaces rows instead of duplicating.
 @Slf4j
 @Service
 @RequiredArgsConstructor

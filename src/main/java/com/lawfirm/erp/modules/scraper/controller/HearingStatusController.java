@@ -1,5 +1,7 @@
 package com.lawfirm.erp.modules.scraper.controller;
 
+import com.lawfirm.erp.auth.security.CurrentUserResolver;
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.constant.ScraperConstants;
 import com.lawfirm.erp.common.dto.ApiResponse;
 import com.lawfirm.erp.common.exception.ResourceNotFoundException;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RestController
@@ -32,12 +35,15 @@ public class HearingStatusController {
     private final ScraperService scraperService;
     private final HearingMatchingService matchingService;
     private final ResponseHandler responseHandler;
+    private final PermissionEvaluator permissionEvaluator;
+    private final CurrentUserResolver currentUserResolver;
 
     @GetMapping("/{caseNo}/hearing-status")
     @Operation(summary = ScraperConstants.HEARING_STATUS_SUMMARY, description = ScraperConstants.HEARING_STATUS_DESCRIPTION)
     public ResponseEntity<ApiResponse<HearingStatusResponse>> hearingStatus(
             @PathVariable String caseNo,
             @RequestParam(required = false) String date) {
+        requireCaseInFirm(caseNo);
         return responseHandler.ok(scraperService.getHearingStatus(caseNo, date),
                 "Hearing status fetched successfully");
     }
@@ -47,19 +53,17 @@ public class HearingStatusController {
     public ResponseEntity<ApiResponse<CaseDetailResponse>> liveDetail(
             @RequestParam Integer courtId,
             @RequestParam String caseNo) {
+        permissionEvaluator.require("SCRAPER_MANAGEMENT:VIEW");
         return responseHandler.ok(scraperService.getCaseDetailLive(courtId, caseNo),
                 "Live case detail fetched");
     }
 
-    /**
-     * All court matches for a case, newest first.
-     */
     @GetMapping("/{caseNo}/matches")
     @Operation(summary = "All hearing matches for a case",
             description = "Returns every matched hearing (scraped row joined to this case) ordered by date.")
     public ResponseEntity<ApiResponse<List<HearingMatchDto>>> matches(
             @PathVariable String caseNo) {
-        var cc = scraperService.findClientCaseByCaseNo(caseNo)
+        var cc = scraperService.findClientCaseByCaseNo(caseNo, currentUserResolver.getCurrentFirmId())
                 .orElseThrow(() -> new ResourceNotFoundException("No client case found for caseNo: " + caseNo));
         List<HearingMatch> matches = matchingService.findByClientCaseId(cc.getId());
         List<HearingMatchDto> dtos = matches.stream()
@@ -68,19 +72,27 @@ public class HearingStatusController {
         return responseHandler.ok(dtos, "Matches fetched successfully");
     }
 
-    /**
-     * Un-notified matches across all cases — the dispatch pending queue.
-     */
     @GetMapping("/matches/unnotified")
-    // Admin/ops visibility into the dispatch queue; caller must hold the scraper permission.
     @Operation(summary = "Un-notified hearing matches",
             description = "Returns every HearingMatch where notified=false — the queue the dispatcher has not yet sent.")
     public ResponseEntity<ApiResponse<List<HearingMatchDto>>> unnotifiedMatches() {
+        permissionEvaluator.require("SCRAPER_MANAGEMENT:VIEW");
         List<HearingMatch> matches = matchingService.findUnnotified();
         List<HearingMatchDto> dtos = matches.stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
         return responseHandler.ok(dtos, "Un-notified matches fetched");
+    }
+
+    // Case-specific reads are only allowed when the case is linked to the caller's firm. A null
+    // firm (super admin / system context) stays unscoped, as everywhere else in the app.
+    private void requireCaseInFirm(String caseNo) {
+        UUID firmId = currentUserResolver.getCurrentFirmId();
+        if (firmId == null) {
+            return;
+        }
+        scraperService.findClientCaseByCaseNo(caseNo, firmId)
+                .orElseThrow(() -> new ResourceNotFoundException("No client case found for caseNo: " + caseNo));
     }
 
     private HearingMatchDto toDto(HearingMatch m) {

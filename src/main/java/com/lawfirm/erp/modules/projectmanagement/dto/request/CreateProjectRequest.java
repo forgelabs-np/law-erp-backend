@@ -15,7 +15,6 @@ public class CreateProjectRequest {
     @NotBlank(message = "Client name is required")
     private String clientName;
 
-    /** Link to existing client user — nullable for new client flow. */
     private UUID clientUserId;
 
     private String description;
@@ -24,6 +23,5 @@ public class CreateProjectRequest {
 
     private LocalDate targetEndDate;
 
-    /** Owner userId — if null, defaults to the creating user. */
     private UUID ownerId;
 }

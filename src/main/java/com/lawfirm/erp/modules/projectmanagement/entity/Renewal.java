@@ -50,10 +50,8 @@ public class Renewal {
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
 
-    /** NULL = ongoing (generate instances indefinitely for recurring). */
     private LocalDate endDate;
 
-    /** Who handles this renewal — nullable (unassigned). */
     private UUID assignedToId;
 
     @Enumerated(EnumType.STRING)

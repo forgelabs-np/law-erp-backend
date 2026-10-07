@@ -7,41 +7,22 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Helper to evaluate SpEL expressions for audit annotations.
- * Simple and reusable.
- */
 public class AuditSpelHelper {
 
     private static final ExpressionParser parser = new SpelExpressionParser();
 
-    /**
-     * Evaluates a SpEL expression against the given context.
-     * @param expression SpEL expression (e.g., "#result.id")
-     * @param rootObject the object to evaluate against (usually the method result or parameter)
-     * @param variables additional variables (e.g., method parameters)
-     * @return the evaluated value, or null if evaluation fails
-     */
     public static Object evaluate(String expression, Object rootObject, Map<String, Object> variables) {
         try {
             StandardEvaluationContext context = new StandardEvaluationContext(rootObject);
             variables.forEach(context::setVariable);
-            // Every @Audit expression in this codebase is written against "#result" (see the
             // annotation's javadoc). Without this binding the variable is undefined, SpEL throws
-            // VARIABLE_NOT_FOUND, and the catch below silently yields null — so entityId and
-            // summary came out empty for every annotated method. Bound after the parameters so
-            // "#result" always means the return value, whatever the parameter names are.
             context.setVariable("result", rootObject);
             return parser.parseExpression(expression).getValue(context);
         } catch (Exception e) {
-            // If SpEL fails, return null and let the caller handle it
             return null;
         }
     }
 
-    /**
-     * Builds a map of method parameter names to their values.
-     */
     public static Map<String, Object> buildParameterMap(Method method, Object[] args) {
         Map<String, Object> params = new HashMap<>();
         java.lang.reflect.Parameter[] parameters = method.getParameters();

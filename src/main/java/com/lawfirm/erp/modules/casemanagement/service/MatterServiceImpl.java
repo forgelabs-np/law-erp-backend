@@ -67,7 +67,6 @@ public class MatterServiceImpl implements MatterService {
         applyClient(matter, firmId, request.getClientUserId(), request.getClientName());
         matter = matterRepository.save(matter);
 
-        // ORIGINAL court case at the originating level
         CourtCase cc = new CourtCase();
         cc.setFirmId(firmId);
         cc.setMatterId(matter.getId());
@@ -89,7 +88,6 @@ public class MatterServiceImpl implements MatterService {
         matter.setCurrentCourtCaseId(cc.getId());
         matter = matterRepository.save(matter);
 
-        // Parties → MatterParty identity + CourtCaseRole on the original case
         for (PartyEntryRequest entry : request.getParties()) {
             MatterParty party = buildParty(matter, entry);
             party = matterPartyRepository.save(party);
@@ -114,7 +112,6 @@ public class MatterServiceImpl implements MatterService {
         UUID firmId = getRequiredFirmId();
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
-        // A client account only ever sees its own matters, whatever it asks for.
         UUID effectiveClientId = clientUserId;
         if (readScopeGuard.isClientScope()) {
             UUID me = readScopeGuard.currentUserId();
@@ -126,7 +123,6 @@ public class MatterServiceImpl implements MatterService {
 
         Page<Matter> matters;
         if (readScopeGuard.isAssignmentScope()) {
-            // An employee works a caseload: their list is their assignments, never the firm's book.
             matters = assignedMatters(firmId, matterType, status, effectiveClientId, search, pageable);
         } else if (effectiveClientId != null) {
             matters = matterRepository.findByFilters(firmId, matterType, status, effectiveClientId, search, pageable);
@@ -143,12 +139,6 @@ public class MatterServiceImpl implements MatterService {
         return toMatterResponse(matter, true);
     }
 
-    /**
-     * The page of matters assigned to the caller.
-     *
-     * <p>An employee with no assignments gets an empty page rather than the firm's matters — the
-     * honest answer to "what am I working on?", and the reason this exists at all.
-     */
     private Page<Matter> assignedMatters(UUID firmId, MatterType matterType, MatterStatus status,
                                          UUID clientUserId, String search, Pageable pageable) {
 
@@ -163,7 +153,6 @@ public class MatterServiceImpl implements MatterService {
                 firmId, matterType, status, clientUserId, search, assigned, pageable);
     }
 
-    /** Validate + denormalize the matter's client link. */
     private void applyClient(Matter matter, UUID firmId, UUID clientUserId, String clientName) {
         if (clientUserId == null) {
             return;
@@ -183,7 +172,6 @@ public class MatterServiceImpl implements MatterService {
         List<MatterTimelineEvent> events =
                 matterTimelineRepository.findByMatterIdAndFirmIdOrderByCreatedAtDesc(matter.getId(), matter.getFirmId());
 
-        // Batch-resolve court case refs (single query, no N+1)
         Set<UUID> ccIds = events.stream()
                 .map(MatterTimelineEvent::getCourtCaseId)
                 .filter(Objects::nonNull)
@@ -208,10 +196,6 @@ public class MatterServiceImpl implements MatterService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Firm-wide activity feed across all matters, newest first. Filters: matter type,
-     * matter status, createdAt window. Batch-resolves matter + court-case refs.
-     */
     public Page<TimelineEventResponse> getFirmTimeline(MatterType matterType, MatterStatus status,
                                                        LocalDate from, LocalDate to,
                                                        int page, int size) {
@@ -219,9 +203,6 @@ public class MatterServiceImpl implements MatterService {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         UUID clientScopeId = readScopeGuard.isClientScope() ? readScopeGuard.currentUserId() : null;
 
-        // Null-safe window: sentinel bounds far outside any real data, so the
-        // query never binds null LocalDateTime params (Hibernate 7 + Postgres
-        // throws 42P18 on "? IS NULL" for datetimes).
         LocalDateTime fromDt = from != null ? from.atStartOfDay() : LocalDateTime.of(1900, 1, 1, 0, 0);
         LocalDateTime toDt = to != null ? to.plusDays(1).atStartOfDay() : LocalDateTime.of(2999, 12, 31, 23, 59, 59);
 
@@ -260,7 +241,6 @@ public class MatterServiceImpl implements MatterService {
         });
     }
 
-    /** Long-pending matters: current leaf hasn't had a real Peshi in N days. */
     public Page<StaleMatterResponse> getStaleMatters(int days, int page, int size) {
         UUID firmId = getRequiredFirmId();
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -296,7 +276,7 @@ public class MatterServiceImpl implements MatterService {
                     LocalDate last = leafId != null ? latestPeshi.get(leafId) : null;
                     long since = last == null ? Long.MAX_VALUE
                             : java.time.temporal.ChronoUnit.DAYS.between(last, LocalDate.now());
-                    if (last != null && last.isAfter(cutoff)) return null; // healthy — not stale
+                    if (last != null && last.isAfter(cutoff)) return null;
 
                     return StaleMatterResponse.builder()
                             .id(m.getId())
@@ -352,9 +332,6 @@ public class MatterServiceImpl implements MatterService {
             }
             parent = courtCaseRepository.findByIdAndFirmId(parentId, firmId)
                     .orElseThrow(() -> new ResourceNotFoundException("Parent court case not found: " + parentId));
-            // REVIEW is the one relation exempt from the closed-parent guard: a review
-            // petition (Supreme Court) is filed AFTER the judgment has gone final — the
-            // parent is CLOSED by design, and a closed parent is exactly where review lives.
             boolean parentClosed = parent.getStatus() == CourtCaseStatus.CLOSED
                     || parent.getStage() == CourtCaseStage.CLOSED;
             if (parentClosed && relation != RelationType.REVIEW) {
@@ -381,7 +358,6 @@ public class MatterServiceImpl implements MatterService {
         cc.setActive(true);
         cc = courtCaseRepository.save(cc);
 
-        // Roles for the new instance — created fresh (roles flip on appeal)
         UUID matterId = matter.getId();
         for (PartyRoleRequest roleReq : request.getRoles()) {
             MatterParty party;
@@ -401,8 +377,6 @@ public class MatterServiceImpl implements MatterService {
             createRole(cc, party, roleReq.getRoleType(), roleReq.getRepresentation(), roleReq.getAdvocateId());
         }
 
-        // Parent is superseded by the child; matter leaf moves to the new instance.
-        // REVIEW does NOT touch the parent: it stays however it already is (CLOSED/final).
         if (parent != null && relation != RelationType.REVIEW) {
             if (relation == RelationType.REMAND) {
                 parent.setStage(CourtCaseStage.REMANDED);
@@ -439,7 +413,6 @@ public class MatterServiceImpl implements MatterService {
         Matter matter = findMatter(matterNumber);
         MatterParty party = matterPartyRepository.save(buildParty(matter, request));
 
-        // Also give the party a role on the current leaf — practical for later additions
         if (matter.getCurrentCourtCaseId() != null) {
             createRoleForParty(party, matter.getCurrentCourtCaseId(),
                     request.getRoleType(), request.getRepresentation(), request.getAdvocateId());
@@ -528,7 +501,6 @@ public class MatterServiceImpl implements MatterService {
             List<CourtCase> ccs = courtCaseRepository.findByMatterIdAndFirmIdOrderByCreatedAtAsc(
                     matter.getId(), firmId);
 
-            // Batch: event counts + party names (no N+1)
             Map<UUID, Integer> eventCounts = ccs.isEmpty() ? Map.of()
                     : courtEventRepository.countByCourtCaseIds(
                             ccs.stream().map(CourtCase::getId).collect(Collectors.toList()))

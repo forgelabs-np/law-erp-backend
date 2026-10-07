@@ -7,10 +7,6 @@ import lombok.Data;
 
 import java.util.UUID;
 
-/**
- * Dashboard flag: matters whose current leaf hasn't had a real Peshi in N days
- * (long-pending Tarik chains invisible in a flat hearing list).
- */
 @Data
 @Builder
 public class StaleMatterResponse {
@@ -27,6 +23,5 @@ public class StaleMatterResponse {
 
     private String currentCourtCaseRef;
 
-    /** Null when the matter has never had a Peshi. */
     private Integer daysSinceLastPeshi;
 }

@@ -30,7 +30,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ApiResponse<Void>> handleBadCredentials(BadCredentialsException ex) {
         log.warn("Authentication failed: {}", ex.getMessage());
-        return responseHandler.error("Invalid username or password", ApiStatus.UNAUTHORIZED, HttpStatus.UNAUTHORIZED);
+        // Surface the specific, already-sanitised reason (firm suspended, account locked, portal
+        // disabled…). True credential failures are thrown as "Invalid username or password", so
+        // anti-enumeration is preserved where it matters.
+        String message = ex.getMessage() != null && !ex.getMessage().isBlank()
+                ? ex.getMessage() : "Invalid username or password";
+        return responseHandler.error(message, ApiStatus.UNAUTHORIZED, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler(UnauthorizedException.class)
@@ -107,16 +112,19 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException ex) {
         log.error("Data integrity violation: {}", ex.getMessage());
 
-        // Extract readable message from constraint name when possible
-        String msg = ex.getMessage();
+        // The top-level Hibernate message does not carry the offending columns; the driver's
+        // most-specific cause does ("Key (username, firm_id)=(…)"). Match against that.
+        Throwable root = ex.getMostSpecificCause();
+        String msg = root != null ? root.getMessage() : ex.getMessage();
         if (msg != null) {
-            if (msg.contains("username")) return responseHandler.error(
+            String lower = msg.toLowerCase();
+            if (lower.contains("username")) return responseHandler.error(
                     "Username already exists", ApiStatus.BAD_REQUEST, HttpStatus.CONFLICT);
-            if (msg.contains("email")) return responseHandler.error(
+            if (lower.contains("email")) return responseHandler.error(
                     "Email already exists", ApiStatus.BAD_REQUEST, HttpStatus.CONFLICT);
-            if (msg.contains("mobile")) return responseHandler.error(
+            if (lower.contains("mobile")) return responseHandler.error(
                     "Mobile number already exists", ApiStatus.BAD_REQUEST, HttpStatus.CONFLICT);
-            if (msg.contains("law_firm_code") || msg.contains("lawFirmCode")) return responseHandler.error(
+            if (lower.contains("law_firm_code") || lower.contains("lawfirmcode")) return responseHandler.error(
                     "Firm code already exists", ApiStatus.BAD_REQUEST, HttpStatus.CONFLICT);
         }
 
@@ -138,7 +146,6 @@ public class GlobalExceptionHandler {
         return responseHandler.error(message, ApiStatus.BAD_REQUEST, HttpStatus.BAD_REQUEST);
     }
 
-    // Wrong HTTP method on an existing endpoint (e.g. GET on a POST-only path)
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
         log.warn("Method not supported: {}", ex.getMessage());
@@ -146,7 +153,6 @@ public class GlobalExceptionHandler {
                 ApiStatus.BAD_REQUEST, HttpStatus.METHOD_NOT_ALLOWED);
     }
 
-    // Unknown path — no controller mapping at all
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(NoResourceFoundException ex) {
         log.warn("Endpoint not found: {}", ex.getMessage());

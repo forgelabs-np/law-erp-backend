@@ -1,12 +1,7 @@
 package com.lawfirm.erp.common.enums;
 
-/**
- * All auditable actions across the system.
- * Each name must be <= 30 chars — stored as CHAR(30) in DB.
- */
 public enum AuditAction {
 
-    // ── Auth ────────────────────────────────
     LOGIN,
     LOGOUT,
     LOGIN_FAILED,
@@ -17,7 +12,6 @@ public enum AuditAction {
     MFA_ENABLED,
     MFA_RESET,
 
-    // ── User / Employee ──────────────────────
     USER_CREATED,
     USER_UPDATED,
     USER_DEACTIVATED,
@@ -26,13 +20,11 @@ public enum AuditAction {
     USER_BLOCKED,
     USER_UNBLOCKED,
 
-    // ── Client ──────────────────────────────
     CLIENT_CREATED,
     CLIENT_UPDATED,
     CLIENT_PORTAL_ENABLED,
     CLIENT_PORTAL_DISABLED,
 
-    // ── Case management (Phase 9) ────────────
     CASE_CREATED,
     CASE_UPDATED,
     CASE_DELETED,
@@ -41,7 +33,6 @@ public enum AuditAction {
     CASE_ARCHIVED,
     CASE_REOPENED,
 
-    // ── Matter / Court case / Court event (Phase 10) ──
     MATTER_CREATED,
     MATTER_UPDATED,
     COURT_CASE_CREATED,
@@ -56,13 +47,11 @@ public enum AuditAction {
     COURT_EVENT_ADJOURNED,
     COURT_EVENT_CANCELLED,
 
-    // ── Document management ──────────────────
     DOCUMENT_UPLOADED,
     DOCUMENT_DELETED,
     DOCUMENT_DOWNLOADED,
     DOCUMENT_SHARED,
 
-    // ── Billing ──────────────────────────────
     INVOICE_CREATED,
     INVOICE_UPDATED,
     INVOICE_DELETED,
@@ -70,12 +59,10 @@ public enum AuditAction {
     INVOICE_SENT,
     PAYMENT_RECORDED,
 
-    // ── Calendar ─────────────────────────────
     HEARING_SCHEDULED,
     HEARING_UPDATED,
     HEARING_CANCELLED,
 
-    // ── Firm management ──────────────────────
     FIRM_CREATED,
     FIRM_UPDATED,
     FIRM_SUSPENDED,
@@ -86,7 +73,6 @@ public enum AuditAction {
     FIRM_MODULE_DISABLED,
     FIRM_MODULE_CONFIGURED,
 
-    // ── RBAC ─────────────────────────────────
     ROLE_ASSIGNED,
     ROLE_UPDATED,
     ROLE_CREATED,
@@ -106,7 +92,6 @@ public enum AuditAction {
     MODULE_UPDATED,
     MODULE_DELETED,
 
-    // ── Email / config (Phase 10) ──────────────
     EMAIL_SENT,
     EMAIL_FAILED,
     EMAIL_CONFIG_UPDATED,
@@ -115,7 +100,6 @@ public enum AuditAction {
     CONFIG_UPDATED,
     CONFIG_DELETED,
 
-    // ── Project management ───────────────────
     PROJECT_CREATED,
     PROJECT_UPDATED,
     PROJECT_COMPLETED,

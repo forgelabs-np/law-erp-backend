@@ -58,13 +58,11 @@ public class RolePermissionServiceImpl implements RolePermissionService {
             );
         }
 
-        // Verify all permissions exist
         List<Permission> permissions = permissionRepository.findAllById(request.getPermissionIds());
         if (permissions.size() != request.getPermissionIds().size()) {
             throw new ResourceNotFoundException("One or more permission IDs are invalid");
         }
 
-        // GLOBAL-scope permissions are reserved for SUPER_ADMIN
         for (Permission perm : permissions) {
             if (perm.getScope() == PermissionScope.GLOBAL) {
                 throw new ForbiddenException(
@@ -73,10 +71,8 @@ public class RolePermissionServiceImpl implements RolePermissionService {
             }
         }
 
-        // Remove existing permissions
         rolePermissionRepository.deleteByRoleId(role.getId());
 
-        // Assign new permissions
         List<RolePermission> rolePermissions = permissions.stream()
                 .map(permission -> RolePermission.builder()
                         .role(role)
@@ -91,7 +87,6 @@ public class RolePermissionServiceImpl implements RolePermissionService {
 
         rolePermissionRepository.saveAll(rolePermissions);
 
-        // Invalidate user sessions
         List<UUID> userIds = userRepository.findUserIdsByRoleId(role.getId());
         for (UUID userId : userIds) {
             userRepository.incrementPermissionVersion(userId);

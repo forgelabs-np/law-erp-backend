@@ -27,14 +27,9 @@ public interface SuperAdminService {
 
     void resetMfa(MfaResetRequest request);
 
-    /**
-     * Resets any user's password platform-wide. With none supplied, a policy-compliant temporary
-     * one is generated and returned; the holder must rotate it on the next login either way.
-     */
     PasswordResetResult resetPassword(UUID userId, ResetPasswordRequest request);
 
     RolePermissionResponse overrideRolePermissions(UUID firmId, UUID roleId, RolePermissionRequest request);
 
-    /** SA discoverability: a firm's roles + current permissions + holder counts. */
     List<RoleResponse> getFirmRoles(UUID firmId);
 }

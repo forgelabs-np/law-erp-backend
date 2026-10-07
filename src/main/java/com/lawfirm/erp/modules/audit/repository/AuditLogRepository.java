@@ -16,12 +16,7 @@ import java.util.UUID;
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
 
-    // ── Firm Admin queries ──────────────────────────────────────────────────
 
-    /**
-     * Get all audit logs for a firm with optional date range.
-     * Uses COALESCE for null-safe date filtering.
-     */
     @Query("SELECT a FROM AuditLog a WHERE a.firmId = :firmId " +
             "AND (a.createdAt >= COALESCE(:from, a.createdAt)) " +
             "AND (a.createdAt <= COALESCE(:to, a.createdAt)) " +
@@ -32,9 +27,6 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             @Param("to") LocalDateTime to,
             Pageable pageable);
 
-    /**
-     * Get audit logs for a specific user within a firm.
-     */
     @Query("SELECT a FROM AuditLog a WHERE a.firmId = :firmId AND a.userId = :userId " +
             "AND (a.createdAt >= COALESCE(:from, a.createdAt)) " +
             "AND (a.createdAt <= COALESCE(:to, a.createdAt)) " +
@@ -46,9 +38,6 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             @Param("to") LocalDateTime to,
             Pageable pageable);
 
-    /**
-     * Get full history for a specific entity (case, document, user, etc.)
-     */
     @Query("SELECT a FROM AuditLog a WHERE a.firmId = :firmId " +
             "AND a.entityType = :entityType AND a.entityId = :entityId " +
             "ORDER BY a.createdAt DESC")
@@ -58,9 +47,6 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             @Param("entityId") UUID entityId,
             Pageable pageable);
 
-    /**
-     * Filter audit logs by action type within a firm.
-     */
     @Query("SELECT a FROM AuditLog a WHERE a.firmId = :firmId AND a.action = :action " +
             "AND (a.createdAt >= COALESCE(:from, a.createdAt)) " +
             "AND (a.createdAt <= COALESCE(:to, a.createdAt)) " +
@@ -72,11 +58,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             @Param("to") LocalDateTime to,
             Pageable pageable);
 
-    // ── Super Admin queries ──────────────────────────────────────────────────
 
-    /**
-     * Super Admin: Get all audit logs for a specific firm with optional filters.
-     */
     @Query("SELECT a FROM AuditLog a WHERE a.firmId = :firmId " +
             "AND (:action IS NULL OR a.action = :action) " +
             "AND (a.createdAt >= COALESCE(:from, a.createdAt)) " +
@@ -90,34 +72,21 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             Pageable pageable);
 
 
-    // ── Additional useful queries ──────────────────────────────────────────
 
-    /**
-     * Get recent audit logs for a firm (no date filter).
-     */
     @Query("SELECT a FROM AuditLog a WHERE a.firmId = :firmId " +
             "ORDER BY a.createdAt DESC")
     Page<AuditLog> findRecentByFirm(
             @Param("firmId") UUID firmId,
             Pageable pageable);
 
-    /**
-     * Get recent audit logs across all firms (super admin).
-     */
     @Query("SELECT a FROM AuditLog a ORDER BY a.createdAt DESC")
     Page<AuditLog> findRecent(Pageable pageable);
 
-    /**
-     * Count audit logs by action type for a firm.
-     */
     @Query("SELECT COUNT(a) FROM AuditLog a WHERE a.firmId = :firmId AND a.action = :action")
     long countByFirmAndAction(
             @Param("firmId") UUID firmId,
             @Param("action") AuditAction action);
 
-    /**
-     * Get audit logs by IP address.
-     */
     @Query("SELECT a FROM AuditLog a WHERE a.firmId = :firmId AND a.ipAddress = :ipAddress " +
             "ORDER BY a.createdAt DESC")
     Page<AuditLog> findByFirmAndIp(
@@ -125,11 +94,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             @Param("ipAddress") String ipAddress,
             Pageable pageable);
 
-    // ── Super Admin: cross-firm queries ────────────────────────────────────
 
-    /**
-     * All audit logs with optional date range, action, userType, and userId filters.
-     */
     @Query("SELECT a FROM AuditLog a " +
             "WHERE (:action IS NULL OR a.action = :action) " +
             "AND (:userType IS NULL OR a.userType = :userType) " +
@@ -145,9 +110,6 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             @Param("to") LocalDateTime to,
             Pageable pageable);
 
-    /**
-     * Audit logs for a specific user across all firms.
-     */
     @Query("SELECT a FROM AuditLog a WHERE a.userId = :userId " +
             "AND (a.createdAt >= COALESCE(:from, a.createdAt)) " +
             "AND (a.createdAt <= COALESCE(:to, a.createdAt)) " +
@@ -158,9 +120,6 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             @Param("to") LocalDateTime to,
             Pageable pageable);
 
-    /**
-     * Entity history across all firms.
-     */
     @Query("SELECT a FROM AuditLog a WHERE a.entityType = :entityType AND a.entityId = :entityId " +
             "ORDER BY a.createdAt DESC")
     Page<AuditLog> findByEntityTypeAndEntityId(

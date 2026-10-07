@@ -17,6 +17,4 @@ public class RecordJudgmentRequest {
     private UUID decisionInFavorOfPartyId;
 
     // NOTE: partyIsState is intentionally NOT here. It is recorded once at court-case
-    // creation (AddCourtCaseRequest.partyIsState) and the appeal-deadline engine always
-    // trusts that stored value — a per-call flag here could silently disagree with it.
 }

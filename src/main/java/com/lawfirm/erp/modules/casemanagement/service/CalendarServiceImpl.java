@@ -21,10 +21,6 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/**
- * The calendar is a read-only view over the unified CourtEvent table —
- * spanning all CourtCases (and thus all court levels) per advocate/firm.
- */
 @Service
 @RequiredArgsConstructor
 public class CalendarServiceImpl implements CalendarService {
@@ -89,10 +85,6 @@ public class CalendarServiceImpl implements CalendarService {
         return enrich(visibleToCaller(firmId, events));
     }
 
-    /**
-     * A client-portal account may only see hearings belonging to its own matters.
-     * Staff are returned the full firm calendar unchanged.
-     */
     private List<CourtEvent> visibleToCaller(UUID firmId, List<CourtEvent> events) {
         if (!readScopeGuard.isClientScope() || events.isEmpty()) {
             return events;
@@ -103,7 +95,6 @@ public class CalendarServiceImpl implements CalendarService {
                 .collect(Collectors.toList());
     }
 
-    /** Court cases of every matter owned by the calling client — column link or marked party. */
     private List<UUID> clientCourtCaseIds(UUID firmId) {
         UUID clientId = readScopeGuard.currentUserId();
         Set<UUID> matterIds = new java.util.HashSet<>(
@@ -117,10 +108,6 @@ public class CalendarServiceImpl implements CalendarService {
         return courtCaseRepository.findIdsByMatterIdIn(List.copyOf(matterIds));
     }
 
-    /**
-     * Returns court case IDs for matters where the employee is the assigned partner.
-     * This ensures employees only see calendar events from matters they own.
-     */
     private List<UUID> getAssignedCourtCaseIds(UUID firmId, UUID advocateId) {
         List<UUID> matterIds = matterRepository.findIdsByFirmIdAndAssignedPartnerId(firmId, advocateId);
         if (matterIds.isEmpty()) {
@@ -129,9 +116,6 @@ public class CalendarServiceImpl implements CalendarService {
         return courtCaseRepository.findIdsByMatterIdIn(matterIds);
     }
 
-    /**
-     * Two batched lookups (court cases, then matters) — no N+1.
-     */
     private List<CalendarEventResponse> enrich(List<CourtEvent> events) {
         if (events.isEmpty()) return List.of();
 

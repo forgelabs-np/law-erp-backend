@@ -12,10 +12,6 @@ import lombok.Setter;
 
 import java.util.UUID;
 
-/**
- * The dispute as the firm tracks it — one record, forever.
- * Owns an unbounded, ordered, branchable chain of CourtCase records.
- */
 @Entity
 @Table(name = "matters", indexes = {
         @Index(name = "idx_matters_firm_type", columnList = "firmId, matterType"),
@@ -46,20 +42,12 @@ public class Matter extends ActiveAuditableEntity {
     @Column(length = 10, nullable = false)
     private MatterStatus status = MatterStatus.ACTIVE;
 
-    /** Pointer to whichever CourtCase is presently the active leaf — UI opens this by default. */
     private UUID currentCourtCaseId;
 
-    /** Overall matter owner (may differ from per-instance advocate). */
     private UUID assignedPartnerId;
 
-    /**
-     * The client this matter is for — the client portal's "my cases" link and the
-     * anchor for OWN-scope filtering. Nullable: a matter may be opened before the
-     * client account exists (opposing-party-only, pro bono intake, etc.).
-     */
     private UUID clientUserId;
 
-    /** Denormalized client name — survives the client account being deleted. */
     @Column(name = "client_name", length = 200)
     private String clientName;
 

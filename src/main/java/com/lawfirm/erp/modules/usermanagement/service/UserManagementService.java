@@ -28,10 +28,6 @@ public interface UserManagementService {
 
     List<UserProfileResponse.ActivityEntry> getUserActivity(UUID userId, LocalDateTime from, LocalDateTime to, int page, int size);
 
-    /**
-     * Sets a new password for another user. With none supplied, a policy-compliant temporary one
-     * is generated and returned; either way the holder must rotate it on the next login.
-     */
     PasswordResetResult resetPassword(UUID userId, ResetPasswordRequest request);
 
     void resetMfa(UUID userId, MfaResetRequest request);

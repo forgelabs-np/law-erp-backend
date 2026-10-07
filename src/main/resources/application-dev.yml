@@ -54,6 +54,11 @@ super-admin:
 app:
   name: Tarikh
   production: false
+  # Dev-only convenience: arms the "123456" MFA bypass. MFA_DEV_BYPASS in system_config
+  # overrides this once an admin sets it; production mode blocks the bypass regardless, and this
+  # property is absent from application-prod.yml.
+  security:
+    mfa-dev-bypass: true
 
 # Local MinIO from docker-compose.yml. The endpoint must be the URL the BROWSER can reach,
 # because document uploads/downloads go straight to storage and never through this app.

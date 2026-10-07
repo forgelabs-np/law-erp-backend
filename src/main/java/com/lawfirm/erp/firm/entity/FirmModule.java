@@ -43,7 +43,7 @@ public class FirmModule extends AuditableEntity {
     private Integer maxFileSizeMb = 10;
 
     @Column(name = "allowed_extensions", length = 500)
-    private String allowedExtensions; // CSV: "pdf,docx,doc,jpg,png"
+    private String allowedExtensions;
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;

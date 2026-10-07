@@ -2,19 +2,8 @@ package com.lawfirm.erp.modules.casemanagement.enums;
 
 import java.util.Set;
 
-/**
- * v2 stage machine — keyed by (court level x matter type x relation type).
- *
- * Trial-level (District) civil and criminal have their own lifecycles.
- * Appellate-level (High/Supreme/Specialized) procedure is shared by both types.
- * Writ petitions (filed directly at HC/SC) have their own short lifecycle.
- *
- * HEARING_STAGE is deliberately one wide bucket: the granular Tarik/Peshi
- * progress lives in the CourtEvent stream, not duplicated here.
- */
 public enum CourtCaseStage {
 
-    // Trial-level civil (District)
     FILED,
     SUMMONS_ISSUED,
     RESPONSE_PENDING,
@@ -27,19 +16,16 @@ public enum CourtCaseStage {
     SENTENCING,
     CLOSED,
 
-    // Trial-level criminal (District)
     FIR_REGISTERED,
     UNDER_INVESTIGATION,
     CHARGE_SHEET_FILED,
 
-    // Appellate-level (High / Supreme / Specialized)
     APPEAL_FILED,
     ADMITTED,
     NOTICE_ISSUED,
     FURTHER_APPEALED,
     REMANDED,
 
-    // Writ (direct HC/SC filing)
     WRIT_FILED,
     ORDER_ISSUED;
 
@@ -106,18 +92,14 @@ public enum CourtCaseStage {
             case REMANDED -> Set.of(CLOSED);
             case EXECUTION -> Set.of(CLOSED);
             case ORDER_ISSUED -> Set.of(CLOSED);
-            case CLOSED -> Set.of(); // terminal
+            case CLOSED -> Set.of();
         };
     }
 
-    /**
-     * Stages that mean "this CourtCase has been superseded by a child" (appeal/remand filed).
-     */
     public static boolean isSuperseded(CourtCaseStage s) {
         return s == APPEALED || s == FURTHER_APPEALED || s == REMANDED;
     }
 
-    /** Stages that close the door on further movement. */
     public static boolean isTerminal(CourtCaseStage s) {
         return s == CLOSED;
     }

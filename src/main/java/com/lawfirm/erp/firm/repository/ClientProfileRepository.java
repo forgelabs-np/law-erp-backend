@@ -16,7 +16,6 @@ public interface ClientProfileRepository extends JpaRepository<ClientProfile, UU
 
     boolean existsByUserId(UUID userId);
 
-    // Count clients in a firm — used for code generation
     @Query("SELECT COUNT(cp) FROM ClientProfile cp WHERE cp.user.firm.id = :firmId")
     long countByFirmId(@Param("firmId") UUID firmId);
 }

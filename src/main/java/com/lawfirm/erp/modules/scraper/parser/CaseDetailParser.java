@@ -13,9 +13,6 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// case_process_detail page: header h2 carries the case numbers, dl blocks the case info,
-// then three record_display tables — तारेख विवरण (dates), वादी/प्रतिवादी (parties),
-// पेशी विवरण (hearing history with judge + order). "भेटिएन" means not found.
 @Component
 public class CaseDetailParser {
 

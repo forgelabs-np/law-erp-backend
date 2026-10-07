@@ -86,8 +86,6 @@ public class MeServiceImpl implements MeService {
         user.setLockedUntil(null);
         userRepository.save(user);
 
-        // Changing a password is also "sign out everywhere": every token minted before this
-        // point carries the old permissionVersion and is refused by JwtAuthFilter.
         userRepository.incrementPermissionVersion(userId);
 
         auditService.log(AuditAction.PASSWORD_CHANGED, AuditEntity.AUTH, userId,
@@ -103,12 +101,10 @@ public class MeServiceImpl implements MeService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Gate: suspended firm users cannot access anything
         if (user.getFirm() != null && user.getFirm().getStatus() == FirmStatus.SUSPENDED) {
             throw new ForbiddenException("Your firm account has been suspended. Contact support.");
         }
 
-        // Gate: trial expired — firm users get empty modules
         boolean trialExpired = false;
         if (user.getFirm() != null && Boolean.TRUE.equals(user.getFirm().getIsTrial())
                 && user.getFirm().getTrialExpiresAt() != null

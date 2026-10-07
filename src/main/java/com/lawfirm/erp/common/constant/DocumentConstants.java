@@ -1,6 +1,5 @@
 package com.lawfirm.erp.common.constant;
 
-/** Swagger summaries and descriptions for the document endpoints. */
 public final class DocumentConstants {
 
     public static final String UPLOAD_SUMMARY = "Upload a document";

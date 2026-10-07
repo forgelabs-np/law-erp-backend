@@ -23,7 +23,7 @@ public class ModuleResponse {
     private List<ModuleResponse> subModules;
     private Integer level;
     private Integer displayOrder;
-    private Integer sortOrder;      // ← NEW field
+    private Integer sortOrder;
     private String icon;
     private String path;
     private Boolean isSystem;

@@ -7,9 +7,5 @@ public interface MeService {
 
     MeResponse getMe();
 
-    /**
-     * Changes the signed-in user's own password: proves the current one, refuses a repeat of it,
-     * and revokes every other session the account holds.
-     */
     void changeOwnPassword(ChangeOwnPasswordRequest request);
 }

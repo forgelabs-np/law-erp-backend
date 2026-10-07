@@ -40,7 +40,6 @@ public class Firm extends ActiveAuditableEntity {
     @Column(columnDefinition = "TEXT")
     private String settings;
 
-    // ── Trial fields ──────────────────────────────────────────────────
     @Column(name = "is_trial")
     private Boolean isTrial = false;
 

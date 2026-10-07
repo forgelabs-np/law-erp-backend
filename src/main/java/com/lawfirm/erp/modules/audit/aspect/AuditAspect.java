@@ -24,17 +24,6 @@ import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Aspect that intercepts methods annotated with @Audit and logs audit entries.
- *
- * Flow:
- *   1. Method executes normally → gets result
- *   2. If skipIfNullResult is true and result is null → skip audit
- *   3. Resolve entityId and summary via SpEL
- *   4. Create and save AuditLog
- *
- * Audit is @Async so it never blocks the main thread.
- */
 @Aspect
 @Component
 @RequiredArgsConstructor
@@ -46,23 +35,18 @@ public class AuditAspect {
 
     @Around("@annotation(com.lawfirm.erp.modules.audit.annotation.Audit)")
     public Object logAudit(ProceedingJoinPoint joinPoint) throws Throwable {
-        // 1. Execute the method first
         Object result = joinPoint.proceed();
 
-        // 2. Get the annotation and method info
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         Method method = signature.getMethod();
         Audit audit = method.getAnnotation(Audit.class);
 
-        // 3. Skip if result is null and skipIfNullResult is true
         if (audit.skipIfNullResult() && result == null) {
             return result;
         }
 
-        // 4. Build parameter map for SpEL
         Map<String, Object> params = AuditSpelHelper.buildParameterMap(method, joinPoint.getArgs());
 
-        // 5. Evaluate entityId and summary using SpEL
         Object entityIdObj = AuditSpelHelper.evaluate(audit.entityId(), result, params);
         String summary = (String) AuditSpelHelper.evaluate(audit.summary(), result, params);
 
@@ -74,12 +58,10 @@ public class AuditAspect {
                 try {
                     entityId = UUID.fromString((String) entityIdObj);
                 } catch (IllegalArgumentException ignored) {
-                    // Not a valid UUID
                 }
             }
         }
 
-        // 6. Get current user and IP
         AuthenticatedUser user = getCurrentUser();
         if (user == null) {
             log.warn("AuditAspect: No authenticated user found for method {}", method.getName());
@@ -88,7 +70,6 @@ public class AuditAspect {
 
         String ip = getClientIp();
 
-        // 7. Save audit log (async)
         saveAuditLogAsync(
                 user.getFirmId(),
                 user.getId(),
@@ -121,14 +102,6 @@ public class AuditAspect {
         }
     }
 
-    /**
-     * Resolves the caller the same way {@code AuditServiceImpl} does: the request-scoped user
-     * first, then the security context.
-     *
-     * <p>Checking the security context principal alone never matched here — {@code JwtAuthFilter}
-     * sets an {@code AuthenticatedDetail} as the principal and publishes the
-     * {@code AuthenticatedUser} as a request attribute — so annotated methods logged nothing.
-     */
     private AuthenticatedUser getCurrentUser() {
         try {
             AuthenticatedUser fromRequest = currentUserResolver.getCurrentUser();
@@ -165,7 +138,7 @@ public class AuditAspect {
 
     private String toUserTypeChar(AuthenticatedUser user) {
         if (user.isSuperAdmin()) return "S";
-        return "F"; // default to FIRM_USER
+        return "F";
     }
 
     private String truncate(String s, int max) {

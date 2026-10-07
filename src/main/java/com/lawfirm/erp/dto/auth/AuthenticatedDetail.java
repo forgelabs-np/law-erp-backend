@@ -33,7 +33,7 @@ public class AuthenticatedDetail implements UserDetails {
 
     @Override
     public String getPassword() {
-        return null;  // Token-based auth doesn't need password
+        return null;
     }
 
     @Override

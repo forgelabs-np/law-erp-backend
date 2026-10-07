@@ -13,7 +13,6 @@ import java.util.UUID;
 @Repository
 public interface ClientCaseRepository extends JpaRepository<ClientCase, Long> {
 
-    /** The courts we actually have active client cases in — the dynamic scrape list. */
     @Query("SELECT DISTINCT cc.courtId FROM ClientCase cc " +
            "WHERE cc.caseStatus = com.lawfirm.erp.modules.scraper.enums.ClientCaseStatus.ACTIVE " +
            "AND cc.active = true")
@@ -21,24 +20,16 @@ public interface ClientCaseRepository extends JpaRepository<ClientCase, Long> {
 
     Optional<ClientCase> findByCaseNoInternal(String caseNoInternal);
 
+    Optional<ClientCase> findByCaseNoInternalAndFirmId(String caseNoInternal, UUID firmId);
+
+    List<ClientCase> findByClientIdAndFirmIdAndActive(UUID clientId, UUID firmId, boolean active);
+
     List<ClientCase> findByCourtIdAndCaseStatus(Integer courtId,
             com.lawfirm.erp.modules.scraper.enums.ClientCaseStatus caseStatus);
 
-    /**
-     * Find client case by court's official number (Nepali BS format).
-     * Used for matching court case numbers from case management module.
-     */
     Optional<ClientCase> findByCourtIdAndCaseNoBs(Integer courtId, String caseNoBs);
 
-    /**
-     * Find all client cases for a specific client.
-     * Used for lawyer dashboard to see all tracked cases.
-     */
     List<ClientCase> findByClientIdAndActive(UUID clientId, boolean active);
 
-    /**
-     * Find client cases by court ID and active status.
-     * Used for bulk operations and scraper optimization.
-     */
     List<ClientCase> findByCourtIdAndActive(Integer courtId, boolean active);
 }

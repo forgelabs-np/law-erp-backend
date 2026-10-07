@@ -4,7 +4,6 @@ public final class UserManagementConstants {
 
     private UserManagementConstants() {}
 
-    // UserManagementController
     public static final String LIST_USERS_SUMMARY = "List all users in the firm";
     public static final String LIST_USERS_DESCRIPTION = "Returns firm admins (FIRM), employees (FIRM_USER), and clients (CLIENT). Filter by userType, roleId, or isActive status.";
 
@@ -32,7 +31,6 @@ public final class UserManagementConstants {
     public static final String BULK_ROLE_CHANGE_SUMMARY = "Reassign role for multiple users at once";
     public static final String BULK_ROLE_CHANGE_DESCRIPTION = "Changes the role for all given users. Validates role belongs to this firm. Invalidates JWT for all affected users. Returns per-user success/failure details.";
 
-    // GlobalDashboardController
     public static final String GET_DASHBOARD_SUMMARY = "Get global dashboard";
     public static final String GET_DASHBOARD_DESCRIPTION = "Aggregated stats across users, firms, case management, scraper, and recent activity. FIRM_ADMIN sees firm-scoped data; SUPER_ADMIN sees all firms.";
 }

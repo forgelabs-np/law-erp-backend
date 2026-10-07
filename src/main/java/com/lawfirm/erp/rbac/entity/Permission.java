@@ -29,7 +29,7 @@ public class Permission extends ActiveAuditableEntity {
     private PermissionScope scope = PermissionScope.TENANT;
 
     @Column(nullable = false, unique = true, length = 100)
-    private String code;  // Format: MODULE:ACTION (e.g., "CASE_MANAGEMENT:VIEW")
+    private String code;
 
     @Column(length = 200)
     private String description;

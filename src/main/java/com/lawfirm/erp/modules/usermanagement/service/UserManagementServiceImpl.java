@@ -83,7 +83,6 @@ public class UserManagementServiceImpl implements UserManagementService {
             users = users.stream().filter(u -> u.isActive() == isActive).toList();
         }
 
-        // Sort by createdAt descending and map to DTOs
         List<UserSummaryResponse> summaries = users.stream()
                 .sorted(Comparator.comparing(User::getCreatedAt).reversed())
                 .map(userManagementMapper::toSummary)
@@ -212,9 +211,6 @@ public class UserManagementServiceImpl implements UserManagementService {
         UUID firmId = getRequiredFirmId();
         User user = getValidatedUser(userId, firmId);
 
-        // The console's reset is a confirmation dialog: it sends no password. Generate one that
-        // satisfies the product's policy and hand it back to the admin to pass on, rather than
-        // refusing the action the button was built for.
         String chosen = request != null ? request.getNewPassword() : null;
         boolean generated = chosen == null || chosen.isBlank();
 
@@ -228,8 +224,6 @@ public class UserManagementServiceImpl implements UserManagementService {
         }
 
         user.setPassword(passwordEncoder.encode(chosen));
-        // An admin-issued password is a temporary credential: force the holder to pick
-        // their own on the next login, whether or not the account is brand new.
         user.setMustChangePassword(true);
         user.setLoginAttempts(0);
         user.setLockedUntil(null);
@@ -254,16 +248,11 @@ public class UserManagementServiceImpl implements UserManagementService {
         return PasswordResetResult.builder()
                 .username(user.getUsername())
                 .generated(generated)
-                // Only ever echoed for a password we generated: an admin-chosen one is theirs.
                 .temporaryPassword(generated ? chosen : null)
                 .mustChangePassword(true)
                 .build();
     }
 
-    /**
-     * A bulk selection must not be empty. Checked here rather than only on the DTO because the
-     * screens post the payload bare, which the envelope's {@code @Valid} never saw.
-     */
     private void requireUserIds(List<UUID> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             throw new BusinessRuleException("At least one user ID is required");
@@ -278,7 +267,6 @@ public class UserManagementServiceImpl implements UserManagementService {
 
         user.setMfaSecret(null);
         user.setMfaVerified(false);
-        // Keep mfaEnabled=true so user is forced to re-setup MFA on next login
         userRepository.save(user);
 
         String reason = request.getReason() != null ? request.getReason() : "No reason provided";
@@ -297,7 +285,6 @@ public class UserManagementServiceImpl implements UserManagementService {
         UUID firmId = getRequiredFirmId();
         UUID currentUserId = currentUserResolver.getCurrentUserId();
 
-        // Batch-load all users in one query (avoids N+1)
         List<User> users = userRepository.findAllById(request.getUserIds());
         Map<UUID, User> userMap = users.stream()
                 .collect(Collectors.toMap(User::getId, u -> u));
@@ -380,7 +367,6 @@ public class UserManagementServiceImpl implements UserManagementService {
         List<String> failed = new ArrayList<>();
         int succeeded = 0;
 
-        // Batch-load all users in one query (avoids N+1)
         List<User> allUsers = userRepository.findAllById(request.getUserIds());
         Map<UUID, User> userMap = allUsers.stream()
                 .collect(Collectors.toMap(User::getId, u -> u));

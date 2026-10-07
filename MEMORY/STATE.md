@@ -1,6 +1,31 @@
 # Project State
 
 ## Current Focus
+**2026-10-07 — closed out the 2026-10-05 E2E report's open items (D6, D7, T1, T4, T5, T6); 627 tests green.**
+D7: a client is now created with `mustChangePassword=true`, so its first portal sign-in is a forced
+rotation exactly like an employee's. D6: `GlobalExceptionHandler` already surfaced
+`BadCredentialsException` messages (unlogged 2026-10-06 work), but that turned `/auth/login` into a
+**username oracle** — every account-state reason was thrown *before* the password was compared.
+`performAuthentication` was reordered: firm/suspended → user lookup → lockout → **password proof** →
+inactive/blocked/wrong-door/portal-disabled. **`AuthenticationManager` was replaced by
+`passwordEncoder.matches`** because `DaoAuthenticationProvider` refuses a disabled/locked account in
+its pre-authentication checks (before the password), which would make those reasons unreachable; it
+also looked the user up globally while this flow resolves them per firm. New probes
+FINDING-4a/4b/4c/5. Per the standing convention the dev MFA bypass moved out of yml-only into a new
+`MFA_DEV_BYPASS` system-config key (`seed=false`, yml as the pre-seed fallback; production mode still
+blocks it). **Live verification:** the dev PostgreSQL still had `users.mfa_secret = varchar(64)` —
+`V2026_10_06__widen_mfa_secret.sql` was unrun, so encrypted secrets could not fit; applied over
+JDBC. The E2E ran against **real PostgreSQL** in a disposable `e2e_scratch` schema (186 s, pass), and
+a real HTTP upload through the **real MinIO** returned `ACTIVE` with the presigned download
+byte-identical. Also repaired the unlogged 2026-10-06 session's collateral: the test profile never
+armed the new MFA-bypass flag (the E2E was red) and `AuthSecurityQaTest` needed the client rotation.
+Reported not fixed: `documents_status_check` still permits `PENDING_UPLOAD`. Full detail in
+`memory/2026-10-07.md`.
+
+## Previous Focus (2026-10-05)
+**2026-10-05 — full-journey E2E pass (super admin → firm admin → employee/client); 3 auth/config bugs found and fixed.** Added `FullLifecycleE2ETest`, which walks the whole lifecycle over real HTTP with real logins (SA register → MFA setup → firm + firm admin → forced rotation + MFA → employee create/login → client portal), closing the gap left by suites that mint tokens directly. Probes found and fixed: (1) a **second super admin** could register (guard was per-username, not singleton); (2) `LOGIN_MAX_ATTEMPTS`/`LOGIN_LOCK_MINUTES` in `system_config` were **dead** — `AuthServiceImpl` used a yml `@Value` + hardcoded 30 min, so the admin lockout settings did nothing; (3) the first-login **password-change token was replayable** (usable twice within its 10 min). 616 → 620 tests green. **Same day, separate bug:** document upload failed on PostgreSQL with `23514` on `matter_timeline_event_type_check` — `V2026_09_28__document_store_constraints.sql` had never been applied (Hibernate `ddl-auto=update` never ALTERs an existing enum CHECK). Applied it over JDBC (13 → 14 values incl. `DOCUMENT_UPLOADED`, verified by a rolled-back insert) and fixed a secondary orphaned-object leak in `DocumentServiceImpl.upload` (a post-`put` failure left the stored object behind). Added `MigrationConstraintDriftTest` to fail the build when an enum value lacks a migration. 623 tests green. Reported not fixed: `GlobalExceptionHandler` masks every `BadCredentialsException` as "Invalid username or password", and clients are not forced to rotate the firm-admin-set password. Full detail in `memory/2026-10-05.md`.
+
+## Earlier Focus (2026-10-03)
 **2026-10-03 — the document upload flow is now ONE call; there is no confirm and no PENDING_UPLOAD.**
 `POST /api/v1/firm/documents` (multipart: `file` + `matterNumber`/`projectCode` + optional
 `courtCaseRef`) stores the file and returns the document **ACTIVE** immediately. The 3-step flow only
@@ -173,8 +198,13 @@ extension and `docs/frontend-reset-password-guide.md`. 2026-09-25 adds `UpdateFi
 `SuperAdminQaTest` SA-04b/SA-04c and the Postman request. **2026-09-28 adds the whole document store**
 (`common/storage/**`, `modules/document/**`, `StorageQuotaController`, the audit-aspect fixes, the
 `MatterScopeGuard` fix, minio + okhttp-jvm deps, `docker-compose.yml`, the `V2026_09_28` migration, 125
-tests and two docs). (`production` still carries the uncommitted 2026-09-21 F-1..F-15 batch; PR #29 was
-merged into it from `devG`.)
+tests and two docs).(`production` still carries the uncommitted 2026-09-21 F-1..F-15 batch; PR #29 was merged into it
+from `devG`.) 2026-10-03 adds the one-call document upload + the MinIO stopgap; 2026-10-05 the
+E2E suite, the auth/config fixes, the migration drift guard and the repo-wide comment strip;
+**2026-10-06 the auth/RBAC hardening pass** (MFA-secret encryption, `EncryptedStringConverter`, the
+`V2026_10_06` migration, config-driven access-token expiry); **2026-10-07** the D6/D7 fixes, the
+`MFA_DEV_BYPASS` config key, the D6/D7 probes and the test-profile MFA-bypass flag. **Nothing since
+2026-09-23 has been committed.**
 **Build command on this machine:** plain `./mvnw -o test` — `JAVA_HOME` is already set correctly
 (`C:\Users\Dev\.jdks\ms-21.0.12`) and works. (The old instruction here pointed at
 `$HOME/.jdks/corretto-21.0.11`, which does not exist on this machine — corrected 2026-09-28.)
@@ -248,6 +278,10 @@ threshold, limit, timeout, expiry, quota or filename length in code and never bu
 - **Postman** — sections 8-11 for all new endpoints
 
 ## Deep History Index
+- `memory/2026-10-07.md` — D6 login-message ordering (why the password is proved before any state is named, and why `AuthenticationManager` was dropped), D7 client rotation, `MFA_DEV_BYPASS` as a system-config key, the live-Postgres schema check that caught the unrun `mfa_secret` migration, the real-PostgreSQL E2E run, and the live MinIO upload + presigned round-trip; the QA-harness raw-password gotcha
+- `memory/2026-10-06.md` — **reconstructed** unlogged hardening pass: MFA-secret encryption at rest + its migration, dev-MFA-bypass flag, access-token expiry from config, atomic refresh rotation, MFA-attempt throttling, password policy on change/reset, `handleBadCredentials` surfacing messages, and the two collateral breaks (red suite, unrun migration) that 2026-10-07 repaired
+- `docs/e2e-report-2026-10-05.md` — full-lifecycle E2E test report: journey steps, 623-green result, defects D1–D5 with evidence, D6/D7 reported-not-fixed, live migration note, TODO and enhancements
+- `memory/2026-10-05.md` — full-journey E2E (`FullLifecycleE2ETest`) + the three fixed defects (multiple super admins, dead login-lockout config, replayable password-change token), the document migration + orphan-leak fix, and the comment strip
 - `memory/2026-10-03.md` — doc 13 `download-url` 400 explained: row is `PENDING_UPLOAD` (never
   confirmed), object storage down; the endpoint is behaving as designed. No code change.
 - `memory/2026-10-01.md` — document list gains an embedded presigned `documentUrl` (ACTIVE-only); why

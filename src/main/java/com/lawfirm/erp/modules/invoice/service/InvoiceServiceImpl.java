@@ -65,7 +65,6 @@ public class InvoiceServiceImpl implements InvoiceService {
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Invoice> invoicePage = invoiceRepository.search(search, status, firmId, pageable);
 
-        // Batch-resolve firm names
         List<UUID> firmIds = invoicePage.getContent().stream()
                 .map(Invoice::getFirmId).distinct().collect(Collectors.toList());
         java.util.Map<UUID, Firm> firmMap = firmIds.isEmpty() ? java.util.Map.of()
@@ -112,7 +111,6 @@ public class InvoiceServiceImpl implements InvoiceService {
                         .createdBy(adminId)
                         .build();
 
-                // Build line items
                 List<InvoiceItem> items = new ArrayList<>();
                 for (int i = 0; i < request.getItems().size(); i++) {
                     InvoiceItemRequest itemReq = request.getItems().get(i);
@@ -130,9 +128,9 @@ public class InvoiceServiceImpl implements InvoiceService {
                 invoice.recalculateTotals();
 
                 invoice = invoiceRepository.save(invoice);
-                break; // success
+                break;
             } catch (org.springframework.dao.DataIntegrityViolationException e) {
-                if (attempt == 4) throw e; // give up after 5 tries
+                if (attempt == 4) throw e;
                 log.warn("Invoice number collision on attempt {}, retrying...", attempt + 1);
             }
         }
@@ -157,12 +155,9 @@ public class InvoiceServiceImpl implements InvoiceService {
         if (request.getPaymentTerms() != null) invoice.setPaymentTerms(request.getPaymentTerms());
         if (request.getNotes() != null) invoice.setNotes(request.getNotes());
 
-        // Replace line items if provided
         if (request.getItems() != null) {
-            // Remove old items
             invoice.getItems().clear();
 
-            // Add new items
             for (int i = 0; i < request.getItems().size(); i++) {
                 InvoiceItemRequest itemReq = request.getItems().get(i);
                 InvoiceItem item = InvoiceItem.builder()
@@ -252,7 +247,6 @@ public class InvoiceServiceImpl implements InvoiceService {
         Firm firm = firmRepository.findById(invoice.getFirmId())
                 .orElseThrow(() -> new ResourceNotFoundException("Firm not found"));
 
-        // Find firm admin email
         User firmAdmin = userRepository.findFirmAdminsByFirmId(firm.getId()).stream().findFirst()
                 .orElseThrow(() -> new BusinessRuleException("No firm admin found for firm: " + firm.getName()));
 
@@ -274,7 +268,6 @@ public class InvoiceServiceImpl implements InvoiceService {
         log.info("Invoice {} sent to {} at {}", invoice.getInvoiceNumber(), firmAdmin.getFullName(), firmAdmin.getEmail());
     }
 
-    // ─── Helpers ──────────────────────────────────────────────────────────
 
     private Invoice findInvoice(UUID id) {
         return invoiceRepository.findById(id)
@@ -296,7 +289,7 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         int nextSeq = 1;
         if (!existing.isEmpty()) {
-            String last = existing.get(0); // e.g. INV-2025-0015
+            String last = existing.get(0);
             String seqPart = last.substring(last.lastIndexOf('-') + 1);
             nextSeq = Integer.parseInt(seqPart) + 1;
         }

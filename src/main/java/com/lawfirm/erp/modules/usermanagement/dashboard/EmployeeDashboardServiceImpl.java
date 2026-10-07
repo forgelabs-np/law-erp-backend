@@ -35,13 +35,11 @@ public class EmployeeDashboardServiceImpl implements EmployeeDashboardService {
         UUID firmId = getRequiredFirmId(scope);
         UUID userId = scope.getUserId();
 
-        // Get only this user's assigned matters
         List<UUID> assignedMatterIds = assignmentService.getAssignedMatterIds(userId, firmId);
         if (assignedMatterIds.isEmpty()) {
             return emptyDashboard();
         }
 
-        // 1 batch query for matters
         List<Matter> matters = matterRepository.findAllById(assignedMatterIds).stream()
                 .filter(m -> m.getFirmId().equals(firmId))
                 .collect(Collectors.toList());
@@ -50,7 +48,6 @@ public class EmployeeDashboardServiceImpl implements EmployeeDashboardService {
                 .filter(m -> m.getStatus() == MatterStatus.ACTIVE)
                 .count();
 
-        // 1 batch query for leaf court cases
         List<UUID> leafIds = matters.stream().map(Matter::getCurrentCourtCaseId)
                 .filter(Objects::nonNull).collect(Collectors.toList());
         Map<UUID, Matter> matterMap = matters.stream().collect(Collectors.toMap(Matter::getId, m -> m));
@@ -58,26 +55,21 @@ public class EmployeeDashboardServiceImpl implements EmployeeDashboardService {
                 : courtCaseRepository.findAllById(leafIds).stream()
                 .collect(Collectors.toMap(CourtCase::getId, c -> c));
 
-        // 1 batch query for ALL events across all leaf cases — reused by all sub-methods
         Map<UUID, List<CourtEvent>> eventsByCC = leafIds.isEmpty() ? Map.of()
                 : courtEventRepository.findByCourtCaseIdInAndFirmIdOrderBySequenceNoAsc(leafIds, firmId)
                 .stream().collect(Collectors.groupingBy(CourtEvent::getCourtCaseId));
 
         LocalDate today = LocalDate.now();
 
-        // Filter today's events from the already-fetched data (no extra query)
         List<EmployeeDashboardResponse.MyTodayEvent> todayEvents = buildTodayEvents(
                 eventsByCC, ccMap, matterMap, userId, today);
 
-        // Upcoming hearings (next 14 days)
         List<EmployeeDashboardResponse.MyUpcomingHearing> upcomingHearings = buildUpcomingHearings(
                 eventsByCC, ccMap, matterMap, today, today.plusDays(14));
 
-        // Upcoming deadlines (next 30 days)
         List<EmployeeDashboardResponse.MyUpcomingDeadline> upcomingDeadlines = buildUpcomingDeadlines(
                 leafIds, ccMap, matterMap, today, today.plusDays(30));
 
-        // Stale matters (no hearing in 90 days)
         List<EmployeeDashboardResponse.MyStaleMatter> staleMatters = buildStaleMatters(
                 eventsByCC, ccMap, matterMap, today);
 
@@ -95,7 +87,6 @@ public class EmployeeDashboardServiceImpl implements EmployeeDashboardService {
                 .build();
     }
 
-    /** Filters pre-fetched events for today where this employee is the attending advocate. No DB call. */
     private List<EmployeeDashboardResponse.MyTodayEvent> buildTodayEvents(
             Map<UUID, List<CourtEvent>> eventsByCC, Map<UUID, CourtCase> ccMap,
             Map<UUID, Matter> matterMap, UUID userId, LocalDate today) {
@@ -119,7 +110,6 @@ public class EmployeeDashboardServiceImpl implements EmployeeDashboardService {
                 .collect(Collectors.toList());
     }
 
-    /** Filters pre-fetched events for next 14 days. No DB call. */
     private List<EmployeeDashboardResponse.MyUpcomingHearing> buildUpcomingHearings(
             Map<UUID, List<CourtEvent>> eventsByCC, Map<UUID, CourtCase> ccMap,
             Map<UUID, Matter> matterMap, LocalDate from, LocalDate to) {
@@ -153,7 +143,6 @@ public class EmployeeDashboardServiceImpl implements EmployeeDashboardService {
                 .collect(Collectors.toList());
     }
 
-    /** Checks pre-loaded court case data. No DB call. */
     private List<EmployeeDashboardResponse.MyUpcomingDeadline> buildUpcomingDeadlines(
             List<UUID> leafIds, Map<UUID, CourtCase> ccMap,
             Map<UUID, Matter> matterMap, LocalDate from, LocalDate to) {
@@ -200,7 +189,6 @@ public class EmployeeDashboardServiceImpl implements EmployeeDashboardService {
                 .collect(Collectors.toList());
     }
 
-    /** Checks pre-fetched events. No DB call. */
     private List<EmployeeDashboardResponse.MyStaleMatter> buildStaleMatters(
             Map<UUID, List<CourtEvent>> eventsByCC, Map<UUID, CourtCase> ccMap,
             Map<UUID, Matter> matterMap, LocalDate today) {

@@ -42,6 +42,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 
 import java.io.ByteArrayInputStream;
@@ -348,6 +349,21 @@ class DocumentServiceImplTest {
             assertThrows(BusinessRuleException.class,
                     () -> uploadCase("petition.pdf", "application/pdf", pdf));
             assertTrue(storageService.objects.isEmpty(), "the rejected object must not be left behind");
+        }
+
+        @Test
+        @DisplayName("a failure after the bytes are stored hands the object back (no orphan)")
+        void discardsWhenTimelinePersistenceFails() {
+            givenPlainFirmAdmin();
+            byte[] pdf = DocumentTestFiles.pdf("content");
+            doThrow(new DataIntegrityViolationException("matter_timeline_event_type_check"))
+                    .when(matterTimelineRepository).save(any(MatterTimelineEvent.class));
+
+            assertThrows(DataIntegrityViolationException.class,
+                    () -> uploadCase("petition.pdf", "application/pdf", pdf));
+            assertTrue(storageService.objects.isEmpty(),
+                    "an object stored before a failed timeline insert must be removed again");
+            assertFalse(storageService.deletedKeys.isEmpty());
         }
 
         @Test

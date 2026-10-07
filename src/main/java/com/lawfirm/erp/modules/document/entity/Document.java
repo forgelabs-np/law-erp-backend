@@ -27,17 +27,6 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * One stored document, bound to exactly one owner: a case ({@code matterId}) or a project
- * ({@code projectId}). The XOR between the two is enforced by the service and by a database
- * check constraint.
- *
- * <p>Two nullable foreign keys rather than a polymorphic {@code ownerType}/{@code ownerId}
- * pair, because both sides are queried and indexed independently and a discriminator column
- * could not be joined.
- *
- * <p>{@code status} — not an {@code isActive} flag — is the single lifecycle authority.
- */
 @Entity
 @Table(name = "documents", indexes = {
         @Index(name = "idx_documents_firm_matter", columnList = "firm_id, matter_id, status"),
@@ -56,25 +45,18 @@ public class Document {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * Stable external identity. Needed because {@code audit_logs.entity_id} is a UUID, so the
-     * numeric primary key cannot be the reference the audit trail stores.
-     */
     @Column(name = "uuid", nullable = false, unique = true, updatable = false)
     private UUID uuid;
 
     @Column(name = "firm_id", nullable = false)
     private UUID firmId;
 
-    /** Set when the document belongs to a case. Exactly one of matterId/projectId is present. */
     @Column(name = "matter_id")
     private UUID matterId;
 
-    /** Set when the document belongs to a project. */
     @Column(name = "project_id")
     private UUID projectId;
 
-    /** Optional tag for the specific court instance inside the matter. */
     @Column(name = "court_case_id")
     private UUID courtCaseId;
 
@@ -90,7 +72,6 @@ public class Document {
     @Column(name = "size_bytes", nullable = false)
     private long sizeBytes;
 
-    /** Object key in the storage bucket. Authoritative — the readable path is a convenience. */
     @Column(name = "storage_key", nullable = false, length = 500)
     private String storageKey;
 

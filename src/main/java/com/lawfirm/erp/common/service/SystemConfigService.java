@@ -26,13 +26,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * GLOBAL (platform-wide) settings. Values live in {@code system_config} and are read from
- * the DB every time they are needed, so a Super Admin change takes effect on the next
- * request without a rebuild. Per-firm values live in {@link FirmConfigService}.
- *
- * Sensitive (PASSWORD-type) values are AES-256 encrypted at rest and decrypted for admins.
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -41,18 +34,11 @@ public class SystemConfigService {
     private final SystemConfigRepository systemConfigRepository;
     private final ConfigEncryptionUtil configEncryptionUtil;
 
-    /**
-     * Supplies the connection settings and the pre-seed fallback for the STORAGE policy values.
-     * Nothing is read from {@code storage.minio} once the STORAGE keys exist in the DB, but a
-     * fresh deployment seeds from whatever the running yml holds.
-     */
     private final StorageProperties storageProperties;
 
-    /** application.yml app.production — seed default for APP_PRODUCTION only. */
     @Value("${app.production:false}")
     private boolean appProductionFallback;
 
-    // GLOBAL scope keys
     public static final String KEY_SMTP_HOST = "SMTP_HOST";
     public static final String KEY_SMTP_PORT = "SMTP_PORT";
     public static final String KEY_SMTP_USERNAME = "SMTP_USERNAME";
@@ -65,12 +51,14 @@ public class SystemConfigService {
     public static final String KEY_CLIENT_PORTAL_URL = "CLIENT_PORTAL_URL";
     public static final String KEY_MFA_ENABLED = "MFA_ENABLED";
     public static final String KEY_MFA_REQUIRED_ROLES = "MFA_REQUIRED_ROLES";
+    public static final String KEY_MFA_DEV_BYPASS = "MFA_DEV_BYPASS";
     public static final String KEY_REGISTRATION_SECRET = "REGISTRATION_SECRET";
     public static final String KEY_LOGIN_MAX_ATTEMPTS = "LOGIN_MAX_ATTEMPTS";
     public static final String KEY_LOGIN_LOCK_MINUTES = "LOGIN_LOCK_MINUTES";
     public static final String KEY_TRIAL_DEFAULT_DAYS = "TRIAL_DEFAULT_DAYS";
     public static final String KEY_TRIAL_WARNING_DAYS = "TRIAL_WARNING_DAYS";
     public static final String KEY_NOTIFICATION_MAX_ATTEMPTS = "NOTIFICATION_MAX_ATTEMPTS";
+    public static final String KEY_ACCESS_TOKEN_EXPIRY_MINUTES = "ACCESS_TOKEN_EXPIRY_MINUTES";
 
     // STORAGE-scope keys: object-storage policy, global because the store is shared infra.
     public static final String KEY_STORAGE_MAX_FILE_SIZE_BYTES = "STORAGE_MAX_FILE_SIZE_BYTES";
@@ -79,20 +67,15 @@ public class SystemConfigService {
     public static final String KEY_STORAGE_DEFAULT_QUOTA_BYTES = "STORAGE_DEFAULT_QUOTA_BYTES";
     public static final String KEY_DOCUMENT_MAX_FILENAME_LENGTH = "DOCUMENT_MAX_FILENAME_LENGTH";
 
-    /** Fallbacks, mirrored in {@link ConfigKeyRegistry} and {@link StorageProperties}. */
     public static final long DEFAULT_STORAGE_MAX_FILE_SIZE_BYTES = 50L * 1024 * 1024;
     public static final int DEFAULT_STORAGE_UPLOAD_EXPIRY_SECONDS = 1800;
     public static final int DEFAULT_STORAGE_DOWNLOAD_EXPIRY_SECONDS = 900;
     public static final long DEFAULT_STORAGE_QUOTA_BYTES = 5L * 1024 * 1024 * 1024;
     public static final int DEFAULT_DOCUMENT_MAX_FILENAME_LENGTH = 120;
 
-    /** Fallbacks, mirrored as registry defaults. */
     public static final String DEFAULT_LOGIN_URL = "https://app.nepalcrm.com/login";
     public static final String DEFAULT_CLIENT_PORTAL_URL = "https://app.nepalcrm.com/portal";
 
-    // ========================================================================
-    // Reads
-    // ========================================================================
 
     public Optional<String> getGlobal(String key) {
         return systemConfigRepository.findByConfigKey(key)
@@ -104,14 +87,10 @@ public class SystemConfigService {
         return toValueMap(systemConfigRepository.findAll());
     }
 
-    /** All active GLOBAL settings with their metadata, sorted by group then key. */
     public List<SystemConfigSettingView> getGlobalSettings() {
         return toViews(systemConfigRepository.findAll());
     }
 
-    // ========================================================================
-    // Writes
-    // ========================================================================
 
     @Transactional
     public SystemConfig setGlobal(String key, String value) {
@@ -139,10 +118,6 @@ public class SystemConfigService {
         log.info("Deleted global config: {}", key);
     }
 
-    /**
-     * Inserts default rows for every registry entry marked seed. Insert-if-missing only:
-     * a value an admin has edited is never touched on restart.
-     */
     @Transactional
     public void seedGlobalDefaults() {
         int inserted = 0;
@@ -180,11 +155,7 @@ public class SystemConfigService {
         }
     }
 
-    // ========================================================================
-    // Runtime policy helpers (DB-driven, code defaults when key absent)
-    // ========================================================================
 
-    /** MFA enforcement on/off. Defaults to true (fail closed) when the key is absent. */
     public boolean isMfaEnabled() {
         Optional<String> raw = getGlobal(KEY_MFA_ENABLED);
         if (raw.isEmpty()) {
@@ -201,7 +172,6 @@ public class SystemConfigService {
         return true;
     }
 
-    /** Role codes that must have MFA enabled. Defaults to SUPER_ADMIN,FIRM_ADMIN when absent. */
     public Set<String> mfaRequiredRoleCodes() {
         Optional<String> raw = getGlobal(KEY_MFA_REQUIRED_ROLES);
         if (raw.isEmpty()) {
@@ -214,89 +184,92 @@ public class SystemConfigService {
         return roles.isEmpty() ? Set.of() : roles;
     }
 
-    /** Failed logins before lockout. Default 5. */
     public int loginMaxAttempts() {
         return intValue(KEY_LOGIN_MAX_ATTEMPTS, 5);
     }
 
-    /** Lockout duration in minutes. Default 30. */
     public int loginLockMinutes() {
         return intValue(KEY_LOGIN_LOCK_MINUTES, 30);
     }
 
-    /** Trial days when a firm is created without one. Default 14. */
     public int trialDefaultDays() {
         return intValue(KEY_TRIAL_DEFAULT_DAYS, 14);
     }
 
-    /** Days before trial expiry to warn. Default 3. */
     public int trialWarningDays() {
         return intValue(KEY_TRIAL_WARNING_DAYS, 3);
     }
 
-    /** Attempts before a notification is marked DEAD. Default 3. */
     public int notificationMaxAttempts() {
         return intValue(KEY_NOTIFICATION_MAX_ATTEMPTS, 3);
     }
 
-    // ------------------------------------------------------------------
-    // STORAGE policy. Absent key → the running yml value, so moving these to the DB is
-    // behaviour-preserving on an existing deployment (the first seed captures the yml value).
-    // ------------------------------------------------------------------
 
-    /** Largest single upload, in bytes. */
     public long storageMaxFileSizeBytes() {
         return longValue(KEY_STORAGE_MAX_FILE_SIZE_BYTES, storageProperties.getMaxFileSizeBytes());
     }
 
-    /** Presigned upload-ticket validity, in seconds. */
     public int storageUploadExpirySeconds() {
         return intValue(KEY_STORAGE_UPLOAD_EXPIRY_SECONDS, storageProperties.getUploadExpirySeconds());
     }
 
-    /** Presigned download-link validity, in seconds. */
     public int storageDownloadExpirySeconds() {
         return intValue(KEY_STORAGE_DOWNLOAD_EXPIRY_SECONDS, storageProperties.getDownloadExpirySeconds());
     }
 
-    /** Allocation a firm gets on first use, in bytes. 0 = unlimited. */
     public long storageDefaultQuotaBytes() {
         return longValue(KEY_STORAGE_DEFAULT_QUOTA_BYTES, storageProperties.getDefaultQuotaBytes());
     }
 
-    /** Cap on the filename segment stored in an object key. */
     public int documentMaxFilenameLength() {
         return intValue(KEY_DOCUMENT_MAX_FILENAME_LENGTH, DEFAULT_DOCUMENT_MAX_FILENAME_LENGTH);
     }
 
-    /** APP_PRODUCTION (Y/N); empty when unset so callers can fall back to application.yml. */
     public Optional<Boolean> productionFlag() {
         return getGlobal(KEY_APP_PRODUCTION)
                 .filter(value -> !value.isBlank())
                 .map(this::parseYesNo);
     }
 
-    /** Login link for email. GLOBAL-only, so a firm cannot repoint it. */
+    /**
+     * Whether the dev TOTP bypass (“123456”) is armed, or empty when the key has never been
+     * set so callers fall back to the yml value. Production mode is a second gate and is checked
+     * by the caller, so a database seeded in dev can never leave the bypass armed in production.
+     */
+    public Optional<Boolean> mfaDevBypassFlag() {
+        return getGlobal(KEY_MFA_DEV_BYPASS)
+                .filter(value -> !value.isBlank())
+                .map(this::parseYesNo);
+    }
+
+    /**
+     * Access-token lifetime in milliseconds, or {@code 0} when the key is unset so callers fall back
+     * to the yml value. Keeps the token lifetime a runtime setting like every other security knob.
+     */
+    public long accessTokenExpiryMs() {
+        Optional<String> raw = getGlobal(KEY_ACCESS_TOKEN_EXPIRY_MINUTES);
+        if (raw.isEmpty() || raw.get().isBlank()) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(raw.get().trim()) * 60_000L;
+        } catch (NumberFormatException e) {
+            log.warn("Config '{}' has non-numeric value '{}' — using jwt.access-expiry fallback",
+                    KEY_ACCESS_TOKEN_EXPIRY_MINUTES, raw.get());
+            return 0L;
+        }
+    }
+
     public String loginUrl() {
         return getGlobal(KEY_LOGIN_URL).filter(value -> !value.isBlank()).orElse(DEFAULT_LOGIN_URL);
     }
 
-    /** Client portal link for email. GLOBAL-only. */
     public String clientPortalUrl() {
         return getGlobal(KEY_CLIENT_PORTAL_URL).filter(value -> !value.isBlank())
                 .orElse(DEFAULT_CLIENT_PORTAL_URL);
     }
 
-    // ========================================================================
-    // Private helpers
-    // ========================================================================
 
-    /**
-     * Registry default, except the two groups whose seed follows the running application.yml:
-     * APP_PRODUCTION and the STORAGE policy values. That keeps a deployment that already tuned
-     * {@code storage.minio.*} from silently reverting to the code defaults on first boot after
-     * this change.
-     */
     private String seedValueFor(SettingDef def) {
         switch (def.key) {
             case KEY_APP_PRODUCTION:
@@ -336,11 +309,6 @@ public class SystemConfigService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Key→value map that survives duplicate rows (Postgres does not enforce uniqueness
-     * when firm_id is NULL) and values that fail to decrypt (a changed encryption key).
-     * Both used to throw from Collectors.toMap and break every read. Newest row wins.
-     */
     private Map<String, String> toValueMap(List<SystemConfig> rows) {
         Map<String, String> values = new LinkedHashMap<>();
         Map<String, LocalDateTime> stamps = new HashMap<>();
@@ -385,7 +353,6 @@ public class SystemConfigService {
         return config.getConfigValue();
     }
 
-    /** GLOBAL long setting; code default when absent or invalid. */
     private long longValue(String key, long fallback) {
         Optional<String> raw = getGlobal(key);
         if (raw.isEmpty() || raw.get().isBlank()) {
@@ -399,7 +366,6 @@ public class SystemConfigService {
         }
     }
 
-    /** GLOBAL numeric setting; code default when absent or invalid. */
     private int intValue(String key, int fallback) {
         Optional<String> raw = getGlobal(key);
         if (raw.isEmpty() || raw.get().isBlank()) {
@@ -413,7 +379,6 @@ public class SystemConfigService {
         }
     }
 
-    /** Y/N or TRUE/FALSE → boolean; unrecognized values are treated as N. */
     private boolean parseYesNo(String value) {
         String trimmed = value.trim();
         if (trimmed.equalsIgnoreCase("Y") || trimmed.equalsIgnoreCase("TRUE")) return true;
@@ -422,7 +387,6 @@ public class SystemConfigService {
         return false;
     }
 
-    /** Blocks delete of rows whose value is locked (allowEdit=false, already set). */
     private void checkNotLocked(String key) {
         systemConfigRepository.findByConfigKey(key)
                 .ifPresent(row -> {
@@ -455,8 +419,6 @@ public class SystemConfigService {
             return null;
         }
 
-        // Only registry-declared GLOBAL keys are writable — a FIRM key set here would be
-        // invisible to the firm that owns it.
         SettingDef def = ConfigKeyRegistry.requireGlobal(key);
         SystemConfig config = systemConfigRepository.findByConfigKey(key).orElse(null);
 

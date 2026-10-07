@@ -32,13 +32,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 
-/**
- * Firm-side document API.
- *
- * <p>Permission is checked here; <em>which</em> documents the caller may touch is decided in
- * the service by {@code DocumentScopeGuard}, so a valid permission alone never widens a result
- * set.
- */
 @RestController
 @RequestMapping("/api/v1/firm")
 @RequiredArgsConstructor

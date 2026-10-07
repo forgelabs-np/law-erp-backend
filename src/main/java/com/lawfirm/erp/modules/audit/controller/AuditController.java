@@ -36,10 +36,6 @@ public class AuditController {
     private final PermissionEvaluator permissionEvaluator;
     private final ResponseHandler responseHandler;
 
-    /**
-     * Full firm timeline — all activity, paginated.
-     * Optional filters: from, to date range.
-     */
     @GetMapping
     @Operation(summary = AuditConstants.GET_FIRM_TIMELINE_SUMMARY)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getFirmTimeline(
@@ -61,9 +57,6 @@ public class AuditController {
         return responseHandler.ok(result, "Audit logs fetched");
     }
 
-    /**
-     * User timeline — "what did Advocate1 do?"
-     */
     @GetMapping("/users/{userId}")
     @Operation(summary = AuditConstants.GET_USER_TIMELINE_SUMMARY)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getUserTimeline(
@@ -86,9 +79,6 @@ public class AuditController {
         return responseHandler.ok(result, "User activity fetched");
     }
 
-    /**
-     * Entity history — "show me everything that happened to Case #142"
-     */
     @GetMapping("/entities/{entityType}/{entityId}")
     @Operation(summary = AuditConstants.GET_ENTITY_HISTORY_SUMMARY)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getEntityHistory(
@@ -107,7 +97,7 @@ public class AuditController {
         return responseHandler.ok(result, "Entity history fetched");
     }
 
-   
+
     @GetMapping("/actions")
     @Operation(summary = AuditConstants.GET_BY_ACTION_SUMMARY)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getByAction(

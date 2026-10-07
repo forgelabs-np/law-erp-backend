@@ -38,16 +38,6 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * Firm Admin role management — the simplified model:
- *
- *   SA → sets FIRM_ADMIN permissions on the system template (via override)
- *   Firm Admin → distributes subset of their permissions to employee roles
- *
- * Ceiling:
- *   - FIRM_ADMIN role: system FIRM_ADMIN template permissions (SA controls)
- *   - Other firm roles: firm FIRM_ADMIN's enabled permissions
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -62,10 +52,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
     private final CurrentUserResolver currentUserResolver;
     private final AuditService auditService;
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // GET /api/v1/firm/roles
-    // List all firm-scoped roles
-    // ═══════════════════════════════════════════════════════════════════════
     public List<RoleResponse> getFirmRoles() {
         UUID firmId = getRequiredFirmId();
 
@@ -94,12 +80,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         return List.of();
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // GET /api/v1/firm/roles/{roleId}/permissions
-    // Ceiling:
-    //   - FIRM_ADMIN role: system FIRM_ADMIN template permissions
-    //   - Other firm roles: firm FIRM_ADMIN's enabled permissions
-    // ═══════════════════════════════════════════════════════════════════════
     public FirmRolePermissionsResponse getRolePermissions(UUID roleId) {
         UUID firmId = getRequiredFirmId();
         Role role = getValidatedFirmRole(roleId, firmId);
@@ -126,11 +106,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                 .build();
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // PUT /api/v1/firm/roles/{roleId}/permissions
-    // Firm admin updates permissions on a firm-scoped role
-    // Ceiling enforced — cannot exceed what FIRM_ADMIN has
-    // ═══════════════════════════════════════════════════════════════════════
     @Transactional
     public RolePermissionResponse updateRolePermissions(UUID roleId, RolePermissionRequest request) {
         UUID firmId = getRequiredFirmId();
@@ -140,7 +115,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
 
         List<Permission> permissions = applyPermissions(role, firmId, request.getPermissionIds(), adminId);
 
-        // Invalidate all users holding this role
         List<UUID> affectedUsers = userRepository.findUserIdsByRoleId(role.getId());
         for (UUID userId : affectedUsers) {
             userRepository.incrementPermissionVersion(userId);
@@ -167,23 +141,14 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                 .build();
     }
 
-    // ─── Ceiling logic ─────────────────────────────────────────────────────
 
-    /**
-     * Two-tier ceiling (simplified):
-     *   - FIRM_ADMIN role: system FIRM_ADMIN template permissions (SA controls via override)
-     *   - Other firm roles: firm FIRM_ADMIN's enabled permissions
-     */
     private List<Permission> computeCeiling(Role role, UUID firmId) {
         if (isFirmAdminRole(role)) {
-            // FIRM_ADMIN has no ceiling — SA sets their permissions via override.
-            // Firm Admin can distribute any non-GLOBAL permission.
             return permissionRepository.findAll().stream()
                     .filter(p -> p.getScope() != PermissionScope.GLOBAL && Boolean.TRUE.equals(p.isActive()))
                     .toList();
         }
 
-        // For all other firm roles: ceiling = firm FIRM_ADMIN's enabled permissions
         Role firmAdmin = findFirmAdminRole(firmId);
         if (firmAdmin == null) {
             return List.of();
@@ -194,15 +159,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                 .toList();
     }
 
-    /**
-     * Grants {@code permissionIds} to {@code role}, enforcing the caller's ceiling, and
-     * returns the granted permissions. Shared by role creation and permission updates so
-     * the two paths cannot drift apart.
-     *
-     * <p>Ceiling: a Super Admin may grant any active non-GLOBAL permission (they own the
-     * template); a firm admin is limited to what the firm's FIRM_ADMIN role holds.
-     * GLOBAL-scope permissions are never grantable outside the SA template.
-     */
     private List<Permission> applyPermissions(Role role, UUID firmId, List<UUID> permissionIds, UUID adminId) {
         List<Permission> permissions = permissionRepository.findAllById(permissionIds);
         if (permissions.size() != permissionIds.size()) {
@@ -247,10 +203,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         return "FIRM_ADMIN".equals(role.getRoleCode());
     }
 
-    /**
-     * Default roles cloned from system templates when a firm is created.
-     * Firm Admin cannot delete these — only Super Admin can.
-     */
     private boolean isDefaultClonedRole(Role role) {
         String code = role.getRoleCode();
         return RoleCode.ADVOCATE.equals(code)
@@ -262,7 +214,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         return roleRepository.findByFirmIdAndRoleCode(firmId, "FIRM_ADMIN").orElse(null);
     }
 
-    // ─── Guards ───────────────────────────────────────────────────────────
 
     private UUID getRequiredFirmId() {
         UUID firmId = currentUserResolver.getCurrentFirmId();
@@ -285,10 +236,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         return role;
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // POST /api/v1/firm/roles
-    // Firm Admin creates a custom role within their firm
-    // ═══════════════════════════════════════════════════════════════════════
     @Transactional
     public RoleResponse createRole(RoleRequest request) {
         return createRoleForFirm(getRequiredFirmId(), request);
@@ -304,7 +251,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
 
         // SUPER_ADMIN is platform-level — the per-firm role clone deliberately skips it. A
         // firm-scoped role with this code would hand ROLE_SUPER_ADMIN to a tenant user, because
-        // JwtUtil derives the granted authority from the role code alone.
         if (RoleCode.SUPER_ADMIN.equalsIgnoreCase(request.getCode())) {
             throw new BusinessRuleException(
                     "Role code SUPER_ADMIN is reserved for platform administrators");
@@ -329,8 +275,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         role.setCreatedAt(LocalDateTime.now());
         role = roleRepository.save(role);
 
-        // Apply permissions in the same call. Before this, permissionIds sent on create were
-        // silently dropped and the caller had to issue a second PUT to make the role usable.
         if (request.getPermissionIds() != null && !request.getPermissionIds().isEmpty()) {
             applyPermissions(role, firmId, request.getPermissionIds(), adminId);
         }
@@ -346,9 +290,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         return toMinimalRoleResponse(role);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // DELETE /api/v1/firm/roles/{roleId}
-    // ═══════════════════════════════════════════════════════════════════════
     @Transactional
     public void deleteRole(UUID roleId) {
         UUID firmId = getRequiredFirmId();
@@ -359,8 +300,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
             throw new BusinessRuleException("Cannot delete FIRM_ADMIN role. Only Super Admin can manage Firm Admins.");
         }
 
-        // Block deletion of default cloned roles (ADVOCATE, PARALEGAL, CLIENT)
-        // These are seeded when a firm is created. Only Super Admin can delete them.
         if (isDefaultClonedRole(role)) {
             throw new BusinessRuleException(
                     "Cannot delete default role '" + role.getRoleCode()
@@ -387,9 +326,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         );
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // PATCH /api/v1/firm/roles/{roleId}/toggle
-    // ═══════════════════════════════════════════════════════════════════════
     @Transactional
     public RoleResponse toggleRoleStatus(UUID roleId) {
         UUID firmId = getRequiredFirmId();
@@ -416,9 +352,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
         return toMinimalRoleResponse(role);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // GET /api/v1/firm/roles/{roleId}/users
-    // ═══════════════════════════════════════════════════════════════════════
     public List<RoleUserResponse> getRoleUsers(UUID roleId) {
         UUID firmId = getRequiredFirmId();
         Role role = getValidatedFirmRole(roleId, firmId);
@@ -429,7 +362,6 @@ public class FirmRoleServiceImpl implements FirmRoleService {
                 .collect(Collectors.toList());
     }
 
-    // ─── Mappers ──────────────────────────────────────────────────────────
 
     private RoleUserResponse toUserResponse(User user) {
         return RoleUserResponse.builder()

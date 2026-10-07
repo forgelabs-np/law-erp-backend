@@ -4,7 +4,6 @@ public final class NotificationConstants {
 
     private NotificationConstants() {}
 
-    // ── Controller @Operation strings ─────────────────────────────────────
     public static final String LIST_NOTIFICATIONS_SUMMARY = "List my notifications";
     public static final String LIST_NOTIFICATIONS_DESCRIPTION = "Returns the current user's notifications, newest first. Set unreadOnly=true to fetch only unread ones.";
     public static final String UNREAD_COUNT_SUMMARY = "Get unread notification count";
@@ -17,7 +16,6 @@ public final class NotificationConstants {
     public static final String GET_PREFERENCES_DESCRIPTION = "Every notification type with its effective email-channel setting. ALERT types are locked on — deadlines must not be silencable.";
     public static final String UPSERT_PREFERENCE_SUMMARY = "Update one notification preference";
 
-    // ── Renderer copy ─────────────────────────────────────────────────────
     public static final String CASE_ASSIGNED_TITLE = "Assigned to matter";
     public static final String CASE_ASSIGNED_BODY = "You were assigned to matter %s as %s.";
     public static final String INVOICE_STATUS_TITLE = "Invoice %s";
@@ -31,7 +29,6 @@ public final class NotificationConstants {
     public static final String ANNOUNCEMENT_TITLE = "%s";
     public static final String ANNOUNCEMENT_BODY = "%s";
 
-    // ── Trial ─────────────────────────────────────────────────────────
     public static final String TRIAL_EXPIRING_TITLE = "Trial period expiring soon";
     public static final String TRIAL_EXPIRING_BODY = "Your trial for %s expires in %d day(s). Please contact support to continue after the trial ends.";
     public static final String TRIAL_EXPIRED_TITLE = "Trial period expired";

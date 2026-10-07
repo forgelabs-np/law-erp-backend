@@ -22,22 +22,10 @@ public class UserLoginHistoryService {
 
     private final UserLoginHistoryRepository historyRepository;
 
-    /**
-     * Records login history.
-     *
-     * FIX: RequestContext used to call RequestContextHolder inside @Async thread,
-     * which has no bound request — throws IllegalStateException.
-     *
-     * Solution: capture IP and deviceInfo SYNCHRONOUSLY on the calling thread
-     * (where the request IS available), then pass the plain strings to the
-     * async write method. Same pattern we used for AuditService.
-     */
     public void saveRecord(User user, LoginStatus status, String failureReason) {
-        // Capture request data NOW — on the main request thread
         String ip         = resolveClientIp();
         String deviceInfo = resolveDeviceInfo();
 
-        // Write asynchronously with plain values — no thread-local reads needed
         saveAsync(user, status, failureReason, ip, deviceInfo);
     }
 
@@ -79,7 +67,6 @@ public class UserLoginHistoryService {
         }
     }
 
-    // ── Helpers — called on the main request thread only ─────────────────
 
     private String resolveClientIp() {
         try {

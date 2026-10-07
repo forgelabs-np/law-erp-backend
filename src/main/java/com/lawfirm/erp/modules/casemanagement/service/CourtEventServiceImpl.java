@@ -34,11 +34,6 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/**
- * The Tarik/Peshi loop. Marking an event HELD forces the "what did the court give next?"
- * answer — which both records the outcome and creates the next CourtEvent row,
- * the direct digital equivalent of writing the next date in the diary.
- */
 @Service
 @RequiredArgsConstructor
 public class CourtEventServiceImpl implements CourtEventService {
@@ -66,8 +61,6 @@ public class CourtEventServiceImpl implements CourtEventService {
                     throw new BusinessRuleException(
                             "Advocate has a scheduling conflict at the given time (Peshi events cannot overlap)");
                 }
-                // Tarik dates are administrative (often handled by a junior/clerk) — allow,
-                // but surface the overlap so the user can still see it.
                 conflictWarning = "Advocate has " + conflicts.size()
                         + " overlapping event(s) at this time — Tarik events allow overlap";
             }
@@ -105,7 +98,6 @@ public class CourtEventServiceImpl implements CourtEventService {
         List<CourtEvent> events = courtEventRepository
                 .findByCourtCaseIdAndFirmIdOrderBySequenceNoAsc(cc.getId(), firmId);
 
-        // Batch-resolve matter once for all events (avoids N+1)
         Matter matter = matterRepository.findById(cc.getMatterId()).orElse(null);
 
         return events.stream()
@@ -180,7 +172,6 @@ public class CourtEventServiceImpl implements CourtEventService {
         event.setNextEventType(request.getNextEventType());
         if (request.getNotes() != null) event.setNotes(request.getNotes());
 
-        // The loop: what did the court give next?
         if (request.getNextEventType() != NextEventType.NONE) {
             if (request.getNextEventDate() == null) {
                 throw new BusinessRuleException(
@@ -204,16 +195,10 @@ public class CourtEventServiceImpl implements CourtEventService {
                 next = courtEventRepository.save(next);
                 event.setNextEventId(next.getId());
             }
-            // NextEventType.JUDGMENT → no event row; judgment is recorded via the
-            // court-case judgment endpoint once the court delivers it.
         }
 
         event = courtEventRepository.save(event);
 
-        // Outcome side effects on the CourtCase. The judgment path is delegated to
-        // CourtCaseService.recordJudgmentInternal so /held and the judgment endpoint can
-        // never get out of sync: a DECIDED case ALWAYS carries the judgment fields and a
-        // computed appeal deadline (marking held alone can never decide a case).
         if (request.getOutcomeType() == OutcomeType.JUDGMENT_DELIVERED) {
             if (request.getJudgmentDate() == null
                     || request.getJudgmentSummary() == null || request.getJudgmentSummary().isBlank()) {

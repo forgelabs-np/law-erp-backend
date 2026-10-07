@@ -16,11 +16,6 @@ public interface AuthService {
 
     LoginResponse refreshToken(String refreshToken);
 
-    /**
-     * Server-side logout: ends every session for the account on every device by bumping
-     * its permissionVersion (stale access tokens are refused by JwtAuthFilter, stale
-     * refresh tokens by refreshToken()).
-     */
     void logout();
 
     LoginResponse confirmMfaSetup(MfaSetupConfirmRequest request);
@@ -29,12 +24,7 @@ public interface AuthService {
 
     LoginResponse changePassword(ChangePasswordRequest request);
 
-    /**
-     * Start self-service recovery. Always behaves the same whether or not the account
-     * exists (no enumeration); when it does, a one-time reset link is e-mailed.
-     */
     void forgotPassword(ForgotPasswordRequest request);
 
-    /** Redeem the one-time link, set the new password and revoke existing sessions. */
     void resetPasswordWithToken(PasswordResetRequest request);
 }

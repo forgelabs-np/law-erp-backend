@@ -7,10 +7,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-/**
- * Represents a court where the firm has active cases.
- * Used for scraper integration and court selection UI.
- */
 @Getter
 @Setter
 @Builder
@@ -18,18 +14,9 @@ import lombok.Setter;
 @NoArgsConstructor
 public class FirmCourtResponse {
 
-    /**
-     * The court's official name (e.g., "Kathmandu District Court")
-     */
     private String courtName;
 
-    /**
-     * Court level (DISTRICT, HIGH, SUPREME)
-     */
     private CourtLevel courtLevel;
 
-    /**
-     * Number of active cases at this court
-     */
     private Long activeCaseCount;
 }

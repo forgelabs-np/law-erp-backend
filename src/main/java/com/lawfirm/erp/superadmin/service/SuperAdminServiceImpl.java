@@ -102,19 +102,14 @@ public class SuperAdminServiceImpl implements SuperAdminService {
             throw new RuntimeException("Invalid secret key for super admin registration");
         }
 
-        if (userRepository.existsByUsernameAndUserType(request.getUsername(), UserType.SUPER_ADMIN)) {
+        if (userRepository.countByUserType(UserType.SUPER_ADMIN) > 0) {
             throw new RuntimeException("Super admin already exists. Only one super admin allowed.");
         }
 
-        if (userRepository.existsByUsernameAndFirmId(request.getUsername(), null)) {
-            throw new RuntimeException("Username already taken");
-        }
-        if (userRepository.existsByEmailAndFirmId(request.getEmail(), null)) {
-            throw new RuntimeException("Email already registered");
-        }
-        if (userRepository.existsByMobileNoAndFirmId(request.getMobileNo(), null)) {
-            throw new RuntimeException("Mobile number already registered");
-        }
+        // No username/email/mobile uniqueness guard is needed here: the countByUserType(SUPER_ADMIN)
+        // check above already enforces the single-super-admin rule. The old guards passed a null
+        // firm id into "...AndFirmId" queries, where "u.firm.id = NULL" can never match — they were
+        // dead code that silently never fired.
 
         Role superAdminRole = roleRepository.findByRoleName("SUPER_ADMIN")
                 .orElseThrow(() -> new RuntimeException("SUPER_ADMIN role not found"));
@@ -131,8 +126,6 @@ public class SuperAdminServiceImpl implements SuperAdminService {
         user.setFirm(systemFirm);
         user.setRole(superAdminRole);
         user.setUserType(UserType.SUPER_ADMIN);
-        // DB-driven MFA policy: force MFA on the new super admin only while
-        // enforcement is on and SUPER_ADMIN is in the required roles (default: on).
         boolean mfaRequired = systemConfigService.isMfaEnabled()
                 && systemConfigService.mfaRequiredRoleCodes().contains("SUPER_ADMIN");
         user.setMfaEnabled(mfaRequired);
@@ -150,12 +143,6 @@ public class SuperAdminServiceImpl implements SuperAdminService {
                 .build();
     }
 
-    /**
-     * Registration secret resolution: DB (REGISTRATION_SECRET) wins when set,
-     * otherwise fall back to the env/yml value. DB-first lets the platform run
-     * without rebuilds; the yml fallback covers the very first boot, before any
-     * super admin exists to write config.
-     */
     private String resolveRegistrationSecret() {
         return systemConfigService.getGlobal(SystemConfigService.KEY_REGISTRATION_SECRET)
                 .filter(secret -> !secret.isBlank())
@@ -174,6 +161,10 @@ public class SuperAdminServiceImpl implements SuperAdminService {
 
             if (user.getIsBlocked()) {
                 throw new LockedException("Account is blocked. Please contact system administrator.");
+            }
+
+            if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now())) {
+                throw new LockedException("Account locked. Please try again later.");
             }
 
             Authentication authentication = authenticationManager.authenticate(
@@ -236,8 +227,6 @@ public class SuperAdminServiceImpl implements SuperAdminService {
         }
 
         user.setPassword(passwordEncoder.encode(chosen));
-        // Super-Admin-issued passwords are temporary: force a rotation on next login and
-        // clear any lockout so the user can actually get back in.
         user.setMustChangePassword(true);
         user.setLoginAttempts(0);
         user.setLockedUntil(null);
@@ -252,9 +241,7 @@ public class SuperAdminServiceImpl implements SuperAdminService {
         log.info("Password reset for user: {} by Super Admin (generated={})",
                 user.getUsername(), generated);
 
-        // Same delivery as the firm-admin reset: the credential only exists in the response body
         // otherwise, and the SA console does not render temporaryPassword. A null firm is
-        // legitimate here — Super Admin resets reach accounts with no firm of their own.
         UUID firmId = user.getFirm() != null ? user.getFirm().getId() : null;
         emailService.sendPasswordReset(
                 firmId,
@@ -268,7 +255,6 @@ public class SuperAdminServiceImpl implements SuperAdminService {
         return PasswordResetResult.builder()
                 .username(user.getUsername())
                 .generated(generated)
-                // Never echo a password the caller chose; only the one we had to invent.
                 .temporaryPassword(generated ? chosen : null)
                 .mustChangePassword(true)
                 .build();
@@ -282,7 +268,6 @@ public class SuperAdminServiceImpl implements SuperAdminService {
 
         user.setMfaSecret(null);
         user.setMfaVerified(false);
-        // Keep mfaEnabled=true so user is forced to re-setup MFA on next login
         userRepository.save(user);
 
         String reason = request.getReason() != null ? request.getReason() : "No reason provided";
@@ -301,13 +286,11 @@ public class SuperAdminServiceImpl implements SuperAdminService {
 
         List<Role> firmRoles = roleRepository.findByFirmIdAndIsSystemFalse(firmId);
 
-        // Batch user counts (single query)
         Map<UUID, Integer> userCountMap = new HashMap<>();
         for (Object[] row : userRepository.countUsersByRoleIds(firmId)) {
             userCountMap.put((UUID) row[0], ((Number) row[1]).intValue());
         }
 
-        // Batch permissions for all roles (single query)
         List<UUID> roleIds = firmRoles.stream().map(Role::getId).collect(Collectors.toList());
         Map<UUID, List<PermissionResponse>> permsByRole = roleIds.isEmpty()
                 ? Map.of()
@@ -339,11 +322,9 @@ public class SuperAdminServiceImpl implements SuperAdminService {
     public RolePermissionResponse overrideRolePermissions(UUID firmId, UUID roleId, RolePermissionRequest request) {
         UUID adminId = currentUserResolver.getCurrentUserId();
 
-        // Validate firm exists
         Firm firm = firmRepository.findById(firmId)
                 .orElseThrow(() -> new ResourceNotFoundException("Firm not found: " + firmId));
 
-        // Validate role exists and belongs to this firm
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + roleId));
 
@@ -351,18 +332,15 @@ public class SuperAdminServiceImpl implements SuperAdminService {
             throw new ForbiddenException("Role does not belong to firm: " + firmId);
         }
 
-        // Super Admin cannot modify system roles via this endpoint (use RoleController for that)
         if (Boolean.TRUE.equals(role.getIsSystem())) {
             throw new ForbiddenException("Cannot modify system roles via firm override. Use /api/v1/admin/roles instead.");
         }
 
-        // Load permissions — no ceiling check, Super Admin can assign anything
         List<Permission> permissions = permissionRepository.findAllById(request.getPermissionIds());
         if (permissions.size() != request.getPermissionIds().size()) {
             throw new ResourceNotFoundException("One or more permission IDs are invalid");
         }
 
-        // Replace permissions
         rolePermissionRepository.deleteByRoleId(role.getId());
 
         List<RolePermission> newRolePermissions = permissions.stream()
@@ -379,7 +357,6 @@ public class SuperAdminServiceImpl implements SuperAdminService {
 
         rolePermissionRepository.saveAll(newRolePermissions);
 
-        // Invalidate all users holding this role
         List<UUID> affectedUsers = userRepository.findUserIdsByRoleId(role.getId());
         for (UUID userId : affectedUsers) {
             userRepository.incrementPermissionVersion(userId);
@@ -426,12 +403,25 @@ public class SuperAdminServiceImpl implements SuperAdminService {
         }
 
         if (!totpUtil.verify(user.getMfaSecret(), totpCode)) {
+            registerFailedMfaAttempt(user);
             auditService.log(AuditAction.LOGIN_FAILED, AuditEntity.AUTH, user.getId(),
                     "Invalid MFA code on super admin login: " + user.getUsername());
             throw new BadCredentialsException("Invalid authenticator code");
         }
 
         return issueFullTokens(user);
+    }
+
+    // Throttles guessed TOTP codes with the same lockout counters used for passwords.
+    private void registerFailedMfaAttempt(User user) {
+        int maxAttempts = systemConfigService.loginMaxAttempts();
+        user.setLoginAttempts(user.getLoginAttempts() + 1);
+        if (maxAttempts > 0 && user.getLoginAttempts() >= maxAttempts) {
+            user.setLockedUntil(LocalDateTime.now()
+                    .plusMinutes(systemConfigService.loginLockMinutes()));
+            log.warn("Super admin {} locked after {} failed MFA attempts", user.getUsername(), maxAttempts);
+        }
+        userRepository.save(user);
     }
 
     private LoginResponse buildMfaSetupResponse(User user) {
@@ -458,8 +448,6 @@ public class SuperAdminServiceImpl implements SuperAdminService {
         String accessToken = jwtUtil.generateAccessToken(user);
         String refreshToken = jwtUtil.generateRefreshToken(user);
 
-        // Tracked like AuthServiceImpl.recordRefreshToken: without the row the token could
-        // not be rotated, revoked or reuse-detected (F-9).
         RefreshToken row = new RefreshToken();
         row.setId(jwtUtil.extractTokenId(refreshToken));
         row.setUserId(user.getId());

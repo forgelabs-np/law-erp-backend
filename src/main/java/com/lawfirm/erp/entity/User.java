@@ -1,6 +1,7 @@
 package com.lawfirm.erp.entity;
 
 import com.lawfirm.erp.common.enums.UserType;
+import com.lawfirm.erp.common.util.EncryptedStringConverter;
 import com.lawfirm.erp.entity.base.ActiveAuditableEntity;
 import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.rbac.entity.Role;
@@ -75,41 +76,19 @@ public class User extends ActiveAuditableEntity implements UserDetails {
     @Builder.Default
     private Integer permissionVersion = 0;
 
-    // ── NEW: First-login password change ──────────────────────────────────────
-    /**
-     * Set true when admin creates account with a temp password.
-     * Login returns PASSWORD_CHANGE_REQUIRED until user changes it.
-     * Cleared to false after POST /auth/change-password succeeds.
-     */
     @Column(name = "must_change_password", columnDefinition = "BOOLEAN DEFAULT FALSE")
     @Builder.Default
     private Boolean mustChangePassword = false;
 
-    // ── NEW: MFA (TOTP / Google Authenticator) ────────────────────────────────
-    /**
-     * Whether MFA is enabled for this account.
-     * - SUPER_ADMIN: forced true in code (always required)
-     * - FIRM_ADMIN:  forced true in code (always required)
-     * - ADVOCATE:    optional, firm admin can enable via bulk-enable-mfa
-     * - PARALEGAL / CLIENT: always false, never enforced
-     */
     @Column(name = "mfa_enabled", columnDefinition = "BOOLEAN DEFAULT FALSE")
     @Builder.Default
     private Boolean mfaEnabled = false;
 
-    /**
-     * Base32-encoded TOTP secret — generated when MFA setup starts.
-     * NEVER returned in any API response.
-     * Null until user initiates setup.
-     */
-    @Column(name = "mfa_secret", length = 64)
+    // Encrypted at rest. 255 leaves room for the AES-GCM IV + ciphertext Base64 of a 32-char secret.
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "mfa_secret", length = 255)
     private String mfaSecret;
 
-    /**
-     * True only after user successfully confirms they scanned the QR code.
-     * mfaEnabled=true + mfaVerified=false → force QR code setup screen.
-     * mfaEnabled=true + mfaVerified=true  → show 6-digit code input.
-     */
     @Column(name = "mfa_verified", columnDefinition = "BOOLEAN DEFAULT FALSE")
     @Builder.Default
     private Boolean mfaVerified = false;

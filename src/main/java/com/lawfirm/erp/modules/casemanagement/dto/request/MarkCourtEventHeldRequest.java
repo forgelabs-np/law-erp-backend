@@ -9,10 +9,6 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.UUID;
 
-/**
- * Marking an event HELD forces the "what did the court give next?" answer —
- * the direct digital equivalent of writing the next date in the diary.
- */
 @Data
 public class MarkCourtEventHeldRequest {
 
@@ -24,15 +20,12 @@ public class MarkCourtEventHeldRequest {
     @NotNull(message = "Next event type is required")
     private NextEventType nextEventType;
 
-    /** Required when nextEventType is TARIK/PESHI/JUDGMENT. */
     private LocalDate nextEventDate;
 
     private LocalTime nextEventTime;
 
     private String notes;
 
-    // Inline judgment fields — REQUIRED when outcomeType == JUDGMENT_DELIVERED, so a case
-    // can only become DECIDED with the judgment on record (the two paths cannot drift).
 
     private LocalDate judgmentDate;
 

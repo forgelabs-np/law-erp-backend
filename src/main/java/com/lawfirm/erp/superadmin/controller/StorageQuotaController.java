@@ -22,12 +22,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-/**
- * Platform-side storage allocation: how much space each firm gets.
- *
- * <p>Super-Admin-only on purpose. The allocation deliberately does not live in the firm's own
- * settings, so a firm admin cannot raise their own limit.
- */
 @RestController
 @RequestMapping("/api/v1/super-admin/firms")
 @RequiredArgsConstructor

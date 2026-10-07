@@ -10,21 +10,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-/**
- * Seeds and maintains the scraper court registry (scraper_courts).
- *
- * Source of truth: the court menu on supremecourt.gov.np (district list verified from the
- * homepage HTML on 2026-09-06). courtId is the numeric path segment of each
- * /weekly_dainik/pesi/daily/<id> link; the Nepali name is that link's exact text.
- *
- * District courts only — High Courts are served by a separate appeal/syspublic.php system
- * with a different URL scheme the scrape client cannot talk to, so they are deliberately
- * not seeded rather than guessed.
- *
- * Runs an upsert by courtId at startup: missing courts are inserted, known courts get their
- * names refreshed. It never touches courtType or the isActive kill-switch, so operator
- * choices in the registry survive every deploy.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -32,7 +17,6 @@ public class CourtSeeder {
 
     private final CourtRepository courtRepository;
 
-    /** One registry row: site id, name as shown on the site, English display name. */
     private record CourtRoute(Integer courtId, String nameNepali, String nameEnglish) {}
 
     private static final List<CourtRoute> COURT_ROUTES = List.of(

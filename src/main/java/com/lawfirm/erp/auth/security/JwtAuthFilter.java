@@ -70,19 +70,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                             "This token is only valid for authentication steps. Please complete login.");
                     return;
                 }
-                // For the allowed paths, skip all further checks and let it through
                 filterChain.doFilter(request, response);
                 return;
             }
-            // ── Permission version staleness check ────────────────────────
-            // Every full access token, Super Admin included: logout, password resets and
-            // role changes bump permissionVersion and must bite for SA sessions too (F-9).
             if (userIdStr != null) {
                 UUID userId = UUID.fromString(userIdStr);
                 Integer tokenVersion = claims.get("permVersion", Integer.class);
 
-                // FIX 1: If token has no permVersion claim (old token format), reject it
-                // so user re-logs in and gets a fresh token with the claim.
                 if (tokenVersion == null) {
                     log.warn("Token missing permVersion claim for user: {} — forcing re-login", userIdStr);
                     response.sendError(HttpStatus.UNAUTHORIZED.value(),
@@ -92,9 +86,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
                 Integer currentVersion = userRepository.findPermissionVersionById(userId);
 
-                // FIX 2: If DB has null (user existed before permissionVersion column was added),
                 // treat DB null as 0 — same as the default. Don't reject the token.
-                // This prevents all pre-existing users from being locked out.
                 int dbVersion = (currentVersion != null) ? currentVersion : 0;
 
                 if (tokenVersion != dbVersion) {
@@ -106,12 +98,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 }
             }
 
-            // ── Firm context ──────────────────────────────────────────────
             if (firmId != null && !"SUPER_ADMIN".equals(userType)) {
                 UUID firmUuid = UUID.fromString(firmId);
-                // Suspension must bite immediately. The SA console, the trial-expiry scheduler
-                // and direct edits all just flip Firm.status, so it is re-read per request
-                // rather than trusted from the token or checked only at login.
                 FirmStatus firmStatus = firmRepository.findStatusById(firmUuid);
                 if (firmStatus == FirmStatus.SUSPENDED || firmStatus == FirmStatus.EXPIRED) {
                     response.sendError(HttpStatus.FORBIDDEN.value(),
@@ -123,7 +111,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 FirmContextHolder.clear();
             }
 
-            // ── Build authentication ──────────────────────────────────────
             Authentication auth = jwtUtil.getAuthentication(token, request);
 
             String deviceId = request.getHeader("deviceId");

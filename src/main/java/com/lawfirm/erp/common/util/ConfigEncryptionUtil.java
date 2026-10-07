@@ -13,7 +13,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
 
-/** AES-256 GCM encrypt/decrypt for sensitive config values (SMTP passwords). */
 @Slf4j
 @Component
 public class ConfigEncryptionUtil {
@@ -23,6 +22,14 @@ public class ConfigEncryptionUtil {
     private static final int GCM_TAG_LENGTH = 128;
 
     private final SecretKey secretKey;
+
+    // Lightweight accessor for JPA AttributeConverters, which Hibernate instantiates itself and
+    // cannot dependency-inject. Set once when the Spring context builds this bean.
+    private static volatile ConfigEncryptionUtil instance;
+
+    public static ConfigEncryptionUtil getInstance() {
+        return instance;
+    }
 
     public ConfigEncryptionUtil(@Value("${config.encryption.key}") String base64Key) {
         if (base64Key == null || base64Key.isBlank()) {
@@ -38,10 +45,10 @@ public class ConfigEncryptionUtil {
             );
         }
         this.secretKey = new SecretKeySpec(keyBytes, "AES");
+        instance = this;
         log.info("ConfigEncryptionUtil initialized with 256-bit AES key");
     }
 
-    /** Returns Base64( IV (12 bytes) + ciphertext ). */
     public String encrypt(String plaintext) {
         try {
             byte[] iv = new byte[GCM_IV_LENGTH];
@@ -53,7 +60,6 @@ public class ConfigEncryptionUtil {
 
             byte[] ciphertext = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
 
-            // Prepend IV to ciphertext
             ByteBuffer buffer = ByteBuffer.allocate(iv.length + ciphertext.length);
             buffer.put(iv);
             buffer.put(ciphertext);
@@ -65,7 +71,6 @@ public class ConfigEncryptionUtil {
         }
     }
 
-    /** Expects Base64( IV (12 bytes) + ciphertext ). */
     public String decrypt(String encryptedData) {
         try {
             byte[] decoded = Base64.getDecoder().decode(encryptedData);

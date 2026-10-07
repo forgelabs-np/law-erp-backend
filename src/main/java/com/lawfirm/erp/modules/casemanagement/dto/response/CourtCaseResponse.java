@@ -44,7 +44,6 @@ public class CourtCaseResponse {
 
     private String judgeName;
 
-    // Judgment / appeal deadline
     private LocalDate judgmentDate;
 
     private String judgmentSummary;
@@ -55,12 +54,10 @@ public class CourtCaseResponse {
 
     private boolean partyIsState;
 
-    /** True for High Court judgments — a further appeal needs a leave petition first. */
     private boolean appealRequiresLeave;
 
     private boolean appealLapsed;
 
-    // Criminal trial-level
     private String firNumber;
 
     private LocalDate firDate;
@@ -75,7 +72,6 @@ public class CourtCaseResponse {
 
     private BailStatus bailStatus;
 
-    // Civil trial-level
     private LocalDate mediationDate;
 
     private String mediationOutcome;

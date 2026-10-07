@@ -16,13 +16,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Client portal — documents on the client's own cases and projects.
- *
- * <p>Read-only by construction: there is no upload or delete endpoint here, and the service
- * query ignores any visibility or status the caller asks for, always returning shared, active
- * documents on matters and projects the caller owns.
- */
 @RestController
 @RequestMapping("/api/v1/client/documents")
 @RequiredArgsConstructor

@@ -4,7 +4,6 @@ import com.lawfirm.erp.modules.document.dto.response.DocumentResponse;
 import com.lawfirm.erp.modules.document.entity.Document;
 import org.springframework.stereotype.Component;
 
-/** Entity → response. Owner references are resolved by the service and passed in. */
 @Component
 public class DocumentMapper {
 

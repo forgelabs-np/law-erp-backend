@@ -24,14 +24,11 @@ public class Project extends ActiveAuditableEntity {
     @Column(nullable = false)
     private UUID firmId;
 
-    /** Link to existing client user — nullable for "new client" flow. */
     private UUID clientUserId;
 
-    /** Denormalized client name — always present even if client user is deleted. */
     @Column(name = "client_name", nullable = false, length = 200)
     private String clientName;
 
-    /** Firm-scoped unique code: FIRMCODE-PRJ-YYYY-NNNNN */
     @Column(name = "project_code", nullable = false, length = 30, updatable = false)
     private String projectCode;
 
@@ -49,7 +46,6 @@ public class Project extends ActiveAuditableEntity {
 
     private LocalDate targetEndDate;
 
-    /** The project manager — always a firm user. */
     @Column(nullable = false)
     private UUID ownerId;
 }

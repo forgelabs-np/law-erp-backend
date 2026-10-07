@@ -22,7 +22,6 @@ public class CasePositioningResponse {
     private MatterType matterType;
     private MatterStatus matterStatus;
 
-    // Current court case (leaf)
     private UUID courtCaseId;
     private String ourCourtCaseRef;
     private String courtName;
@@ -30,19 +29,16 @@ public class CasePositioningResponse {
     private CourtCaseStatus caseStatus;
     private UUID advocateId;
 
-    // Last hearing
     private LocalDate lastHearingDate;
     private CourtEventType lastHearingType;
     private CourtEventStatus lastHearingStatus;
     private String lastHearingOutcome;
 
-    // Next event
     private LocalDate nextEventDate;
     private CourtEventType nextEventType;
     private String nextEventCourtRoom;
     private String nextEventJudge;
 
-    // Stats
     private int totalEvents;
     private Integer daysSinceLastHearing;
     private boolean stale;

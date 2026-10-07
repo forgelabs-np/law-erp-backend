@@ -29,7 +29,6 @@ public interface CourtEventRepository extends JpaRepository<CourtEvent, UUID> {
     @Query("SELECT e.courtCaseId, COUNT(e) FROM CourtEvent e WHERE e.courtCaseId IN :courtCaseIds GROUP BY e.courtCaseId")
     List<Object[]> countByCourtCaseIds(@Param("courtCaseIds") List<UUID> courtCaseIds);
 
-    /** Latest held Peshi per court case — for stale-matter detection (daysSinceLastPeshi). */
     @Query("SELECT e.courtCaseId, MAX(e.scheduledDate) FROM CourtEvent e " +
            "WHERE e.courtCaseId IN :courtCaseIds " +
            "AND e.eventType = com.lawfirm.erp.modules.casemanagement.enums.CourtEventType.PESHI " +
@@ -47,7 +46,6 @@ public interface CourtEventRepository extends JpaRepository<CourtEvent, UUID> {
 
     List<CourtEvent> findByScheduledDate(LocalDate date);
 
-    /** Tomorrow's real hearings — the T-1 reminder job. */
     List<CourtEvent> findByEventTypeAndStatusAndScheduledDate(
             com.lawfirm.erp.modules.casemanagement.enums.CourtEventType eventType,
             com.lawfirm.erp.modules.casemanagement.enums.CourtEventStatus status,
@@ -60,18 +58,12 @@ public interface CourtEventRepository extends JpaRepository<CourtEvent, UUID> {
     List<CourtEvent> findByFirmIdAndAttendingAdvocateIdAndScheduledDateBetween(UUID firmId, UUID advocateId,
                                                                                LocalDate from, LocalDate to);
 
-    /** Events for specific court cases on a date — for employee calendar filtering. */
     List<CourtEvent> findByCourtCaseIdInAndFirmIdAndAttendingAdvocateIdAndScheduledDate(
             List<UUID> courtCaseIds, UUID firmId, UUID advocateId, LocalDate date);
 
-    /** Events for specific court cases between dates — for employee calendar filtering. */
     List<CourtEvent> findByCourtCaseIdInAndFirmIdAndAttendingAdvocateIdAndScheduledDateBetween(
             List<UUID> courtCaseIds, UUID firmId, UUID advocateId, LocalDate from, LocalDate to);
 
-    /**
-     * Overlap check: same advocate, same date, time ranges intersect, event not canceled.
-     * excludeId is null on create, the event's own id on update.
-     */
     @Query("SELECT e FROM CourtEvent e WHERE e.firmId = :firmId " +
            "AND e.attendingAdvocateId = :advocateId " +
            "AND e.scheduledDate = :date " +

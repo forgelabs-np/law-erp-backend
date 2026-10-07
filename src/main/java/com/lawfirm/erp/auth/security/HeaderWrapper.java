@@ -14,13 +14,11 @@ public class HeaderWrapper extends HttpServletRequestWrapper {
 
     @Override
     public String getHeader(String name) {
-        // Custom header takes priority, then fall through to original
         return customHeaders.getOrDefault(name, super.getHeader(name));
     }
 
     @Override
     public Enumeration<String> getHeaderNames() {
-        // Combine original header names with custom ones
         Set<String> names = new HashSet<>();
         names.addAll(Collections.list(super.getHeaderNames()));
         names.addAll(customHeaders.keySet());
@@ -29,19 +27,11 @@ public class HeaderWrapper extends HttpServletRequestWrapper {
 
     @Override
     public Enumeration<String> getHeaders(String name) {
-        List<String> values = new ArrayList<>();
-
-        // Add custom header if present
+        // A custom header overrides the original entirely (same contract as getHeader);
+        // appending the original would return the injected value twice.
         if (customHeaders.containsKey(name)) {
-            values.add(customHeaders.get(name));
+            return Collections.enumeration(List.of(customHeaders.get(name)));
         }
-
-        // Add original headers
-        Enumeration<String> originalHeaders = super.getHeaders(name);
-        while (originalHeaders.hasMoreElements()) {
-            values.add(originalHeaders.nextElement());
-        }
-
-        return Collections.enumeration(values);
+        return super.getHeaders(name);
     }
 }

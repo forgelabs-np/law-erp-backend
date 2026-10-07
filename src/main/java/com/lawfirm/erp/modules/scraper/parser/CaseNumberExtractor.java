@@ -5,7 +5,6 @@ import com.lawfirm.erp.modules.scraper.converter.DevanagariConverter;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Splits "०८१-C४-३८२७ (३९-०८१-३२०३०)" into display form and parenthesized court-scoped id.
 final class CaseNumberExtractor {
 
     private static final Pattern PAREN = Pattern.compile("\\(([^)]+)\\)");

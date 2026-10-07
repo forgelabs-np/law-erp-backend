@@ -9,7 +9,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 
-// Scheduled entry points; crons overridable via scraper.*-cron. All no-op when scraper.enabled=false.
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -19,7 +18,7 @@ public class ScraperScheduler {
     private final HearingExportService exportService;
     private final ScraperProperties properties;
 
-    @Scheduled(cron = "${scraper.daily-cron:0 5 10 * * MON-FRI}")  // 10:05 AM Nepal time, Mon-Fri
+    @Scheduled(cron = "${scraper.daily-cron:0 5 10 * * MON-FRI}")
     public void runDaily() {
         if (!properties.isEnabled()) return;
         String todayBs = NepaliDateUtil.adToBs(LocalDate.now());

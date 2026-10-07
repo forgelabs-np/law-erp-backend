@@ -13,9 +13,6 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Daily page: skip the judge-count summary table; read the date from the "मिति <date> को"
-// title; per-bench sections = header table (इजलाश N + judge in td.judge) + record_display
-// table whose last column (आदेश फैसलाको किसिम) is the outcome.
 @Component
 public class DailyTableParser {
 
@@ -54,10 +51,6 @@ public class DailyTableParser {
         return records;
     }
 
-    /**
-     * From a bench header table: [bench ("1"), judge name]. Prefers the td.judge cell for the
-     * judge; the इजलाश N cell is the fallback for both when no judge cell exists.
-     */
     private String[] extractBenchHeader(Element table) {
         String bench = null;
         String judge = null;
@@ -82,9 +75,9 @@ public class DailyTableParser {
     private void parseRows(Element table, Integer courtId, String judge, String bench, String dateBs,
                            List<HearingRecord> out) {
         for (Element tr : table.select("tr")) {
-            if (tr.select("th").size() > 0) continue; // header row
+            if (tr.select("th").size() > 0) continue;
             List<Element> cells = tr.select("td");
-            if (cells.size() < 6) continue; // footer (इजलास अधिकृत) rows are single cells
+            if (cells.size() < 6) continue;
 
             String[] nums = CaseNumberExtractor.split(cells.get(1).text());
             String serialNo = clean(DevanagariConverter.toArabic(cells.get(0).text()));
@@ -111,7 +104,6 @@ public class DailyTableParser {
         }
     }
 
-    /** Detail tables carry a "मुद्दा" header; the summary (judge counts) table does not. */
     private boolean isDetailTable(Element el) {
         for (Element tr : el.select("tr")) {
             List<Element> ths = tr.select("th");

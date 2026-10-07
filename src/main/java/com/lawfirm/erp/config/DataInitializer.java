@@ -37,28 +37,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Seeds the full RBAC foundation in one pass.
- *
- * Order matters:
- *   1. Tenant types
- *   2. System firm (home of SUPER_ADMIN)
- *   3. System roles
- *   4. Modules
- *   5. Permissions          (code = MODULE_CODE:ACTION, scope set per action)
- *   6. ModulePermission     (module -> its permissions, junction table)
- *   7. RolePermission       (role -> permissions, driven by access-level matrix)
- *
- * Access levels used in the matrix below:
- *   FULL      -> every permission for that module
- *   READ_ONLY -> ACCESS + VIEW only
- *   OWN       -> ACCESS + VIEW, same rows as READ_ONLY.
- *               The CLIENT role gets these too - the row-level restriction
- *               ("only their own case") is enforced in the service layer
- *               using Permission.scope = OWN, NOT by a different permission
- *               record. Scope narrows the SQL, it does not gate the check.
- *   NO_ACCESS -> nothing written for that module/role pair
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -88,7 +66,6 @@ public class DataInitializer implements CommandLineRunner {
 
         createTenantTypes();
         Firm systemFirm = createSystemFirmForSuperAdmin();
-        // Seed DB-driven settings defaults before anything reads policy from them.
         systemConfigService.seedGlobalDefaults();
         if (mfaEnforcementOn()) {
             migrateExistingSuperAdminMfa();
@@ -103,9 +80,6 @@ public class DataInitializer implements CommandLineRunner {
         log.info("=== DataInitializer: seed complete ===");
     }
 
-    // ========================================================================
-    // Tenant types
-    // ========================================================================
     private void createTenantTypes() {
         String[][] tenantTypes = {
                 {"SOLO", "Solo Practitioner", "Single lawyer practice"},
@@ -124,9 +98,6 @@ public class DataInitializer implements CommandLineRunner {
         }
     }
 
-    // ========================================================================
-    // System firm
-    // ========================================================================
     private Firm createSystemFirmForSuperAdmin() {
         return firmRepository.findByLawFirmCode("SYSTEM").orElseGet(() -> {
             Firm systemFirm = Firm.builder()
@@ -141,9 +112,6 @@ public class DataInitializer implements CommandLineRunner {
         });
     }
 
-    // ========================================================================
-    // Migrate existing SUPER_ADMIN users — force MFA
-    // ========================================================================
     private boolean mfaEnforcementOn() {
         return systemConfigService.isMfaEnabled()
                 && systemConfigService.mfaRequiredRoleCodes().contains(RoleCode.SUPER_ADMIN);
@@ -160,9 +128,6 @@ public class DataInitializer implements CommandLineRunner {
         }
     }
 
-    // ========================================================================
-    // System roles
-    // ========================================================================
     private void createSystemRoles() {
         Object[][] roles = {
                 {RoleCode.SUPER_ADMIN, "Full system access - controls everything", true, null},
@@ -190,12 +155,8 @@ public class DataInitializer implements CommandLineRunner {
         }
     }
 
-    // ========================================================================
-    // Modules + Permissions + ModulePermission junction
-    // ========================================================================
     private void createModulesAndPermissions() {
 
-        // { code, name, description, displayOrder, sortOrder, icon, path, extraActions[] }
         Object[][] moduleDefs = {
                 {"CASE_MANAGEMENT", "Case Management", "Manage legal cases", 1, 10, "FolderIcon", "/cases",
                         new PermissionAction[]{PermissionAction.ASSIGN, PermissionAction.ARCHIVE, PermissionAction.UPDATE_STATUS}},
@@ -274,7 +235,7 @@ public class DataInitializer implements CommandLineRunner {
                         Permission p = new Permission();
                         p.setCode(permCode);
                         p.setAction(action);
-                        p.setScope(PermissionScope.TENANT); // default; overridden to GLOBAL for SUPER_ADMIN below
+                        p.setScope(PermissionScope.TENANT);
                         p.setModuleCode(moduleCode);
                         p.setDescription(def[1] + " - " + action.name());
                         p.setActive(true);
@@ -302,12 +263,8 @@ public class DataInitializer implements CommandLineRunner {
         }
     }
 
-    // ========================================================================
-    // Role -> Permission assignment matrix
-    // ========================================================================
     private void assignPermissionsToRoles() {
 
-        // { moduleCode, SUPER_ADMIN, FIRM_ADMIN, ADVOCATE, PARALEGAL, CLIENT }
         String[][] matrix = {
                 {"CASE_MANAGEMENT",     FULL, FULL, FULL,      READ_ONLY, OWN},
                 {"DOCUMENT_MANAGEMENT", NO_ACCESS, FULL, FULL, READ_ONLY, OWN},
@@ -368,17 +325,6 @@ public class DataInitializer implements CommandLineRunner {
         }
     }
 
-    /**
-     * FULL      -> every permission seeded for that module
-     * READ_ONLY -> ACCESS + VIEW only
-     * OWN       -> ACCESS + VIEW (same rows as READ_ONLY).
-     *              CLIENT gets these; the "own records only" restriction
-     *              is applied in the service layer based on
-     *              Permission.scope == OWN, e.g.:
-     *                if (permission.getScope() == PermissionScope.OWN) {
-     *                    query.where("client_id", currentUser.getId());
-     *                }
-     */
     private List<Permission> getPermissionsForAccessLevel(String moduleCode, String accessLevel) {
         List<Permission> all = modulePermissionRepository.findPermissionsByModuleId(
                 moduleRepository.findByCode(moduleCode)
@@ -395,9 +341,6 @@ public class DataInitializer implements CommandLineRunner {
         };
     }
 
-    // ========================================================================
-    // Seed FirmModules for SYSTEM firm — all modules enabled by default
-    // ========================================================================
     private void seedModulesForSystemFirm(Firm systemFirm) {
         List<Module> allModules = moduleRepository.findAll();
         for (Module module : allModules) {
@@ -414,14 +357,10 @@ public class DataInitializer implements CommandLineRunner {
         }
     }
 
-    // ========================================================================
-    // CONFIGURATION sub-modules (GLOBAL_CONFIG, FIRM_CONFIG)
-    // ========================================================================
     private void seedConfigurationSubModules() {
         Module configParent = moduleRepository.findByCode("CONFIGURATION")
                 .orElseThrow(() -> new IllegalStateException("CONFIGURATION module not found"));
 
-        // Sub-module definitions: { code, name, description, sortOrder, icon, path, extraActions[] }
         Object[][] subModuleDefs = {
                 {"GLOBAL_CONFIG", "Global Configuration", "Platform-wide settings (SMTP, MFA, trial, app)", 1, "GlobeIcon", "/settings/global",
                         new PermissionAction[]{}},
@@ -493,9 +432,6 @@ public class DataInitializer implements CommandLineRunner {
         }
     }
 
-    // ========================================================================
-    // Default Renewal Types (system-wide)
-    // ========================================================================
     private void seedDefaultRenewalTypes() {
         String[][] types = {
                 {"Trademark Renewal", "Annual trademark renewal and maintenance"},

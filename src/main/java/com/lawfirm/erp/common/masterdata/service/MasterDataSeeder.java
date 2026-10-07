@@ -18,11 +18,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Seeds Nepal master data (7 provinces, 77 districts) from classpath JSON on startup.
- * Idempotent: rows that already exist (by code) are left untouched — safe to re-run
- * manually via the cache-refresh endpoint after editing the JSON resources.
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -48,7 +43,6 @@ public class MasterDataSeeder implements CommandLineRunner {
             List<DistrictSeed> districtSeeds =
                     objectMapper.readValue(districtsResource.getInputStream(), new TypeReference<>() {});
 
-            // Country row (the top of the hierarchy) — single row today: Nepal.
             if (countryRepository.findByCode("NP").isEmpty()) {
                 Country country = new Country();
                 country.setCode("NP");

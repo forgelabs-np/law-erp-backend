@@ -56,7 +56,6 @@ public class HearingReminderServiceImpl implements HearingReminderService {
             return 0;
         }
 
-        // ── Batch-load the whole context for the day (no N+1) ────────────────
         Set<UUID> courtCaseIds = events.stream().map(CourtEvent::getCourtCaseId).collect(Collectors.toSet());
         Map<UUID, CourtCase> caseById = courtCaseRepository.findAllById(courtCaseIds).stream()
                 .collect(Collectors.toMap(CourtCase::getId, Function.identity()));
@@ -71,7 +70,6 @@ public class HearingReminderServiceImpl implements HearingReminderService {
                 : firmRepository.findAllById(firmIds).stream()
                         .collect(Collectors.toMap(Firm::getId, Function.identity()));
 
-        // Our-client parties per matter, queried per firm (parties are firm-scoped)
         Map<UUID, List<MatterParty>> partiesByMatter = new HashMap<>();
         for (Map.Entry<UUID, Set<UUID>> entry : mattersByFirm(matterById, caseById, events).entrySet()) {
             List<MatterParty> parties = matterPartyRepository
@@ -81,7 +79,6 @@ public class HearingReminderServiceImpl implements HearingReminderService {
             }
         }
 
-        // All recipient users in one query: attending advocates + linked clients
         Set<UUID> userIds = new HashSet<>();
         events.forEach(e -> { if (e.getAttendingAdvocateId() != null) userIds.add(e.getAttendingAdvocateId()); });
         partiesByMatter.values().forEach(ps -> ps.forEach(p -> { if (p.getClientId() != null) userIds.add(p.getClientId()); }));
@@ -89,7 +86,6 @@ public class HearingReminderServiceImpl implements HearingReminderService {
                 : userRepository.findAllById(userIds).stream()
                         .collect(Collectors.toMap(User::getId, Function.identity()));
 
-        // ── Dispatch per event; one failure never stops the batch ────────────
         int dispatched = 0;
         for (CourtEvent event : events) {
             try {
@@ -99,8 +95,6 @@ public class HearingReminderServiceImpl implements HearingReminderService {
                 if (matter == null) { log.warn("Hearing reminder: matter {} missing for event {}", cc.getMatterId(), event.getId()); continue; }
                 Firm firm = firmById.get(event.getFirmId());
 
-                // In-app ALERT (T-1 hearing) — published per recipient below,
-                // day-bucketed dedupKey keeps scheduler re-runs idempotent.
                 java.util.function.Consumer<UUID> publishInApp = recipientId ->
                         eventPublisher.publishEvent(new NotificationEvent(
                                 event.getFirmId(), recipientId, null, false,
@@ -122,7 +116,6 @@ public class HearingReminderServiceImpl implements HearingReminderService {
                         event.getScheduledDate(), event.getScheduledTime(),
                         event.getCourtRoom(), event.getJudgeName());
 
-                // Attending advocate
                 if (event.getAttendingAdvocateId() != null) {
                     User advocate = userById.get(event.getAttendingAdvocateId());
                     if (advocate != null && hasEmail(advocate.getEmail())) {
@@ -138,7 +131,6 @@ public class HearingReminderServiceImpl implements HearingReminderService {
                     }
                 }
 
-                // Linked our-clients (deduped by the claim key — same email only sends once)
                 for (MatterParty party : partiesByMatter.getOrDefault(matter.getId(), List.of())) {
                     if (party.getClientId() == null) continue;
                     User client = userById.get(party.getClientId());
@@ -162,7 +154,6 @@ public class HearingReminderServiceImpl implements HearingReminderService {
         return dispatched;
     }
 
-    /** Groups matter ids by their firm — parties are firm-scoped, so we query per firm. */
     private Map<UUID, Set<UUID>> mattersByFirm(Map<UUID, Matter> matterById, Map<UUID, CourtCase> caseById,
                                                List<CourtEvent> events) {
         Map<UUID, Set<UUID>> byFirm = new HashMap<>();
@@ -174,11 +165,6 @@ public class HearingReminderServiceImpl implements HearingReminderService {
         return byFirm;
     }
 
-    /**
-     * Claims a reminder slot before dispatch. Returns the log row id, or null
-     * when this (event, recipient, date) was already handled — the unique
-     * constraint makes the job idempotent across re-runs and restarts.
-     */
     private UUID claim(CourtEvent event, HearingReminderLog.RecipientType type, String email, LocalDate date) {
         if (reminderLogRepository.existsByCourtEventIdAndRecipientTypeAndRecipientEmailAndScheduledDate(
                 event.getId(), type, email, date)) {

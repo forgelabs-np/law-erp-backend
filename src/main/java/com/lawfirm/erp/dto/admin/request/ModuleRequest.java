@@ -26,7 +26,7 @@ public class ModuleRequest {
 
     private UUID parentId;
     private Integer displayOrder;
-    private Integer sortOrder;  // ← ADD THIS
+    private Integer sortOrder;
     private String icon;
     private String path;
     private Boolean isActive;

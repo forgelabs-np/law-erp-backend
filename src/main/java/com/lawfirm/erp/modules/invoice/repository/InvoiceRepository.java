@@ -24,7 +24,6 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
 
     Optional<Invoice> findByIdAndFirmId(UUID id, UUID firmId);
 
-    /** Generate next invoice number for a given year. */
     @Query("SELECT i.invoiceNumber FROM Invoice i WHERE i.invoiceNumber LIKE :pattern ORDER BY i.invoiceNumber DESC")
     List<String> findMaxInvoiceNumberByPattern(@Param("pattern") String pattern, Pageable pageable);
 
@@ -32,7 +31,6 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
 
     long countByStatus(InvoiceStatus status);
 
-    /** Search by invoice number or firm name (firm name requires a join). */
     @Query("SELECT i FROM Invoice i LEFT JOIN com.lawfirm.erp.firm.entity.Firm f ON f.id = i.firmId " +
            "WHERE (:search IS NULL OR LOWER(i.invoiceNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) " +
            "     OR LOWER(f.name) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))) " +

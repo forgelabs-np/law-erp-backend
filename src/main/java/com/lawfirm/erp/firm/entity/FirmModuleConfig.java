@@ -27,8 +27,8 @@ public class FirmModuleConfig extends AuditableEntity {
     private Integer maxFileSizeMb = 10;
 
     @Column(name = "allowed_file_types", columnDefinition = "TEXT")
-    private String allowedFileTypes; // JSON array: ["pdf", "doc", "docx"]
+    private String allowedFileTypes;
 
     @Column(name = "custom_settings", columnDefinition = "TEXT")
-    private String customSettings; // JSON object for future use
+    private String customSettings;
 }

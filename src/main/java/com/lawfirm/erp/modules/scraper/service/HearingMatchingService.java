@@ -20,10 +20,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
-// Joins client cases against ingested hearings on (courtId, caseNoInternal) and pushes new
-// matches to the notification channel. Independent of the scrape — it reads whatever is
-// already ingested, so a slow/failed scrape never blocks matching. Matches are keyed on
-// (clientCaseId, courtId, hearingDateBs); re-runs skip existing rows.
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -112,7 +108,6 @@ public class HearingMatchingService {
         return true;
     }
 
-    // One-time startup enrichment for matches created before the detail columns existed.
     @PostConstruct
     @Transactional
     public void backfillLegacyMatches() {
@@ -151,21 +146,14 @@ public class HearingMatchingService {
         }
     }
 
-    /**
-     * All matches for a client case, newest first.
-     */
     public List<HearingMatch> findByClientCaseId(Long clientCaseId) {
         return matchRepository.findByClientCaseIdOrderByHearingDateAdDesc(clientCaseId);
     }
 
-    /**
-     * Every match awaiting notification dispatch.
-     */
     public List<HearingMatch> findUnnotified() {
         return matchRepository.findByNotifiedFalse();
     }
 
-    // At-least-once: mark notified only after a successful dispatch, so failures are retried.
     private void dispatchPending() {
         for (HearingMatch m : matchRepository.findByNotifiedFalse()) {
             try {

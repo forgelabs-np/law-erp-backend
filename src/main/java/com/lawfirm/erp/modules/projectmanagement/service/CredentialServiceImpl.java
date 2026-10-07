@@ -127,7 +127,6 @@ public class CredentialServiceImpl implements CredentialService {
         return encryptionUtil.decrypt(credential.getEncryptedPassword());
     }
 
-    // ─── Helpers ───────────────────────────────────────────────────────────
 
     private Project findProject(String projectCode, UUID firmId) {
         return projectRepository.findByProjectCodeAndFirmId(projectCode, firmId)

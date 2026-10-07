@@ -50,7 +50,6 @@ public class RoleManagementServiceImpl implements RoleManagementService {
             log.info("Role updated: {} by admin: {}", role.getRoleCode(), adminId);
             role = roleRepository.save(role);
 
-            // ✅ AUDIT: Role updated
             auditService.log(
                     AuditAction.ROLE_UPDATED,
                     AuditEntity.ROLE,
@@ -63,7 +62,6 @@ public class RoleManagementServiceImpl implements RoleManagementService {
             log.info("Role created: {} by admin: {}", role.getRoleCode(), adminId);
             role = roleRepository.save(role);
 
-            //  AUDIT: Role created
             auditService.log(
                     AuditAction.ROLE_CREATED,
                     AuditEntity.ROLE,
@@ -105,7 +103,6 @@ public class RoleManagementServiceImpl implements RoleManagementService {
         roleRepository.delete(role);
         log.info("Role deleted: {} by admin: {}", role.getRoleCode(), adminId);
 
-        //  AUDIT: Role deleted
         auditService.log(
                 AuditAction.ROLE_DELETED,
                 AuditEntity.ROLE,
@@ -134,7 +131,6 @@ public class RoleManagementServiceImpl implements RoleManagementService {
         log.info("Role {} toggled to {} by admin: {}",
                 role.getRoleCode(), role.isActive(), adminId);
 
-        //  AUDIT: Role status toggled
         auditService.log(
                 role.isActive() ? AuditAction.ROLE_ACTIVATED : AuditAction.ROLE_DEACTIVATED,
                 AuditEntity.ROLE,
@@ -145,7 +141,6 @@ public class RoleManagementServiceImpl implements RoleManagementService {
         return convertToCompleteResponse(role);
     }
 
-    // ─── Private Methods ─────────────────────────────────────────────────────
 
     private UUID getCurrentAdminId() {
         UUID adminId = currentUserResolver.getCurrentUserId();
@@ -155,18 +150,12 @@ public class RoleManagementServiceImpl implements RoleManagementService {
         return adminId;
     }
 
-    /** FIX: Use findAllByRoleCode with code lookup, then filter non-system roles.
-     *  Previously used findSystemRoleByCode() which only found system roles (firm IS NULL),
-     *  making the update-by-code path always fail for non-system roles.
-     *  Now uses findAllByRoleCode() and filters for non-system roles. */
     private Role findExistingRole(RoleRequest request) {
         if (request.getId() != null) {
             return roleRepository.findById(request.getId()).orElse(null);
         }
         if (request.getCode() != null && !request.getCode().isEmpty()) {
             List<Role> roles = roleRepository.findAllByRoleCode(request.getCode());
-            // Prefer non-system (firm-scoped) roles for update
-            // System roles can't be modified (will be caught by validateNotSystemRole)
             return roles.stream()
                     .filter(r -> !Boolean.TRUE.equals(r.getIsSystem()))
                     .findFirst()
@@ -231,17 +220,12 @@ public class RoleManagementServiceImpl implements RoleManagementService {
         return batchConvertToCompleteResponse(roles);
     }
 
-    /**
-     * Batch-load permissions for all roles in one query, then build responses.
-     * Eliminates the N+1 that was: 1 query for roles + N queries for permissions.
-     */
     private List<RoleResponse> batchConvertToCompleteResponse(List<Role> roles) {
         if (roles.isEmpty()) return List.of();
 
         List<UUID> roleIds = roles.stream().map(Role::getId).collect(Collectors.toList());
         List<RolePermission> allRPs = rolePermissionRepository.findByRoleIdIn(roleIds);
 
-        // Group permissions by role ID (single pass, no extra queries)
         Map<UUID, List<PermissionResponse>> permsByRole = allRPs.stream()
                 .collect(Collectors.groupingBy(
                         rp -> rp.getRole().getId(),

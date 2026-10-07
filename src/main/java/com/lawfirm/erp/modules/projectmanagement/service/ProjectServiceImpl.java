@@ -51,13 +51,11 @@ public class ProjectServiceImpl implements ProjectService {
         User currentUser = userRepository.findById(currentUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Resolve owner — defaults to creator
         UUID ownerId = request.getOwnerId() != null ? request.getOwnerId() : currentUserId;
         if (!ownerId.equals(currentUserId)) {
             validateUserBelongsToFirm(ownerId, firmId);
         }
 
-        // Resolve client
         String clientName = request.getClientName();
         UUID clientUserId = request.getClientUserId();
         if (clientUserId != null) {
@@ -72,7 +70,6 @@ public class ProjectServiceImpl implements ProjectService {
             }
         }
 
-        // Generate project code: FIRMCODE-PRJ-YYYY-NNNNN
         String firmCode = FirmContextHolder.getFirmCode();
         String projectCode = generateProjectCode(firmCode, firmId);
 
@@ -91,7 +88,6 @@ public class ProjectServiceImpl implements ProjectService {
         project.setActive(true);
         project = projectRepository.save(project);
 
-        // Auto-add owner as OWNER member
         ProjectMember ownerMember = ProjectMember.builder()
                 .projectId(project.getId())
                 .userId(ownerId)
@@ -111,7 +107,6 @@ public class ProjectServiceImpl implements ProjectService {
         UUID currentUserId = currentUserResolver.getCurrentUserId();
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
-        // Firm admins see all firm projects; employees only see projects they're members of
         boolean isAdmin = isFirmAdmin();
         Page<Project> projects;
         if (isAdmin) {
@@ -217,7 +212,6 @@ public class ProjectServiceImpl implements ProjectService {
                 .collect(Collectors.toList());
     }
 
-    // ─── Helpers ───────────────────────────────────────────────────────────
 
     private Project findProject(String projectCode, UUID firmId) {
         return projectRepository.findByProjectCodeAndFirmId(projectCode, firmId)
@@ -235,7 +229,6 @@ public class ProjectServiceImpl implements ProjectService {
 
     private String generateProjectCode(String firmCode, UUID firmId) {
         int nextSeq = 1;
-        // Simple sequence — last created project's code parsed
         List<Project> recent = projectRepository.findByFirmId(firmId,
                 PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "createdAt"))).getContent();
         if (!recent.isEmpty()) {

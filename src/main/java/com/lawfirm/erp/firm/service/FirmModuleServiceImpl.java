@@ -38,12 +38,6 @@ public class FirmModuleServiceImpl implements FirmModuleService {
     private final CurrentUserResolver currentUserResolver;
     private final AuditService auditService;
 
-    /**
-     * Enabling or disabling a module applies to its whole sub-tree, so a firm can never
-     * end up with a sub-module of a disabled parent — and granting TESTCONFIG grants
-     * TESTCONFIG 1 / TESTCONFIG 2 without a second call. A sub-module granted this way can
-     * still be switched off on its own afterwards, because its own row wins.
-     */
     @Transactional
     public FirmModuleResponse enableModuleForFirm(UUID firmId, EnableModuleRequest request) {
         Firm firm = firmRepository.findById(firmId)

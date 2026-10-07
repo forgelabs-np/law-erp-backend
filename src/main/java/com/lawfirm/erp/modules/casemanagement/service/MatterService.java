@@ -14,7 +14,6 @@ public interface MatterService {
 
     MatterResponse createMatter(CreateMatterRequest request);
 
-    /** {@code clientUserId} filters to one client's matters; ignored for client-scoped callers. */
     Page<MatterResponse> listMatters(MatterType matterType, MatterStatus status,
                                      UUID clientUserId, String search, int page, int size);
 

@@ -18,12 +18,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Runs daily at 09:00 to check trial firms:
- * - Sends TRIAL_EXPIRING (TRIAL_WARNING_DAYS before expiry, default 3) to firm admins
- * - Sends TRIAL_EXPIRED (on expiry day) to firm admins
- * - Sets expired firms to SUSPENDED status
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -33,7 +27,7 @@ public class TrialExpiryScheduler {
     private final NotificationOrchestrator notificationOrchestrator;
     private final SystemConfigService systemConfigService;
 
-    @Scheduled(cron = "0 0 9 * * *") // daily at 09:00
+    @Scheduled(cron = "0 0 9 * * *")
     public void checkTrialExpiries() {
         List<Firm> trialFirms = firmRepository.findByIsTrialTrue();
         LocalDateTime now = LocalDateTime.now();
@@ -44,7 +38,6 @@ public class TrialExpiryScheduler {
             long daysRemaining = ChronoUnit.DAYS.between(now, firm.getTrialExpiresAt());
 
             if (daysRemaining < 0) {
-                // Trial has expired — suspend firm
                 handleExpiredTrial(firm);
             } else if (daysRemaining <= systemConfigService.trialWarningDays()) {
                 // Trial expiring soon — send warning
@@ -61,7 +54,6 @@ public class TrialExpiryScheduler {
     }
 
     private void handleExpiredTrial(Firm firm) {
-        // Suspend the firm
         if (firm.getStatus() != FirmStatus.SUSPENDED) {
             firm.setStatus(FirmStatus.SUSPENDED);
             firmRepository.save(firm);
@@ -78,8 +70,8 @@ public class TrialExpiryScheduler {
                                       Map<String, Object> variables) {
         NotificationEvent event = new NotificationEvent(
                 firm.getId(),
-                null,               // not to a specific user
-                RoleCode.FIRM_ADMIN,  // fan-out to all FIRM_ADMIN users in the firm
+                null,
+                RoleCode.FIRM_ADMIN,
                 false,
                 type,
                 "FIRM",

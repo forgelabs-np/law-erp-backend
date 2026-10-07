@@ -13,40 +13,29 @@ import java.util.UUID;
 @Builder
 public class MeResponse {
 
-    // ── Who ───────────────────────────────────────────────────────────────
     private UUID id;
     private String username;
     private String fullName;
     private String email;
     private String mobileNo;
     private String profilePhotoUrl;
-    private String userType;          // SUPER_ADMIN | FIRM | FIRM_USER | CLIENT
+    private String userType;
 
-    // ── Firm context ──────────────────────────────────────────────────────
-    private FirmInfo firm;            // null for SUPER_ADMIN
+    private FirmInfo firm;
 
-    // ── Role ──────────────────────────────────────────────────────────────
     private RoleInfo role;
 
-    // ── Permissions — flat list ───────────────────────────────────────────
-    // e.g. ["CASE_MANAGEMENT:VIEW", "CASE_MANAGEMENT:CREATE", "BILLING:VIEW"]
-    // Frontend checks: permissions.includes("CASE_MANAGEMENT:DELETE")
     private List<String> permissions;
 
-    // ── Permissions grouped by module — for menu building ─────────────────
-    // Frontend iterates this to build sidebar menu
     private List<ModuleAccess> modules;
 
-    // ── Brand config (from SystemConfig) ──────────────────────────────────
     private String brandColorPrimary;
     private String brandColorSecondary;
     private String appName;
 
-    // ── Status ────────────────────────────────────────────────────────────
     private boolean isActive;
     private LocalDateTime lastLoginAt;
 
-    // ── Nested types ──────────────────────────────────────────────────────
 
     @Data
     @Builder
@@ -59,10 +48,10 @@ public class MeResponse {
         private String address;
         private String jurisdiction;
         private String logoUrl;
-        private String status;             // ACTIVE, SUSPENDED, TRIAL, EXPIRED
+        private String status;
         private boolean isTrial;
         private LocalDateTime trialExpiresAt;
-        private Long daysRemaining;        // null if not trial
+        private Long daysRemaining;
     }
 
     @Data
@@ -70,23 +59,19 @@ public class MeResponse {
     public static class RoleInfo {
         private UUID id;
         private String name;
-        private String code;         // ADVOCATE | PARALEGAL | FIRM_ADMIN | CLIENT
+        private String code;
         private boolean isSystem;
     }
 
     @Data
     @Builder
     public static class ModuleAccess {
-        private String moduleCode;   // "CASE_MANAGEMENT"
-        private String moduleName;   // "Case Management"
-        private String icon;         // "FolderIcon" — for sidebar rendering
-        private String path;         // "/cases" — frontend route
-        private boolean enabled;     // is module enabled for this firm?
-        private List<String> actions;// ["VIEW","CREATE","EDIT"] — what this user can do
-        // ── Sub-modules ─────────────────────────────────────────────────────
-        // Nested under this module (Module > SubModule). Only present when this
-        // module actually has children — leaf modules omit the field entirely.
-        // Frontend renders children as expandable items.
+        private String moduleCode;
+        private String moduleName;
+        private String icon;
+        private String path;
+        private boolean enabled;
+        private List<String> actions;
         @JsonInclude(JsonInclude.Include.NON_EMPTY)
         private List<ModuleAccess> subModules;
     }

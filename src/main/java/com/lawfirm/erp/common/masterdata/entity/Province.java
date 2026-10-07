@@ -10,11 +10,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-/**
- * Master data — a province of Nepal (first-level administrative division).
- * Seeded from {@code classpath:master-data/nepal/provinces.json}; read-mostly,
- * served through the {@code masterData} cache.
- */
 @Entity
 @Table(name = "master_province", indexes = {
         @Index(name = "idx_mp_code", columnList = "code", unique = true)
@@ -25,7 +20,6 @@ import lombok.Setter;
 @NoArgsConstructor
 public class Province extends ActiveAuditableEntity {
 
-    /** Official ISO 3166-2 code, e.g. NP-P1. */
     @Column(length = 8, nullable = false, unique = true)
     private String code;
 
@@ -46,7 +40,6 @@ public class Province extends ActiveAuditableEntity {
 
     private Long population2021;
 
-    /** Seed order (1..7) — used for stable listing. */
     @Column(nullable = false)
     private Integer displayOrder;
 }

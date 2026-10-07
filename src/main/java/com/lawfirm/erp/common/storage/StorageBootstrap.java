@@ -6,13 +6,6 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
-/**
- * Verifies the bucket exists at startup.
- *
- * <p>An unreachable object store is logged rather than fatal: the application has plenty of
- * functionality that does not touch storage, and failing to boot because MinIO is down would
- * take all of it out. Requests that do need storage surface a 502 instead.
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j

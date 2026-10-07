@@ -1,6 +1,5 @@
 package com.lawfirm.erp.modules.scraper.converter;
 
-// Court-site numerals are Devanagari; the DB stores Arabic digits. Non-digits pass through.
 public final class DevanagariConverter {
 
     private static final char[] DEVANAGARI = {'०', '१', '२', '३', '४', '५', '६', '७', '८', '९'};
