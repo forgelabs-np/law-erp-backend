@@ -21,6 +21,10 @@ public class FirmProfileResponse {
     private String address;
     private String jurisdiction;
     private String logoUrl;
+    private Boolean logoAllowed;
+    private String brandPrimaryHex;
+    private String brandSecondaryHex;
+    private Boolean isPersonalColor;
     private Boolean isTrial;
     private Integer trialDays;
     private LocalDateTime trialExpiresAt;

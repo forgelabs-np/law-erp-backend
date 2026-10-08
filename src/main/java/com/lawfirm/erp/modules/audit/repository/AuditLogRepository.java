@@ -82,6 +82,16 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     @Query("SELECT a FROM AuditLog a ORDER BY a.createdAt DESC")
     Page<AuditLog> findRecent(Pageable pageable);
 
+    /** Count-only sibling of {@link #findByFirmAndUser} — no need to materialise the rows. */
+    @Query("SELECT COUNT(a) FROM AuditLog a WHERE a.firmId = :firmId AND a.userId = :userId " +
+            "AND (a.createdAt >= COALESCE(:from, a.createdAt)) " +
+            "AND (a.createdAt <= COALESCE(:to, a.createdAt))")
+    long countByFirmAndUser(
+            @Param("firmId") UUID firmId,
+            @Param("userId") UUID userId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
     @Query("SELECT COUNT(a) FROM AuditLog a WHERE a.firmId = :firmId AND a.action = :action")
     long countByFirmAndAction(
             @Param("firmId") UUID firmId,

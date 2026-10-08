@@ -11,7 +11,6 @@ import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.audit.entity.AuditLog;
 import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
-import com.lawfirm.erp.modules.casemanagement.entity.Matter;
 import com.lawfirm.erp.modules.casemanagement.enums.MatterStatus;
 import com.lawfirm.erp.modules.casemanagement.repository.CourtEventRepository;
 import com.lawfirm.erp.modules.casemanagement.repository.MatterRepository;
@@ -127,9 +126,8 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
     }
 
     private GlobalDashboardResponse.CaseStats buildCaseStats(UUID firmId) {
-        long total = firmId != null
-                ? matterRepository.findByFirmId(firmId, org.springframework.data.domain.Pageable.unpaged()).getTotalElements()
-                : matterRepository.count();
+        // Counts, not rows: the previous version loaded every Matter entity just to count them.
+        long total = firmId != null ? matterRepository.countByFirmId(firmId) : matterRepository.count();
         long active = firmId != null
                 ? matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.ACTIVE)
                 : 0;
@@ -137,13 +135,11 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
                 ? matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.CLOSED)
                 : 0;
 
-        List<Matter> matters = firmId != null
-                ? matterRepository.findByFirmId(firmId, org.springframework.data.domain.Pageable.unpaged()).getContent()
-                : matterRepository.findAll();
-        List<UUID> leafIds = matters.stream()
-                .map(Matter::getCurrentCourtCaseId)
-                .filter(java.util.Objects::nonNull)
-                .collect(Collectors.toList());
+        // Project only the leaf court-case ids (one row per matter) instead of whole entities. The
+        // list keeps one entry per matter, so the stale count below stays identical to the old one.
+        List<UUID> leafIds = firmId != null
+                ? matterRepository.findLeafCourtCaseIdsByFirmId(firmId)
+                : matterRepository.findLeafCourtCaseIds();
 
         long stale = 0;
         if (!leafIds.isEmpty()) {
@@ -151,14 +147,14 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
             var peshiMap = latestPeshi.stream()
                     .collect(Collectors.toMap(r -> (UUID) r[0], r -> (LocalDate) r[1]));
             LocalDate cutoff = LocalDate.now().minusDays(90);
-            stale = matters.stream()
-                    .filter(m -> {
-                        UUID leafId = m.getCurrentCourtCaseId();
-                        if (leafId == null) return true;
+            long withoutRecentPeshi = leafIds.stream()
+                    .filter(leafId -> {
                         LocalDate last = peshiMap.get(leafId);
                         return last == null || last.isBefore(cutoff);
                     })
                     .count();
+            // Matters with no leaf at all counted as stale before, and still do.
+            stale = (total - leafIds.size()) + withoutRecentPeshi;
         }
 
         int todayEvents = firmId != null

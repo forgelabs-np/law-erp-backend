@@ -2,6 +2,7 @@ package com.lawfirm.erp.modules.me.mapper;
 
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
+import com.lawfirm.erp.firm.service.BrandColorValidator;
 import com.lawfirm.erp.modules.me.dto.MeResponse;
 import com.lawfirm.erp.rbac.entity.Role;
 import org.springframework.stereotype.Component;
@@ -28,6 +29,11 @@ public class MeMapper {
                 .address(firm.getAddress())
                 .jurisdiction(firm.getJurisdiction())
                 .logoUrl(firm.getLogoUrl())
+                .logoAllowed(Boolean.TRUE.equals(firm.getLogoAllowed()))
+                .brandPrimaryHex(firm.getBrandPrimaryHex())
+                .brandSecondaryHex(firm.getBrandSecondaryHex())
+                .isPersonalColor(BrandColorValidator.hasPersonalColors(
+                        firm.getBrandPrimaryHex(), firm.getBrandSecondaryHex()) ? Boolean.TRUE : null)
                 .status(firm.getStatus() != null ? firm.getStatus().name() : null)
                 .isTrial(Boolean.TRUE.equals(firm.getIsTrial()))
                 .trialExpiresAt(firm.getTrialExpiresAt())

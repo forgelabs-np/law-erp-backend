@@ -46,6 +46,9 @@ public class FirmProfileServiceImpl implements FirmProfileService {
         if (request.getAddress() != null) firm.setAddress(request.getAddress());
         if (request.getJurisdiction() != null) firm.setJurisdiction(request.getJurisdiction());
         if (request.getLogoUrl() != null) firm.setLogoUrl(request.getLogoUrl());
+        if (request.getLogoAllowed() != null) firm.setLogoAllowed(request.getLogoAllowed());
+        if (request.getBrandPrimaryHex() != null) firm.setBrandPrimaryHex(BrandColorValidator.normalizeHex(request.getBrandPrimaryHex()));
+        if (request.getBrandSecondaryHex() != null) firm.setBrandSecondaryHex(BrandColorValidator.normalizeHex(request.getBrandSecondaryHex()));
 
         firm = firmRepository.save(firm);
         log.info("Firm profile updated: {}", firm.getLawFirmCode());
@@ -71,9 +74,7 @@ public class FirmProfileServiceImpl implements FirmProfileService {
     private Firm getFirmById(UUID firmId) {
         return firmRepository.findById(firmId)
                 .orElseThrow(() -> new ResourceNotFoundException("Firm not found"));
-    }
-
-    private FirmProfileResponse toProfileResponse(Firm firm) {
+    }    private FirmProfileResponse toProfileResponse(Firm firm) {
         return FirmProfileResponse.builder()
                 .id(firm.getId())
                 .lawFirmCode(firm.getLawFirmCode())
@@ -85,10 +86,23 @@ public class FirmProfileServiceImpl implements FirmProfileService {
                 .address(firm.getAddress())
                 .jurisdiction(firm.getJurisdiction())
                 .logoUrl(firm.getLogoUrl())
+                .logoAllowed(Boolean.TRUE.equals(firm.getLogoAllowed()))
+                .brandPrimaryHex(normalizeHex(firm.getBrandPrimaryHex()))
+                .brandSecondaryHex(normalizeHex(firm.getBrandSecondaryHex()))
+                .isPersonalColor(BrandColorValidator.hasPersonalColors(
+                        firm.getBrandPrimaryHex(), firm.getBrandSecondaryHex()))
                 .isTrial(Boolean.TRUE.equals(firm.getIsTrial()))
                 .trialDays(firm.getTrialDays())
                 .trialExpiresAt(firm.getTrialExpiresAt())
                 .createdAt(firm.getCreatedAt())
                 .build();
     }
+
+    private String normalizeHex(String hex) {
+        if (hex == null) {
+            return null;
+        }
+        return BrandColorValidator.normalizeHex(hex);
+    }
+
 }

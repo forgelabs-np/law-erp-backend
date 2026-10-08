@@ -15,6 +15,14 @@ spring:
   # Set which profile is active
   profiles:
     active: dev
+
+  # Batch lazy loads into IN (...) queries instead of one SELECT per row. This is the safety net
+  # behind the explicit fetch joins: any remaining N+1 degrades to ceil(N/100) queries, and it does
+  # not change any result — only how many statements produce it.
+  jpa:
+    properties:
+      hibernate:
+        default_batch_fetch_size: 100
   
   springdoc:
     api-docs:

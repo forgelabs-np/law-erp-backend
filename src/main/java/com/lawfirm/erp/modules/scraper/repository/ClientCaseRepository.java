@@ -32,4 +32,8 @@ public interface ClientCaseRepository extends JpaRepository<ClientCase, Long> {
     List<ClientCase> findByClientIdAndActive(UUID clientId, boolean active);
 
     List<ClientCase> findByCourtIdAndActive(Integer courtId, boolean active);
+
+    /** Only the cases the matcher needs, instead of loading the whole table and filtering in Java. */
+    List<ClientCase> findByActiveTrueAndCaseStatus(
+            com.lawfirm.erp.modules.scraper.enums.ClientCaseStatus caseStatus);
 }

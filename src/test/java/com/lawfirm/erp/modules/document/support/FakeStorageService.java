@@ -66,6 +66,11 @@ public class FakeStorageService implements StorageService {
     }
 
     @Override
+    public String presignFirmLogo(String objectKey) {
+        return "http://fake-storage/logo/" + objectKey;
+    }
+
+    @Override
     public StoredObject stat(String key) {
         byte[] content = objects.get(key);
         if (content == null) {

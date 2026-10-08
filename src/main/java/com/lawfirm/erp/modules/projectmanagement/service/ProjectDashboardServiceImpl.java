@@ -6,12 +6,12 @@ import com.lawfirm.erp.modules.projectmanagement.dto.response.ProjectDashboardRe
 import com.lawfirm.erp.modules.projectmanagement.entity.Project;
 import com.lawfirm.erp.modules.projectmanagement.entity.Renewal;
 import com.lawfirm.erp.modules.projectmanagement.entity.RenewalInstance;
+import com.lawfirm.erp.modules.projectmanagement.entity.RenewalType;
 import com.lawfirm.erp.modules.projectmanagement.enums.ProjectStatus;
 import com.lawfirm.erp.modules.projectmanagement.enums.RenewalInstanceStatus;
 import com.lawfirm.erp.modules.projectmanagement.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -39,60 +39,68 @@ public class ProjectDashboardServiceImpl implements ProjectDashboardService {
         long onHoldProjects = projectRepository.countByFirmIdAndStatus(firmId, ProjectStatus.ON_HOLD);
         long completedProjects = projectRepository.countByFirmIdAndStatus(firmId, ProjectStatus.COMPLETED);
 
-        List<UUID> allProjectIds = projectRepository.findByFirmId(firmId, PageRequest.of(0, 1000))
-                .getContent().stream().map(p -> p.getId()).collect(Collectors.toList());
-        long totalCredentials = allProjectIds.stream()
-                .mapToLong(pid -> credentialRepository.countByProjectIdAndActive(pid, true))
-                .sum();
-        long totalRenewals = allProjectIds.stream()
-                .mapToLong(pid -> renewalRepository.countByProjectIdAndActive(pid, true))
-                .sum();
+        List<Project> projects = projectRepository.findByFirmId(firmId, PageRequest.of(0, 1000)).getContent();
+        List<UUID> allProjectIds = projects.stream().map(Project::getId).collect(Collectors.toList());
+
+        long totalCredentials = allProjectIds.isEmpty() ? 0L
+                : credentialRepository.countByProjectIdInAndActive(allProjectIds, true);
+        long totalRenewals = allProjectIds.isEmpty() ? 0L
+                : renewalRepository.countByProjectIdInAndActive(allProjectIds, true);
+
+        Map<UUID, Project> projectMap = projects.stream()
+                .collect(Collectors.toMap(Project::getId, p -> p));
+
+        // Batched: one renewals query, one instances query and one types lookup for the whole firm
+        // instead of a nested per-project / per-renewal loop (which was N+1 across three levels).
+        List<Renewal> renewals = allProjectIds.isEmpty() ? List.of()
+                : renewalRepository.findByProjectIdInAndActive(allProjectIds, true);
+        Map<Long, Renewal> renewalById = renewals.stream()
+                .collect(Collectors.toMap(Renewal::getId, r -> r));
+
+        List<RenewalInstance> instances = renewalById.isEmpty() ? List.of()
+                : instanceRepository.findByRenewalIdInAndActive(new ArrayList<>(renewalById.keySet()), true);
+
+        Map<Long, String> typeNames = renewals.isEmpty() ? Map.of()
+                : renewalTypeRepository.findAllById(
+                        renewals.stream().map(Renewal::getRenewalTypeId).distinct().collect(Collectors.toList()))
+                .stream()
+                .collect(Collectors.toMap(RenewalType::getId, RenewalType::getName));
 
         List<ProjectDashboardResponse.OverdueItem> overdueItems = new ArrayList<>();
         List<ProjectDashboardResponse.UpcomingItem> upcomingItems = new ArrayList<>();
         LocalDate today = LocalDate.now();
         LocalDate threeMonthsAhead = today.plusMonths(3);
 
-        Map<UUID, Project> projectMap = projectRepository.findAllById(allProjectIds).stream()
-                .collect(Collectors.toMap(Project::getId, p -> p));
+        for (RenewalInstance inst : instances) {
+            Renewal renewal = renewalById.get(inst.getRenewalId());
+            if (renewal == null) continue;
 
-        for (UUID projectId : allProjectIds) {
-            Project project = projectMap.get(projectId);
+            Project project = projectMap.get(renewal.getProjectId());
             String projectCode = project != null ? project.getProjectCode() : null;
             String projectName = project != null ? project.getName() : null;
+            String typeName = typeNames.getOrDefault(renewal.getRenewalTypeId(), "Unknown");
 
-            List<Renewal> renewals = renewalRepository.findByProjectIdAndActive(projectId, true);
-            for (Renewal renewal : renewals) {
-                List<RenewalInstance> instances = instanceRepository
-                        .findByRenewalIdAndActive(renewal.getId(), true);
-
-                String typeName = renewalTypeRepository.findById(renewal.getRenewalTypeId())
-                        .map(t -> t.getName()).orElse("Unknown");
-
-                for (RenewalInstance inst : instances) {
-                    if (inst.getStatus() == RenewalInstanceStatus.OVERDUE) {
-                        int daysOverdue = (int) (LocalDate.now().toEpochDay() - inst.getDueDate().toEpochDay());
-                        overdueItems.add(ProjectDashboardResponse.OverdueItem.builder()
-                                .projectCode(projectCode)
-                                .projectName(projectName)
-                                .renewalTitle(renewal.getTitle())
-                                .renewalTypeName(typeName)
-                                .dueDate(inst.getDueDate())
-                                .daysOverdue(daysOverdue)
-                                .build());
-                    } else if (inst.getStatus() == RenewalInstanceStatus.PENDING
-                            && !inst.getDueDate().isAfter(threeMonthsAhead)) {
-                        int daysUntilDue = (int) (inst.getDueDate().toEpochDay() - LocalDate.now().toEpochDay());
-                        upcomingItems.add(ProjectDashboardResponse.UpcomingItem.builder()
-                                .projectCode(projectCode)
-                                .projectName(projectName)
-                                .renewalTitle(renewal.getTitle())
-                                .renewalTypeName(typeName)
-                                .dueDate(inst.getDueDate())
-                                .daysUntilDue(daysUntilDue)
-                                .build());
-                    }
-                }
+            if (inst.getStatus() == RenewalInstanceStatus.OVERDUE) {
+                int daysOverdue = (int) (today.toEpochDay() - inst.getDueDate().toEpochDay());
+                overdueItems.add(ProjectDashboardResponse.OverdueItem.builder()
+                        .projectCode(projectCode)
+                        .projectName(projectName)
+                        .renewalTitle(renewal.getTitle())
+                        .renewalTypeName(typeName)
+                        .dueDate(inst.getDueDate())
+                        .daysOverdue(daysOverdue)
+                        .build());
+            } else if (inst.getStatus() == RenewalInstanceStatus.PENDING
+                    && !inst.getDueDate().isAfter(threeMonthsAhead)) {
+                int daysUntilDue = (int) (inst.getDueDate().toEpochDay() - today.toEpochDay());
+                upcomingItems.add(ProjectDashboardResponse.UpcomingItem.builder()
+                        .projectCode(projectCode)
+                        .projectName(projectName)
+                        .renewalTitle(renewal.getTitle())
+                        .renewalTypeName(typeName)
+                        .dueDate(inst.getDueDate())
+                        .daysUntilDue(daysUntilDue)
+                        .build());
             }
         }
 

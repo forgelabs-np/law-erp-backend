@@ -4,6 +4,7 @@ import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.common.enums.UserType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -78,6 +79,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query("SELECT u FROM User u WHERE u.userType = :userType")
     List<User> findByUserType(@Param("userType") UserType userType);
 
+    // The admin mapper reads the firm, so fetch it instead of one proxy select per admin.
+    @EntityGraph(attributePaths = {"firm"})
     @Query("SELECT u FROM User u WHERE u.role.roleCode = 'FIRM_ADMIN' AND u.firm IS NOT NULL")
     List<User> findAllFirmAdmins();
 
@@ -95,6 +98,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
                                       @Param("search") String search,
                                       @Param("firmCode") String firmCode);
 
+    // Fetch role and firm so the admin-user mapper does not initialize a proxy per row (N+1).
+    @EntityGraph(attributePaths = {"role", "firm"})
     @Query("""
             SELECT u FROM User u
             WHERE (:userType IS NULL OR u.userType = :userType)
@@ -108,12 +113,38 @@ public interface UserRepository extends JpaRepository<User, UUID> {
                                            @Param("firmCode") String firmCode,
                                            Pageable pageable);
 
+    /**
+     * Server-side paging/search for the user-management lists. Replaces loading every user into
+     * memory, filtering in Java and slicing the result.
+     */
+    @EntityGraph(attributePaths = {"role"})
+    @Query("""
+            SELECT u FROM User u
+            WHERE (:firmId IS NULL OR u.firm.id = :firmId)
+              AND (:userType IS NULL OR u.userType = :userType)
+              AND (:roleId IS NULL OR u.role.id = :roleId)
+              AND (:isActive IS NULL OR u.active = :isActive)
+              AND (:search IS NULL
+                   OR LOWER(u.username) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+                   OR LOWER(u.fullName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+                   OR LOWER(u.email) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
+                   OR u.mobileNo LIKE CONCAT('%', CAST(:search AS string), '%'))
+            ORDER BY u.createdAt DESC
+            """)
+    Page<User> searchPaged(@Param("firmId") UUID firmId,
+                           @Param("userType") UserType userType,
+                           @Param("roleId") UUID roleId,
+                           @Param("isActive") Boolean isActive,
+                           @Param("search") String search,
+                           Pageable pageable);
+
     @Query("SELECT u.role.id as roleId, COUNT(u) as cnt FROM User u WHERE u.firm.id = :firmId GROUP BY u.role.id")
     List<Object[]> countUsersByRoleIds(@Param("firmId") UUID firmId);
 
     @Query("SELECT u.role.id as roleId, u.fullName as fullName FROM User u WHERE u.firm.id = :firmId AND u.role.id IN :roleIds")
     List<Object[]> findUserNamesByRoleIds(@Param("firmId") UUID firmId, @Param("roleIds") List<UUID> roleIds);
 
+    @EntityGraph(attributePaths = {"firm"})
     @Query("SELECT u FROM User u WHERE u.role.roleCode = 'FIRM_ADMIN' AND u.firm.id = :firmId")
     List<User> findFirmAdminsByFirmId(@Param("firmId") UUID firmId);
 

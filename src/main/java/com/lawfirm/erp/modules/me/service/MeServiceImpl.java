@@ -139,6 +139,8 @@ public class MeServiceImpl implements MeService {
                 .brandColorPrimary(resolveBrandPrimary(user))
                 .brandColorSecondary(resolveBrandSecondary(user))
                 .appName(resolveAppName())
+                .logoAllowed(user.getFirm() != null && Boolean.TRUE.equals(user.getFirm().getLogoAllowed()))
+                .logoUrl(user.getFirm() != null ? user.getFirm().getLogoUrl() : null)
                 .isActive(user.isActive())
                 .lastLoginAt(user.getLastLoginAt())
                 .build();

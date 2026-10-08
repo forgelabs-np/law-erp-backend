@@ -37,6 +37,16 @@ public class Firm extends ActiveAuditableEntity {
     private String jurisdiction;
     private String logoUrl;
 
+    /** Logo uploads stay off until the firm opts in via PATCH /firm/brand/logo/allowed. */
+    @Column(name = "logo_allowed")
+    private Boolean logoAllowed = false;
+
+    @Column(name = "brand_primary_hex", length = 7)
+    private String brandPrimaryHex;
+
+    @Column(name = "brand_secondary_hex", length = 7)
+    private String brandSecondaryHex;
+
     @Column(columnDefinition = "TEXT")
     private String settings;
 

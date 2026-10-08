@@ -32,7 +32,9 @@ import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -60,35 +62,7 @@ public class UserManagementServiceImpl implements UserManagementService {
 
     @Override
     public PagedResponse<UserSummaryResponse> listUsers(UserType userType, UUID roleId, Boolean isActive, int page, int size) {
-        boolean superAdmin = currentUserResolver.isSuperAdmin();
-        UUID firmId = superAdmin ? null : getRequiredFirmId();
-
-        List<User> users;
-        if (roleId != null) {
-            users = superAdmin
-                    ? userRepository.findByRoleId(roleId)
-                    : userRepository.findByFirmIdAndRoleId(firmId, roleId);
-            if (userType != null) {
-                users = users.stream().filter(u -> u.getUserType() == userType).toList();
-            }
-        } else if (userType != null) {
-            users = superAdmin
-                    ? userRepository.findByUserType(userType)
-                    : userRepository.findByFirmIdAndUserType(firmId, userType);
-        } else {
-            users = superAdmin ? userRepository.findAll() : userRepository.findByFirmId(firmId);
-        }
-
-        if (isActive != null) {
-            users = users.stream().filter(u -> u.isActive() == isActive).toList();
-        }
-
-        List<UserSummaryResponse> summaries = users.stream()
-                .sorted(Comparator.comparing(User::getCreatedAt).reversed())
-                .map(userManagementMapper::toSummary)
-                .collect(Collectors.toList());
-
-        return paginateList(summaries, page, size);
+        return pagedSummaries(userType, roleId, isActive, null, page, size);
     }
 
     @Override
@@ -96,25 +70,26 @@ public class UserManagementServiceImpl implements UserManagementService {
         if (query == null || query.isBlank()) {
             return listUsers(null, null, null, page, size);
         }
+        return pagedSummaries(null, null, null, query.trim(), page, size);
+    }
 
-        String q = query.toLowerCase().trim();
+    /**
+     * Filtering, sorting and paging all happen in the database. The previous version loaded every
+     * user into memory (the whole table for a Super Admin) and sliced the result in Java.
+     */
+    private PagedResponse<UserSummaryResponse> pagedSummaries(UserType userType, UUID roleId,
+                                                              Boolean isActive, String search,
+                                                              int page, int size) {
+        UUID firmId = currentUserResolver.isSuperAdmin() ? null : getRequiredFirmId();
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
-        boolean superAdmin = currentUserResolver.isSuperAdmin();
-        List<User> users = superAdmin
-                ? userRepository.findAll()
-                : userRepository.findByFirmId(getRequiredFirmId());
+        Page<User> result = userRepository.searchPaged(firmId, userType, roleId, isActive, search, pageable);
 
-        List<UserSummaryResponse> filtered = users.stream()
-                .filter(u ->
-                        (u.getFullName() != null && u.getFullName().toLowerCase().contains(q)) ||
-                        (u.getEmail() != null && u.getEmail().toLowerCase().contains(q)) ||
-                        (u.getUsername() != null && u.getUsername().toLowerCase().contains(q)) ||
-                        (u.getMobileNo() != null && u.getMobileNo().contains(q))
-                )
+        List<UserSummaryResponse> content = result.getContent().stream()
                 .map(userManagementMapper::toSummary)
                 .collect(Collectors.toList());
 
-        return paginateList(filtered, page, size);
+        return PagedResponse.of(result, content);
     }
 
     @Override
@@ -142,9 +117,7 @@ public class UserManagementServiceImpl implements UserManagementService {
         LocalDateTime startOfMonth = LocalDateTime.now()
                 .withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
         long actionsThisMonth = auditLogRepository
-                .findByFirmAndUser(firmId, userId, startOfMonth, null,
-                        PageRequest.of(0, Integer.MAX_VALUE))
-                .getTotalElements();
+                .countByFirmAndUser(firmId, userId, startOfMonth, null);
 
         Role role = user.getRole();
         return UserProfileResponse.builder()
@@ -444,24 +417,6 @@ public class UserManagementServiceImpl implements UserManagementService {
         log.info("User deleted: {} by firm admin", user.getUsername());
     }
 
-    private <T> PagedResponse<T> paginateList(List<T> items, int page, int size) {
-        int totalElements = items.size();
-        int totalPages = (int) Math.ceil((double) totalElements / size);
-        int start = page * size;
-        int end = Math.min(start + size, totalElements);
-        List<T> content = start < totalElements ? items.subList(start, end) : List.of();
-
-        return PagedResponse.<T>builder()
-                .content(content)
-                .page(page)
-                .size(size)
-                .totalElements(totalElements)
-                .totalPages(totalPages)
-                .first(page == 0)
-                .last(page >= totalPages - 1)
-                .empty(content.isEmpty())
-                .build();
-    }
 
     private UUID getRequiredFirmId() {
         UUID firmId = currentUserResolver.getCurrentFirmId();

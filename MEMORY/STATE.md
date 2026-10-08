@@ -1,6 +1,33 @@
 # Project State
 
 ## Current Focus
+**2026-10-08 — Hibernate query-performance pass (Tier 1-3); 671 tests green.**
+Audited all 48 repositories + associations: only 4 used `JOIN FETCH`, none `@EntityGraph`. Fixed:
+`default_batch_fetch_size: 100` (Tier 1); six fetch fixes — `@EntityGraph` on `findAllWithRoleAndFirmPaged`
+(role+firm), `findAllFirmAdmins`/`findFirmAdminsByFirmId` (firm), `CustomerProfileRepository.findMatches`
+(user), plus batched queries in `ClientPortalServiceImpl.listMyProjects` and `ProjectDashboardServiceImpl`
+(was N+1 across three levels); and four Tier-3 unbounded/in-memory paths — `searchUsers`/`listUsers` now
+page in SQL via new `UserRepository.searchPaged` (the old code loaded the whole user set and sliced in
+Java), `getUserProfile` now uses `AuditLogRepository.countByFirmAndUser` instead of loading every audit
+row for `getTotalElements()`, the global dashboard uses counts + a leaf-id projection instead of loading
+every `Matter`, and the scraper matcher uses `findByActiveTrueAndCaseStatus`. Left alone on purpose:
+`getAllFirms()` (paging would break the FE contract) and `User.role` EAGER (joined, not N+1; LAZY breaks
+`getAuthorities()`). `FetchGraphQueryTest` (H2) guards the fetch joins and was proven non-vacuous. Full
+detail in `memory/2026-10-08.md`.
+
+## Previous Focus (2026-10-08, earlier)
+**2026-10-08 — finished the 2026-10-07 firm brand/logo work (it never compiled); 659 tests green.**
+The build breaks were the brand work's own (5 missing `FirmConstants` summaries, `ObjectProvider`
+`.orElseThrow` on a non-Optional, `put()` missing its size arg, `FakeStorageService` missing the new
+`presignFirmLogo`, and a `@RequestPart` DTO that can never bind a file part), not `SystemConfigService`.
+`logoAllowed` now defaults **off** (entity + migration). Logo storage fixed: extension-aware presign
+(was hardcoded `logo.png`), inline not `attachment`, and `deleteFirmLogo` strips the presign query
+string (the prior object was never deleted). Logo validation now throws `BusinessRuleException` (400,
+real message) like the document module, instead of a masked 502. **`isPersonalColor` was only in the
+notes — now implemented**: `FirmProfileResponse` boolean, and `MeResponse.firm.isPersonalColor` sent
+true only when a brand hex is set, **omitted entirely otherwise**. See `memory/2026-10-08.md`.
+
+## Previous Focus (2026-10-07)
 **2026-10-07 — closed out the 2026-10-05 E2E report's open items (D6, D7, T1, T4, T5, T6); 627 tests green.**
 D7: a client is now created with `mustChangePassword=true`, so its first portal sign-in is a forced
 rotation exactly like an employee's. D6: `GlobalExceptionHandler` already surfaced
@@ -203,8 +230,8 @@ from `devG`.) 2026-10-03 adds the one-call document upload + the MinIO stopgap; 
 E2E suite, the auth/config fixes, the migration drift guard and the repo-wide comment strip;
 **2026-10-06 the auth/RBAC hardening pass** (MFA-secret encryption, `EncryptedStringConverter`, the
 `V2026_10_06` migration, config-driven access-token expiry); **2026-10-07** the D6/D7 fixes, the
-`MFA_DEV_BYPASS` config key, the D6/D7 probes and the test-profile MFA-bypass flag. **Nothing since
-2026-09-23 has been committed.**
+`MFA_DEV_BYPASS` config key, the D6/D7 probes and the test-profile MFA-bypass flag; **2026-10-08**
+the firm brand/logo completion (659 tests green). **Nothing since 2026-09-23 has been committed.**
 **Build command on this machine:** plain `./mvnw -o test` — `JAVA_HOME` is already set correctly
 (`C:\Users\Dev\.jdks\ms-21.0.12`) and works. (The old instruction here pointed at
 `$HOME/.jdks/corretto-21.0.11`, which does not exist on this machine — corrected 2026-09-28.)
@@ -277,7 +304,24 @@ threshold, limit, timeout, expiry, quota or filename length in code and never bu
 - **SA password reset** — `POST /api/v1/super-admin/users/{userId}/reset-password` (verified)
 - **Postman** — sections 8-11 for all new endpoints
 
+## Today (2026-10-07)
+**Firm branding + logo + profile frontend contract** (shipped 2026-10-08 — see Current Focus). New firm
+columns `logoAllowed` (default off), `brandPrimaryHex`/`brandSecondaryHex` (nullable hex, length 7);
+strict hex via `BrandColorValidator`; `isPersonalColor` on `MeResponse.firm`/`FirmProfileResponse` (firm
+colors shown when at least one set, otherwise app default); logo upload goes through new
+`FirmStorageService` -> `StorageService` under `firms/{firmId}/logo.{ext}` (png/jpg/jpeg/webp, ≤ 200 KiB,
+prior logo removed on overwrite); presigned logo URL via `StorageService.presignFirmLogo(String)` on
+`MinioStorageService`. Endpoints (firm-admin only): `GET/PUT /api/v1/firm/brand/theme`,
+`GET/POST /api/v1/firm/brand/logo`, `PATCH /api/v1/firm/brand/logo/allowed`; change-own-password
+unchanged at `POST /api/v1/me/change-password`. Written `docs/firm-brand-profile-guide.md`.
+
+`V2026_10_07__add_firm_brand_columns.sql` **applied** to the dev PostgreSQL (remote Supabase) on
+2026-10-08 over JDBC — `logo_allowed boolean NOT NULL DEFAULT false` + both `varchar(7)` hex columns
+verified. **Remaining (environment):** confirm the logo upload round-trips through real MinIO like the
+document upload did — Docker was down on 2026-10-08. 
+
 ## Deep History Index
+- `memory/2026-10-08.md` — finishing the firm brand/logo build: the real compile breaks (missing constants, `ObjectProvider` misuse, `put()` arity, an unbindable `@RequestPart` DTO), `logoAllowed` default flipped off, the four logo-storage bugs (hardcoded `logo.png`, attachment disposition, query-string delete key, post-mutation "old" audit values), why logo validation moved to `BusinessRuleException`, and the `isPersonalColor` contract (present true when set, omitted when not)
 - `memory/2026-10-07.md` — D6 login-message ordering (why the password is proved before any state is named, and why `AuthenticationManager` was dropped), D7 client rotation, `MFA_DEV_BYPASS` as a system-config key, the live-Postgres schema check that caught the unrun `mfa_secret` migration, the real-PostgreSQL E2E run, and the live MinIO upload + presigned round-trip; the QA-harness raw-password gotcha
 - `memory/2026-10-06.md` — **reconstructed** unlogged hardening pass: MFA-secret encryption at rest + its migration, dev-MFA-bypass flag, access-token expiry from config, atomic refresh rotation, MFA-attempt throttling, password policy on change/reset, `handleBadCredentials` surfacing messages, and the two collateral breaks (red suite, unrun migration) that 2026-10-07 repaired
 - `docs/e2e-report-2026-10-05.md` — full-lifecycle E2E test report: journey steps, 623-green result, defects D1–D5 with evidence, D6/D7 reported-not-fixed, live migration note, TODO and enhancements

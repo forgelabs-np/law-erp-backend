@@ -68,6 +68,12 @@ public class MinioStorageService implements StorageService {
     }
 
     @Override
+    public String presignFirmLogo(String objectKey) {
+        // No response-content-disposition: a logo is displayed inline in an <img>, not downloaded.
+        return presignDownload(objectKey, null, Duration.ofMinutes(15));
+    }
+
+    @Override
     public StoredObject stat(String key) {
         try {
             StatObjectResponse stat = client().statObject(StatObjectArgs.builder()
@@ -120,25 +126,32 @@ public class MinioStorageService implements StorageService {
                 log.info("Created object storage bucket '{}'", properties.getBucket());
             }
         } catch (Exception e) {
-            throw new StorageOperationException("Could not verify the storage bucket", e);
+            throw new StorageOperationException("Could not ensure object storage bucket", e);
         }
     }
 
     @Override
     public boolean isConfigured() {
-        return properties.isConfigured();
+        try {
+            return client().bucketExists(BucketExistsArgs.builder().bucket(properties.getBucket()).build());
+        } catch (Exception e) {
+            log.debug("Object storage not configured: {}", e.getMessage());
+            return false;
+        }
     }
 
     private MinioClient client() {
         MinioClient client = minioClientProvider.getIfAvailable();
         if (client == null) {
-            throw new StorageOperationException(
-                    "Object storage is not configured (storage.minio.endpoint is empty)");
+            throw new StorageOperationException("MinIO client is not available");
         }
         return client;
     }
 
-    private String headerSafe(String value) {
-        return value.replaceAll("[\\r\\n\"]", "_");
+    private String headerSafe(String filename) {
+        if (filename == null || filename.isBlank()) {
+            return "";
+        }
+        return filename.replace("\"", "%22");
     }
 }

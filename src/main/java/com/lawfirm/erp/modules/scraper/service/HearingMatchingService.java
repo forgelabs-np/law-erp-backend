@@ -34,10 +34,8 @@ public class HearingMatchingService {
     @Transactional
     public int matchAndNotify() {
         LocalDate today = LocalDate.now();
-        List<ClientCase> active = clientCaseRepository.findAll().stream()
-                .filter(c -> c.isActive())
-                .filter(c -> c.getCaseStatus() == ClientCaseStatus.ACTIVE)
-                .toList();
+        List<ClientCase> active = clientCaseRepository
+                .findByActiveTrueAndCaseStatus(ClientCaseStatus.ACTIVE);
 
         int created = 0;
         for (ClientCase cc : active) {

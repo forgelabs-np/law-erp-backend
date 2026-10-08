@@ -18,4 +18,7 @@ public interface StorageService {
     void ensureBucket();
 
     boolean isConfigured();
+
+    /** Presigned GET for a firm's logo object, rendered inline (no download disposition). */
+    String presignFirmLogo(String objectKey);
 }

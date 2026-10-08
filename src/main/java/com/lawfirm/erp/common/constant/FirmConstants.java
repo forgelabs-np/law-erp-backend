@@ -19,6 +19,12 @@ public final class FirmConstants {
     public static final String GET_FIRM_PROFILE_SUMMARY = "Get firm profile";
     public static final String UPDATE_FIRM_PROFILE_SUMMARY = "Update firm profile";
 
+    public static final String GET_FIRM_THEME_SUMMARY = "Get the firm's brand theme (primary/secondary hex colors)";
+    public static final String UPDATE_FIRM_THEME_SUMMARY = "Update the firm's brand theme (primary/secondary hex colors)";
+    public static final String GET_FIRM_LOGO_SUMMARY = "Get the firm's logo settings";
+    public static final String UPLOAD_FIRM_LOGO_SUMMARY = "Upload the firm's logo (png/jpg/jpeg/webp, max 200 KiB)";
+    public static final String SET_FIRM_LOGO_ALLOWED_SUMMARY = "Enable or disable logo uploads for the firm";
+
     public static final String GET_MY_ENABLED_MODULES_SUMMARY = "Get enabled modules for my firm";
 
     public static final String ENABLE_MODULE_FOR_FIRM_SUMMARY = "Enable/disable a module for a firm";

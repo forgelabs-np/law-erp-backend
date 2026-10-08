@@ -32,6 +32,8 @@ public class MeResponse {
     private String brandColorPrimary;
     private String brandColorSecondary;
     private String appName;
+    private boolean logoAllowed;
+    private String logoUrl;
 
     private boolean isActive;
     private LocalDateTime lastLoginAt;
@@ -48,6 +50,17 @@ public class MeResponse {
         private String address;
         private String jurisdiction;
         private String logoUrl;
+        private boolean logoAllowed;
+        private String brandPrimaryHex;
+        private String brandSecondaryHex;
+
+        /**
+         * Present (and true) only when the firm has chosen its own brand colors. When the firm
+         * has not set either hex, this is omitted so the portal falls back to the app default.
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private Boolean isPersonalColor;
+
         private String status;
         private boolean isTrial;
         private LocalDateTime trialExpiresAt;

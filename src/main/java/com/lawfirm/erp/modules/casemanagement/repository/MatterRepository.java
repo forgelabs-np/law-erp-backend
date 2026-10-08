@@ -82,6 +82,10 @@ public interface MatterRepository extends JpaRepository<Matter, UUID> {
     @Query("SELECT m.currentCourtCaseId FROM Matter m WHERE m.firmId = :firmId AND m.currentCourtCaseId IS NOT NULL")
     List<UUID> findLeafCourtCaseIdsByFirmId(@Param("firmId") UUID firmId);
 
+    /** Firm-less sibling of {@link #findLeafCourtCaseIdsByFirmId} for the Super Admin dashboard. */
+    @Query("SELECT m.currentCourtCaseId FROM Matter m WHERE m.currentCourtCaseId IS NOT NULL")
+    List<UUID> findLeafCourtCaseIds();
+
     @Query("SELECT m.id FROM Matter m WHERE m.firmId = :firmId AND m.assignedPartnerId = :userId")
     List<UUID> findIdsByFirmIdAndAssignedPartnerId(@Param("firmId") UUID firmId,
                                                     @Param("userId") UUID userId);
