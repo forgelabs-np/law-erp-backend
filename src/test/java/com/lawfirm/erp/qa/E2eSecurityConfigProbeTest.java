@@ -5,11 +5,13 @@ import com.lawfirm.erp.common.enums.UserType;
 import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.firm.entity.Firm;
+import com.lawfirm.erp.rbac.entity.Role;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
@@ -51,30 +53,77 @@ class E2eSecurityConfigProbeTest extends QaBaseTest {
     // FINDING 2 — DB-configured login lockout is ignored
     // ═══════════════════════════════════════════════════════════════════════
 
+    private static final String LOCKOUT_FIRM_CODE = "PROBELOCK";
+    private static final String LOCKOUT_ADMIN = "probe_lock_admin";
+
+    /**
+     * Committed fixture for the lockout probe, built from the repositories rather than through the
+     * super-admin API. Registering a super admin here would commit (the probe is
+     * non-transactional) and then FINDING-1 and every other SA-dependent test would see two.
+     * Idempotent, so re-running the class in one JVM reuses the same firm and account.
+     */
+    private User committedLockoutFixtureUser() {
+        Firm firm = firmRepository.findByLawFirmCode(LOCKOUT_FIRM_CODE).orElseGet(() -> {
+            Firm created = createFirm(LOCKOUT_FIRM_CODE, LOCKOUT_FIRM_CODE + " Law Firm");
+            Role role = new Role();
+            role.setFirm(created);
+            role.setRoleName("FIRM_ADMIN");
+            role.setRoleCode("FIRM_ADMIN");
+            role.setIsSystem(false);
+            role.setActive(true);
+            roleRepository.save(role);
+            return created;
+        });
+
+        User admin = userRepository.findByUsernameAndFirmId(LOCKOUT_ADMIN, firm.getId())
+                .orElseGet(() -> createUser(LOCKOUT_ADMIN, LOCKOUT_ADMIN + "@probelock.test",
+                        ADMIN_PWD, UserType.FIRM, firmRole(firm, "FIRM_ADMIN"), firm));
+
+        admin.setLoginAttempts(0);
+        admin.setLockedUntil(null);
+        return userRepository.save(admin);
+    }
+
+    /**
+     * This probe deliberately runs OUTSIDE the test transaction.
+     *
+     * <p>A lockout only exists if the failed-attempt write <em>commits</em>. Inside the class-level
+     * transaction every write joins the test's own transaction, so the test reads back its own
+     * uncommitted change and passes even when the service rolls that write back on the exception —
+     * exactly how a shattered lockout counter stayed green here while production let an account be
+     * guessed at forever. Non-transactional, the read below only sees committed state.
+     *
+     * <p>Because it commits, the config it overrides is restored in a finally block so the rest of
+     * the suite still runs against the seeded {@code LOGIN_MAX_ATTEMPTS}.
+     */
     @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     @DisplayName("FINDING-2: login lockout must honour LOGIN_MAX_ATTEMPTS from system config")
     void loginLockoutHonoursDbConfiguredMaxAttempts() throws Exception {
-        String sa = token(superAdmin("probe_lock_sa"));
-        createFirm(sa, "PROBELOCK", "probe_lock_admin");
+        UUID adminId = committedLockoutFixtureUser().getId();
 
-        systemConfigService.setGlobal(SystemConfigService.KEY_LOGIN_MAX_ATTEMPTS, "1");
-        assertEquals(1, systemConfigService.loginMaxAttempts(),
-                "precondition: system config must hold LOGIN_MAX_ATTEMPTS=1");
+        int seededMaxAttempts = systemConfigService.loginMaxAttempts();
+        try {
+            systemConfigService.setGlobal(SystemConfigService.KEY_LOGIN_MAX_ATTEMPTS, "1");
+            assertEquals(1, systemConfigService.loginMaxAttempts(),
+                    "precondition: system config must hold LOGIN_MAX_ATTEMPTS=1");
 
-        UUID adminId = firmAdmin(firmByCode("PROBELOCK"), "probe_lock_admin").getId();
+            MvcResult first = badLogin(LOCKOUT_FIRM_CODE, LOCKOUT_ADMIN, "WrongPass1!");
+            assertEquals(401, status(first), raw(first));
 
-        MvcResult first = badLogin("PROBELOCK", "probe_lock_admin", "WrongPass1!");
-        assertEquals(401, status(first), raw(first));
+            // Asserted on the row, not the response body — the surfaced wording is locked down
+            // separately by FINDING-4a so this test does not break when the copy changes.
+            assertNotNull(userRepository.findById(adminId).orElseThrow().getLockedUntil(),
+                    "with LOGIN_MAX_ATTEMPTS=1 the account must be locked after one failed login");
 
-        // Asserted on the row, not the response body — the surfaced wording is locked down
-        // separately by FINDING-4a so this test does not break when the copy changes.
-        assertNotNull(userRepository.findById(adminId).orElseThrow().getLockedUntil(),
-                "with LOGIN_MAX_ATTEMPTS=1 the account must be locked after one failed login");
-
-        MvcResult second = badLogin("PROBELOCK", "probe_lock_admin", "WrongPass2!");
-        assertEquals(401, status(second), raw(second));
-        assertEquals(1, userRepository.findById(adminId).orElseThrow().getLoginAttempts(),
-                "a locked account must not accrue further failed-attempt counts");
+            MvcResult second = badLogin(LOCKOUT_FIRM_CODE, LOCKOUT_ADMIN, "WrongPass2!");
+            assertEquals(401, status(second), raw(second));
+            assertEquals(1, userRepository.findById(adminId).orElseThrow().getLoginAttempts(),
+                    "a locked account must not accrue further failed-attempt counts");
+        } finally {
+            systemConfigService.setGlobal(SystemConfigService.KEY_LOGIN_MAX_ATTEMPTS,
+                    String.valueOf(seededMaxAttempts));
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════

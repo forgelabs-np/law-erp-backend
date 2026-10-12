@@ -119,6 +119,16 @@ public class UserManagementController {
                 "Password reset successfully. User must re-login.");
     }
 
+    @PostMapping("/{userId}/unlock")
+    @Operation(summary = "Lift a user's login lockout",
+            description = "Clears the user's failed-login counter and lockout without changing their "
+                    + "password, MFA or active state. Scoped to the caller's firm.")
+    public ResponseEntity<ApiResponse<Void>> unlockUser(@PathVariable UUID userId) {
+        permissionEvaluator.require("USER_MANAGEMENT:EDIT");
+        userManagementService.unlockUser(userId);
+        return responseHandler.ok(null, "Lockout lifted. The user can sign in again.");
+    }
+
     @PostMapping("/{userId}/reset-mfa")
     @Operation(summary = "Reset MFA for a user")
     public ResponseEntity<ApiResponse<Void>> resetMfa(

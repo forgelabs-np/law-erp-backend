@@ -38,11 +38,9 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
@@ -58,7 +56,6 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class SuperAdminServiceTest {
 
-    @Mock private AuthenticationManager authenticationManager;
     @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private JwtUtil jwtUtil;
     @Mock private TotpUtil totpUtil;
@@ -141,7 +138,7 @@ class SuperAdminServiceTest {
             LoginResponse response = login(USERNAME, PASSWORD, null);
 
             assertEquals(AuthStatus.SUCCESS, response.getStatus());
-            verify(authenticationManager).authenticate(any());
+            verify(passwordEncoder).matches(PASSWORD, superAdmin.getPassword());
             verify(jwtUtil).generateAccessToken(superAdmin);
             verify(jwtUtil).generateRefreshToken(superAdmin);
         }
@@ -309,11 +306,9 @@ class SuperAdminServiceTest {
         }
 
         @Test
-        @DisplayName("Wrong password → AuthenticationManager throws → BadCredentialsException")
+        @DisplayName("Wrong password → BadCredentialsException")
         void wrongPassword_throws() {
             mockFindSuperAdmin();
-            when(authenticationManager.authenticate(any()))
-                    .thenThrow(new BadCredentialsException("Bad credentials"));
 
             assertThrows(BadCredentialsException.class,
                     () -> login(USERNAME, "wrong-pass", null));
@@ -520,9 +515,12 @@ class SuperAdminServiceTest {
                 .thenReturn(Optional.of(superAdmin));
     }
 
+    /**
+     * The password is now proved with the encoder rather than AuthenticationManager, so the failed
+     * attempt can be counted and the account locked before the exception unwinds.
+     */
     private void mockAuthentication() {
-        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
-                .thenReturn(new UsernamePasswordAuthenticationToken(superAdmin, null, superAdmin.getAuthorities()));
+        when(passwordEncoder.matches(anyString(), anyString())).thenReturn(true);
     }
 
     private LoginResponse login(String username, String password, String totpCode) {

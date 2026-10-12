@@ -42,7 +42,6 @@ import com.lawfirm.erp.rbac.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
@@ -71,7 +70,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class SuperAdminServiceImpl implements SuperAdminService {
 
-    private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
     private final TotpUtil totpUtil;
     private final UserRepository userRepository;
@@ -151,47 +149,62 @@ public class SuperAdminServiceImpl implements SuperAdminService {
 
     @Override
     public LoginResponse loginSuperAdmin(SuperAdminLoginRequest request) {
-        try {
-            User user = userRepository.findByUsernameAndUserType(request.getUsername(), UserType.SUPER_ADMIN)
-                    .orElseThrow(() -> new BadCredentialsException("Invalid username or password"));
+        User user = userRepository.findByUsernameAndUserType(request.getUsername(), UserType.SUPER_ADMIN)
+                .orElseThrow(() -> new BadCredentialsException("Invalid username or password"));
 
-            if (!user.isActive()) {
-                throw new DisabledException("Account is disabled. Please contact system administrator.");
-            }
-
-            if (user.getIsBlocked()) {
-                throw new LockedException("Account is blocked. Please contact system administrator.");
-            }
-
-            if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now())) {
-                throw new LockedException("Account locked. Please try again later.");
-            }
-
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(user.getUsername(), request.getPassword())
-            );
-
-            User authenticatedUser = (User) authentication.getPrincipal();
-
-            if (Boolean.TRUE.equals(authenticatedUser.getMfaEnabled())) {
-                return handleMfaFlow(authenticatedUser, request.getTotpCode());
-            }
-
-            return issueFullTokens(authenticatedUser);
-
-        } catch (BadCredentialsException e) {
-            log.error("Super admin login failed - bad credentials: {}", request.getUsername());
-            throw new BadCredentialsException("Invalid username or password");
-        } catch (DisabledException e) {
+        if (!user.isActive()) {
             log.error("Super admin login failed - account disabled: {}", request.getUsername());
             throw new DisabledException("Account is disabled. Please contact system administrator.");
-        } catch (LockedException e) {
+        }
+
+        if (Boolean.TRUE.equals(user.getIsBlocked())) {
             log.error("Super admin login failed - account blocked: {}", request.getUsername());
             throw new LockedException("Account is blocked. Please contact system administrator.");
-        } catch (AuthenticationException e) {
-            log.error("Super admin login failed - authentication error: {}", e.getMessage());
+        }
+
+        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now())) {
+            log.error("Super admin login failed - account locked: {}", request.getUsername());
+            throw new LockedException("Account locked. Please try again later.");
+        }
+
+        // The password is proved with the encoder rather than AuthenticationManager so a wrong
+        // password can be counted and locked before the exception unwinds. This method is not
+        // transactional, so the increment commits; previously the count was recorded but no lock
+        // was ever applied, leaving this account open to unlimited guessing.
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            registerFailedPasswordAttempt(user);
+            log.error("Super admin login failed - bad credentials: {}", request.getUsername());
             throw new BadCredentialsException("Invalid username or password");
         }
+
+        // Only written when there is something to clear, so a clean login stays read-only.
+        if (user.getLoginAttempts() != 0 || user.getLockedUntil() != null) {
+            user.setLoginAttempts(0);
+            user.setLockedUntil(null);
+            userRepository.save(user);
+        }
+
+        if (Boolean.TRUE.equals(user.getMfaEnabled())) {
+            return handleMfaFlow(user, request.getTotpCode());
+        }
+
+        return issueFullTokens(user);
+    }
+
+    // Counts a failed super-admin password and locks the account at the configured limit,
+    // mirroring AuthServiceImpl.handleFailedLogin.
+    private void registerFailedPasswordAttempt(User user) {
+        int maxAttempts = systemConfigService.loginMaxAttempts();
+        user.setLoginAttempts(user.getLoginAttempts() + 1);
+        if (maxAttempts > 0 && user.getLoginAttempts() >= maxAttempts) {
+            user.setLockedUntil(LocalDateTime.now()
+                    .plusMinutes(systemConfigService.loginLockMinutes()));
+            log.warn("Super admin {} locked after {} failed password attempts",
+                    user.getUsername(), maxAttempts);
+        }
+        userRepository.save(user);
+        auditService.log(AuditAction.LOGIN_FAILED, AuditEntity.AUTH, user.getId(),
+                "Failed super admin login: " + user.getUsername());
     }
 
     @Override
@@ -315,6 +328,31 @@ public class SuperAdminServiceImpl implements SuperAdminService {
                         .updatedAt(role.getUpdatedAt())
                         .build())
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Lifts a brute-force lockout without touching the user's password, MFA or account state —
+     * the counterpart of the lock that {@link #registerFailedPasswordAttempt} applies. Before this
+     * existed the only ways out of a lock were waiting for it to expire or editing
+     * {@code users.login_attempts}/{@code locked_until} by hand.
+     */
+    @Override
+    @Transactional
+    public void unlockUser(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        user.setLoginAttempts(0);
+        user.setLockedUntil(null);
+        userRepository.save(user);
+
+        // The blocked/active flags are unrelated controls; a lockout must not silently clear them.
+        auditService.log(AuditAction.USER_UNBLOCKED, AuditEntity.USER, userId,
+                "Lockout lifted by Super Admin for: " + user.getUsername()
+                        + " (blocked=" + Boolean.TRUE.equals(user.getIsBlocked())
+                        + ", active=" + user.isActive() + ")");
+
+        log.info("Lockout lifted for user: {} by Super Admin", user.getUsername());
     }
 
     @Override

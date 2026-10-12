@@ -418,6 +418,31 @@ public class UserManagementServiceImpl implements UserManagementService {
     }
 
 
+    /**
+     * Lifts a brute-force lockout for a user of the caller's own firm, without changing the
+     * password, MFA or active state. The alternative was waiting out the lock or editing
+     * {@code users.login_attempts}/{@code locked_until} directly in the database.
+     */
+    @Override
+    @Transactional
+    public void unlockUser(UUID userId) {
+        UUID firmId = getRequiredFirmId();
+        User user = getValidatedUser(userId, firmId);
+
+        user.setLoginAttempts(0);
+        user.setLockedUntil(null);
+        userRepository.save(user);
+        userRepository.incrementPermissionVersion(userId);
+        permissionEvaluator.clearUserCache(userId);
+
+        auditService.log(AuditAction.USER_UNBLOCKED, AuditEntity.USER, userId,
+                "Lockout lifted by firm admin for: " + user.getUsername()
+                        + " (blocked=" + Boolean.TRUE.equals(user.getIsBlocked())
+                        + ", active=" + user.isActive() + ")");
+
+        log.info("Lockout lifted for: {} by firm admin", user.getUsername());
+    }
+
     private UUID getRequiredFirmId() {
         UUID firmId = currentUserResolver.getCurrentFirmId();
         if (firmId == null) throw new ForbiddenException("Firm context required");

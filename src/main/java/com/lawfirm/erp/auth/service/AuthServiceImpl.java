@@ -59,14 +59,17 @@ public class AuthServiceImpl implements AuthService {
     private final CurrentUserResolver currentUserResolver;
     private final SystemConfigService systemConfigService;
 
+    // noRollbackFor: a rejected login throws BadCredentialsException AFTER recording the failed
+    // attempt (and the login-history/audit rows). Letting the default rollback undo that made the
+    // lockout counter never persist — an account could be brute-forced forever.
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = BadCredentialsException.class)
     public LoginResponse authenticateInternalUser(LoginRequest request) {
         return performAuthentication(request, false);
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = BadCredentialsException.class)
     public LoginResponse authenticateClient(LoginRequest request) {
         return performAuthentication(request, true);
     }
@@ -237,8 +240,10 @@ public class AuthServiceImpl implements AuthService {
         log.info("Server-side logout for: {}", user.getUsername());
     }
 
+    // Same reason as the login methods: registerFailedMfaAttempt() must survive the rejection,
+    // otherwise a 6-digit TOTP can be brute-forced without ever throttling.
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = BadCredentialsException.class)
     public LoginResponse confirmMfaSetup(MfaSetupConfirmRequest request) {
         UUID userId = jwtUtil.extractUserIdFromMfaToken(request.getMfaToken());
         if (userId == null) {

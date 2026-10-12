@@ -128,6 +128,15 @@ public class SuperAdminController {
                 "Password reset successfully. User must re-login.");
     }
 
+    @PostMapping("/users/{userId}/unlock")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(summary = SuperAdminConstants.UNLOCK_USER_SUMMARY,
+            description = SuperAdminConstants.UNLOCK_USER_DESCRIPTION)
+    public ResponseEntity<ApiResponse<Void>> unlockUser(@PathVariable UUID userId) {
+        superAdminService.unlockUser(userId);
+        return responseHandler.ok(null, "Lockout lifted. The user can sign in again.");
+    }
+
     @PostMapping("/mfa/reset")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     @Operation(summary = SuperAdminConstants.RESET_MFA_SUMMARY, description = SuperAdminConstants.RESET_MFA_DESCRIPTION)

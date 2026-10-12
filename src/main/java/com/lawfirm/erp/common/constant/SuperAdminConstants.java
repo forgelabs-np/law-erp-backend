@@ -16,6 +16,9 @@ public final class SuperAdminConstants {
     public static final String RESET_PASSWORD_SUMMARY = "Reset any user's password";
     public static final String RESET_PASSWORD_DESCRIPTION = "Resets any user's password in any firm. The body is optional and may be bare or {\"data\": …} wrapped: send {\"newPassword\": …} (8–50 chars, also accepted as \"password\") to set a chosen password, or send no body, {} or {\"data\":{}} to have a temporary one generated and returned. Either way the password is e-mailed to the user, who is forced to rotate it on first login. Immediately invalidates the user's existing JWT — they must re-login.";
 
+    public static final String UNLOCK_USER_SUMMARY = "Lift a user's login lockout";
+    public static final String UNLOCK_USER_DESCRIPTION = "Clears a user's failed-login counter and expired/in-force lockout in any firm, without changing the password, MFA or blocked state. Use it when an account is locked after too many wrong passwords instead of editing the database.";
+
     public static final String RESET_MFA_SUMMARY = "Reset user MFA";
     public static final String RESET_MFA_DESCRIPTION = "Super Admin resets a user's MFA authenticator, forcing them to set it up again on next login";
 

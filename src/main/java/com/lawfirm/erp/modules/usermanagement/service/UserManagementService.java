@@ -32,6 +32,8 @@ public interface UserManagementService {
 
     void resetMfa(UUID userId, MfaResetRequest request);
 
+    void unlockUser(UUID userId);
+
     BulkOperationResult bulkDeactivate(BulkDeactivateRequest request);
 
     BulkOperationResult bulkRoleChange(BulkRoleChangeRequest request);

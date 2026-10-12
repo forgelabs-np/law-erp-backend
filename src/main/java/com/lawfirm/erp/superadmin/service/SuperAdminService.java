@@ -29,6 +29,8 @@ public interface SuperAdminService {
 
     PasswordResetResult resetPassword(UUID userId, ResetPasswordRequest request);
 
+    void unlockUser(UUID userId);
+
     RolePermissionResponse overrideRolePermissions(UUID firmId, UUID roleId, RolePermissionRequest request);
 
     List<RoleResponse> getFirmRoles(UUID firmId);
