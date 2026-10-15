@@ -34,7 +34,6 @@ public class AddCourtCaseRequest {
 
     private String judgeName;
 
-    /** Defaults to the matter's current leaf when null. */
     private UUID parentCourtCaseId;
 
     private boolean partyIsState;

@@ -19,6 +19,5 @@ public interface FirmModuleService {
 
     boolean isModuleEnabled(UUID firmId, String moduleCode);
 
-    /** Every module code with its resolved access (sub-modules inherit their parent). */
     Map<String, Boolean> resolveEnabledModules(UUID firmId);
 }

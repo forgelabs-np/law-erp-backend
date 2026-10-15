@@ -32,6 +32,9 @@ class AuthSecurityQaTest extends QaBaseTest {
 
     private record Setup(Firm firm, String saToken, String adminToken, String adminUsername) {}
 
+    /** The password a client picks on its forced first portal rotation. */
+    private static final String ROTATED_CLIENT_PWD = "PortalRotated9!";
+
     private Setup setupFirm(String firmCode, String adminUsername) throws Exception {
         String sa = token(superAdmin("qa_sa_" + firmCode.toLowerCase()));
         createFirm(sa, firmCode, adminUsername);
@@ -574,9 +577,17 @@ class AuthSecurityQaTest extends QaBaseTest {
         assertAllowed(created, "create client with portal access");
         String clientId = json(created).path("data").path("id").asText();
 
+        // A client is handed an admin-chosen password, so its first portal sign-in is a forced
+        // rotation (same rule as employees) and the live token comes out of that rotation.
         MvcResult enabledLogin = clientLoginRaw("QAAUTH9", mobile, CLIENT_PWD);
         assertEquals(200, status(enabledLogin), "Client login while enabled: " + raw(enabledLogin));
-        String liveToken = json(enabledLogin).path("data").path("accessToken").asText();
+        JsonNode firstData = json(enabledLogin).path("data");
+        assertEquals("PASSWORD_CHANGE_REQUIRED", firstData.path("status").asText(),
+                "A client must rotate the admin-set password first: " + raw(enabledLogin));
+        MvcResult rotation = changePasswordRaw(firstData.path("passwordChangeToken").asText(),
+                ROTATED_CLIENT_PWD, null);
+        assertEquals(200, status(rotation), "Client password rotation: " + raw(rotation));
+        String liveToken = json(rotation).path("data").path("accessToken").asText();
         assertAllowed(authGet(liveToken, "/api/v1/client/projects"), "portal works while enabled");
 
         // Admin revokes portal access — the documented purpose of the flag
@@ -587,7 +598,7 @@ class AuthSecurityQaTest extends QaBaseTest {
 
         // The live session dies immediately (permissionVersion bump) and login is refused
         assertUnauthorized(authGet(liveToken, "/api/v1/client/projects"));
-        assertEquals(401, status(clientLoginRaw("QAAUTH9", mobile, CLIENT_PWD)),
+        assertEquals(401, status(clientLoginRaw("QAAUTH9", mobile, ROTATED_CLIENT_PWD)),
                 "A revoked client must not be able to sign in");
 
         // Portal-only accounts cannot slip in through the internal login endpoint
@@ -597,7 +608,7 @@ class AuthSecurityQaTest extends QaBaseTest {
         // Switching portal access back on restores the account
         assertAllowed(authPatch(s.adminToken(), "/api/v1/firm/clients/" + clientId + "/portal-access",
                 apiRequest(Boolean.TRUE)), "re-enable portal access");
-        MvcResult restored = clientLoginRaw("QAAUTH9", mobile, CLIENT_PWD);
+        MvcResult restored = clientLoginRaw("QAAUTH9", mobile, ROTATED_CLIENT_PWD);
         assertEquals(200, status(restored), "Re-enabling portal access must restore the login: " + raw(restored));
         assertAllowed(authGet(json(restored).path("data").path("accessToken").asText(),
                 "/api/v1/client/projects"), "portal works again");

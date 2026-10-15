@@ -57,15 +57,12 @@ public class ClientServiceImpl implements ClientService {
         Firm firm = firmRepository.findById(firmId)
                 .orElseThrow(() -> new ResourceNotFoundException("Firm not found"));
 
-        // Validate uniqueness
         validateUniqueness(firmId, request.getUsername(), request.getEmail(), request.getMobileNo());
 
-        // Get firm-scoped CLIENT role (isSystem = false)
         Role clientRole = roleRepository
                 .findByFirmIdAndRoleCode(firmId, "CLIENT")
                 .orElseThrow(() -> new BusinessRuleException("CLIENT role not found for this firm. Please contact support."));
 
-        // Create user
         User user = User.builder()
                 .username(request.getUsername())
                 .email(request.getEmail())
@@ -80,18 +77,19 @@ public class ClientServiceImpl implements ClientService {
                 .isMobileVerified(true)
                 .isBlocked(false)
                 .loginAttempts(0)
+                // The firm admin picked this password, so it is temporary like an employee's:
+                // the first portal sign-in must rotate it before any token is issued.
+                .mustChangePassword(true)
                 .build();
         user.setActive(true);
         user = userRepository.save(user);
 
-        // Assign role
         UserRole userRole = UserRole.builder()
                 .user(user)
                 .role(clientRole)
                 .build();
         userRoleRepository.save(userRole);
 
-        // Audit: Client created
         auditService.log(
                 AuditAction.CLIENT_CREATED,
                 AuditEntity.CLIENT,
@@ -101,7 +99,6 @@ public class ClientServiceImpl implements ClientService {
 
         log.info("Client created: {} in firm {}", user.getUsername(), firm.getLawFirmCode());
 
-        // Send welcome email (async, non-blocking)
         UUID currentUserId = currentUserResolver.getCurrentUserId();
         emailService.sendWelcomeClient(
                 firmId,
@@ -109,7 +106,7 @@ public class ClientServiceImpl implements ClientService {
                 user.getEmail(),
                 user.getFullName(),
                 user.getUsername(),
-                request.getPassword(), // raw password before encoding
+                request.getPassword(),
                 firm.getName()
         );
 
@@ -153,9 +150,6 @@ public class ClientServiceImpl implements ClientService {
         user.setPortalAccessEnabled(portalAccessEnabled);
         user = userRepository.save(user);
 
-        // Revoke the client's live sessions: the JWT filter rejects a token whose
-        // permissionVersion no longer matches the row, so turning the portal off
-        // (or back on) takes effect immediately instead of after token expiry.
         if (oldValue != Boolean.TRUE.equals(portalAccessEnabled)) {
             userRepository.incrementPermissionVersion(user.getId());
             permissionEvaluator.clearUserCache(user.getId());

@@ -4,13 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-/**
- * A signed-in user changing their own password.
- *
- * <p>Distinct from {@code POST /auth/change-password}, which redeems the one-time token handed
- * out on a forced rotation: this one is reached from a profile screen with the session already
- * established, so it proves the caller with the password they are replacing.
- */
 @Data
 public class ChangeOwnPasswordRequest {
 

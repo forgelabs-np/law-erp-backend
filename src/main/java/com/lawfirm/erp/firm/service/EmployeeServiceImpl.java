@@ -65,20 +65,17 @@ public class EmployeeServiceImpl implements EmployeeService {
         Firm firm = firmRepository.findById(firmId)
                 .orElseThrow(() -> new ResourceNotFoundException("Firm not found"));
 
-        // Validate uniqueness within firm
         validateUniqueness(firmId, request.getEmail(), request.getMobileNo());
 
-        // Validate role
         Role role = validateFirmRole(request.getRoleId(), firmId);
         if ("FIRM_ADMIN".equals(role.getRoleCode())) {
             throw new ForbiddenException("Cannot create employee with FIRM_ADMIN role. Please contact Super Admin.");
         }
 
-        // Create User
         String generatedUsername = generateUniqueUsername(firm.getLawFirmCode(), request.getUsername());
 
         User user = User.builder()
-                .username(generatedUsername)          // ← generated, not admin-typed
+                .username(generatedUsername)
                 .email(request.getEmail())
                 .mobileNo(request.getMobileNo())
                 .password(passwordEncoder.encode(request.getPassword()))
@@ -92,26 +89,21 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .loginAttempts(0)
                 .mustChangePassword(true)
                 // FIX: MFA is now configurable. FIRM_ADMIN always has MFA forced on.
-                // ADVOCATE and PARALEGAL can have MFA enabled by firm admin later.
-                // "FIRM_ADMIN" is blocked above, so this is always false for employees.
                 .mfaEnabled(false)
                 .build();
 
         user.setActive(true);
         user = userRepository.save(user);
 
-        // Assign role via UserRole
         UserRole userRole = UserRole.builder()
                 .user(user)
                 .role(role)
                 .build();
         userRoleRepository.save(userRole);
 
-        // Generate employee code
         long count = employeeProfileRepository.countByFirmId(firmId);
         String employeeCode = firm.getLawFirmCode() + "-" + String.format("%04d", count + 1);
 
-        // Create EmployeeProfile
         EmployeeProfile profile = EmployeeProfile.builder()
                 .user(user)
                 .employeeCode(employeeCode)
@@ -125,7 +117,6 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .build();
         employeeProfileRepository.save(profile);
 
-        // Audit
         auditService.log(
                 AuditAction.USER_CREATED,
                 AuditEntity.USER,
@@ -135,7 +126,6 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         log.info("Employee created: {} (code: {}) in firm {}", user.getUsername(), employeeCode, firm.getLawFirmCode());
 
-        // 8. Send welcome email (async, non-blocking)
         UUID currentUserId = currentUserResolver.getCurrentUserId();
         emailService.sendWelcomeEmployee(
                 firmId,
@@ -143,7 +133,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 user.getEmail(),
                 user.getFullName(),
                 user.getUsername(),
-                request.getPassword(), // raw password before encoding
+                request.getPassword(),
                 firm.getName(),
                 firm.getLawFirmCode()
         );
@@ -166,7 +156,6 @@ public class EmployeeServiceImpl implements EmployeeService {
                 pageable
         );
 
-        // Batch-load all employee profiles in one query (avoids N+1)
         List<UUID> userIds = userPage.getContent().stream()
                 .map(User::getId).collect(Collectors.toList());
         Map<UUID, EmployeeProfile> profileMap = employeeProfileRepository
@@ -193,16 +182,13 @@ public class EmployeeServiceImpl implements EmployeeService {
         UUID firmId = getCurrentFirmId();
         User user = getUserValidated(employeeId, firmId);
 
-        // Get the employee profile
         EmployeeProfile profile = employeeProfileRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Employee profile not found"));
 
-        // Only update non-null fields — proper partial update
         if (request.getFullName() != null) user.setFullName(request.getFullName());
         if (request.getEmail() != null) user.setEmail(request.getEmail());
         if (request.getMobileNo() != null) user.setMobileNo(request.getMobileNo());
 
-        // Handle role update if roleId is provided
         Role newRole = null;
         if (request.getRoleId() != null) {
             newRole = validateFirmRole(request.getRoleId(), firmId);
@@ -300,7 +286,6 @@ public class EmployeeServiceImpl implements EmployeeService {
         return toResponse(user, user.getRole(), profile);
     }
 
-    // ─── Private Helpers ─────────────────────────────────────────────────────
 
     private UUID getCurrentFirmId() {
         UUID firmId = currentUserResolver.getCurrentFirmId();
@@ -311,9 +296,6 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     private void validateUniqueness(UUID firmId, String email, String mobileNo) {
-//        if (userRepository.existsByUsernameAndFirmId(username, firmId)) {
-//            throw new DuplicateResourceException("Username '" + username + "' already exists in your firm");
-//        }
         if (userRepository.existsByEmailAndFirmId(email, firmId)) {
             throw new DuplicateResourceException("Email '" + email + "' already exists in your firm");
         }
@@ -372,12 +354,10 @@ public class EmployeeServiceImpl implements EmployeeService {
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found"));
 
-        // 1. Must be firm-scoped (not system role)
         if (role.getFirm() == null) {
             throw new ForbiddenException("Cannot assign system roles directly to employees");
         }
 
-        // 2. Must belong to this firm
         if (!role.getFirm().getId().equals(firmId)) {
             throw new ForbiddenException("Role does not belong to your firm");
         }
@@ -392,12 +372,10 @@ public class EmployeeServiceImpl implements EmployeeService {
             throw new ForbiddenException("Cannot assign FIRM_ADMIN role. Only Super Admin can create Firm Admins.");
         }
 
-        // 5. Must be applicable to FIRM_USER
         if (role.getApplicableTo() != UserType.FIRM_USER) {
             throw new BusinessRuleException("Cannot assign a CLIENT role to an employee");
         }
 
-        // 6. Role must be active
         if (!role.isActive()) {
             throw new BusinessRuleException("Cannot assign an inactive role");
         }

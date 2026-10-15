@@ -7,11 +7,6 @@ import lombok.Data;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * User-first row for the super admin "users &amp; roles" view.
- * Each row carries the user's own fields plus its role and firm (nullable),
- * so the frontend can render "User → Role" without extra lookups.
- */
 @Data
 @Builder
 public class AdminUserResponse {
@@ -27,12 +22,10 @@ public class AdminUserResponse {
     private LocalDateTime lastLoginAt;
     private LocalDateTime createdAt;
 
-    // ── Role (nullable) ────────────────────────────────────────────────
     private UUID roleId;
     private String roleName;
     private String roleCode;
 
-    // ── Firm (nullable — super admin users point at the SYSTEM firm) ───
     private UUID firmId;
     private String firmCode;
     private String firmName;

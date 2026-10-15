@@ -1,5 +1,6 @@
 package com.lawfirm.erp.auth.security;
 
+import com.lawfirm.erp.common.service.SystemConfigService;
 import com.lawfirm.erp.dto.auth.AuthenticatedDetail;
 import com.lawfirm.erp.entity.User;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
@@ -31,6 +32,7 @@ import java.util.function.Function;
 public class JwtUtil {
 
     private final RolePermissionRepository rolePermissionRepository;
+    private final SystemConfigService systemConfigService;
 
     @Value("${jwt.secret}")
     private String secret;
@@ -59,7 +61,6 @@ public class JwtUtil {
         claims.put("roleCode", user.getRole().getRoleCode());
         claims.put("userType", user.getUserType().name());
 
-        // ✅ ADD THIS - permission version for JWT staleness check
         claims.put("permVersion", user.getPermissionVersion() != null ? user.getPermissionVersion() : 0);
 
         if (user.getFirm() != null) {
@@ -77,12 +78,17 @@ public class JwtUtil {
             claims.put("permissions", permissionCodes);
         }
 
+        long expiryMs = systemConfigService.accessTokenExpiryMs();
+        if (expiryMs <= 0) {
+            expiryMs = accessExpiry;
+        }
+
         return Jwts.builder()
                 .id(user.getId().toString())
                 .claims(claims)
                 .subject(user.getUsername())
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + accessExpiry))
+                .expiration(new Date(System.currentTimeMillis() + expiryMs))
                 .signWith(key, Jwts.SIG.HS512)
                 .compact();
     }
@@ -91,16 +97,11 @@ public class JwtUtil {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId().toString());
         claims.put("type", "refresh");
-        // Same staleness rule as access tokens (F-9): password resets, role changes and
-        // logout all bump permissionVersion, and refreshToken() refuses a token minted
         // against an older version — otherwise a stolen refresh token outlives the very
-        // event that was meant to kill the session.
         claims.put("permVersion", user.getPermissionVersion() != null ? user.getPermissionVersion() : 0);
 
         String token = Jwts.builder()
                 .claims(claims)
-                // jti — primary key of this token's RefreshToken row, so it can be rotated,
-                // revoked and replay-detected. Set after .claims() so it cannot be overwritten.
                 .id(UUID.randomUUID().toString())
                 .subject(user.getUsername())
                 .issuedAt(new Date())
@@ -112,12 +113,10 @@ public class JwtUtil {
         return token;
     }
 
-    /** The jti claim — for refresh tokens this is the primary key of their RefreshToken row. */
     public String extractTokenId(String token) {
         return extractClaim(token, Claims::getId);
     }
 
-    /** Refresh-token lifetime in ms — lets callers compute the row's expiry without re-parsing. */
     public long getRefreshExpiryMs() {
         return refreshExpiry;
     }
@@ -248,90 +247,63 @@ public class JwtUtil {
                 .build();
 
         UsernamePasswordAuthenticationToken authenticationToken =
-                new UsernamePasswordAuthenticationToken(authenticatedDetail, null, authorities);  // ← Add authorities here
+                new UsernamePasswordAuthenticationToken(authenticatedDetail, null, authorities);
         authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
         return authenticationToken;
     }
-    // ADD these methods to your existing JwtUtil.java
-// Place them after generateRefreshToken()
 
-    // ── Limited-scope tokens ──────────────────────────────────────────────────
 
-    /**
-     * Short-lived token (10 min) issued when MFA is required.
-     * Only valid for /auth/mfa/* endpoints — NOT a full access token.
-     * JwtAuthFilter rejects this for all other endpoints.
-     */
     public String generateMfaToken(User user) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId().toString());
-        claims.put("type", "mfa");          // ← scope marker
+        claims.put("type", "mfa");
 
         return Jwts.builder()
                 .claims(claims)
                 .subject(user.getUsername())
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + 10 * 60 * 1000L)) // 10 min
+                .expiration(new Date(System.currentTimeMillis() + 10 * 60 * 1000L))
                 .signWith(key, Jwts.SIG.HS512)
                 .compact();
     }
 
-    /**
-     * Short-lived token (10 min) issued when password change is required.
-     * Only valid for /auth/change-password — NOT a full access token.
-     */
     public String generatePasswordChangeToken(User user) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId().toString());
-        claims.put("type", "pwd_change");   // ← scope marker
+        claims.put("type", "pwd_change");
 
         return Jwts.builder()
                 .claims(claims)
                 .subject(user.getUsername())
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + 10 * 60 * 1000L)) // 10 min
+                .expiration(new Date(System.currentTimeMillis() + 10 * 60 * 1000L))
                 .signWith(key, Jwts.SIG.HS512)
                 .compact();
     }
 
-    /**
-     * One-time self-service password reset token (15 min), e-mailed as a link.
-     * Same limited-scope treatment as the MFA / password-change tokens: it can only be
-     * redeemed at /auth/reset-password and is never a usable bearer token.
-     */
     public String generatePasswordResetToken(User user) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId().toString());
-        claims.put("type", "pwd_reset");   // ← scope marker
-        // Bound to the account's current permissionVersion so the link is genuinely
-        // single-use: redeeming it bumps the version (as does an admin/role change),
-        // which retires the link. See AuthServiceImpl.resetPasswordWithToken.
+        claims.put("type", "pwd_reset");
         claims.put("permVersion", user.getPermissionVersion() != null ? user.getPermissionVersion() : 0);
 
         return Jwts.builder()
                 .claims(claims)
                 .subject(user.getUsername())
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + 15 * 60 * 1000L)) // 15 min
+                .expiration(new Date(System.currentTimeMillis() + 15 * 60 * 1000L))
                 .signWith(key, Jwts.SIG.HS512)
                 .compact();
     }
 
-    /** Extract userId from an mfa token — returns null if wrong type or expired */
     public UUID extractUserIdFromMfaToken(String token) {
         return extractUserIdFromScopedToken(token, "mfa");
     }
 
-    /** Extract userId from a self-service password-reset token */
     public UUID extractUserIdFromPasswordResetToken(String token) {
         return extractUserIdFromScopedToken(token, "pwd_reset");
     }
 
-    /**
-     * The permissionVersion a reset link was minted against, or null if the token is not a
-     * valid, unexpired reset token. Callers compare this with the account's current version to
-     * make the link single-use.
-     */
     public Integer extractPasswordResetTokenVersion(String token) {
         try {
             if (!validateToken(token)) return null;
@@ -343,7 +315,6 @@ public class JwtUtil {
         }
     }
 
-    /** Extract userId from a password-change token — returns null if wrong type or expired */
     public UUID extractUserIdFromPasswordChangeToken(String token) {
         return extractUserIdFromScopedToken(token, "pwd_change");
     }
@@ -361,10 +332,6 @@ public class JwtUtil {
         }
     }
 
-    /**
-     * Returns true if this is a limited-scope token (mfa, pwd_change or pwd_reset),
-     * not a full access token — the filter only lets it reach the auth endpoints.
-     */
     public boolean isLimitedScopeToken(String token) {
         try {
             Claims claims = extractAllClaims(token);

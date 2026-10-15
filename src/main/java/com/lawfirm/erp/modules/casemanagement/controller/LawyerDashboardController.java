@@ -1,7 +1,10 @@
 package com.lawfirm.erp.modules.casemanagement.controller;
 
+import com.lawfirm.erp.auth.security.AuthenticatedUser;
+import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.dto.ApiResponse;
+import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.common.exception.ResponseHandler;
 import com.lawfirm.erp.modules.casemanagement.dto.response.LawyerDashboardResponse;
 import com.lawfirm.erp.modules.casemanagement.service.LawyerDashboardService;
@@ -25,14 +28,16 @@ public class LawyerDashboardController {
 
     private final LawyerDashboardService lawyerDashboardService;
     private final PermissionEvaluator permissionEvaluator;
+    private final CurrentUserResolver currentUserResolver;
     private final ResponseHandler responseHandler;
 
     @GetMapping("/dashboard/{advocateId}")
-    @Operation(summary = "Lawyer dashboard", 
+    @Operation(summary = "Lawyer dashboard",
             description = "Returns comprehensive dashboard for a lawyer: upcoming hearings, case status, deadlines, and notifications.")
     public ResponseEntity<ApiResponse<LawyerDashboardResponse>> getLawyerDashboard(
             @PathVariable UUID advocateId) {
         permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
+        requireSelfOrAdmin(advocateId);
         return responseHandler.ok(lawyerDashboardService.getLawyerDashboard(advocateId),
                 "Lawyer dashboard fetched successfully");
     }
@@ -43,6 +48,7 @@ public class LawyerDashboardController {
     public ResponseEntity<ApiResponse<LawyerDashboardResponse.CaseSummary>> getLawyerCases(
             @PathVariable UUID advocateId) {
         permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
+        requireSelfOrAdmin(advocateId);
         return responseHandler.ok(lawyerDashboardService.getLawyerCases(advocateId),
                 "Lawyer cases fetched successfully");
     }
@@ -54,6 +60,7 @@ public class LawyerDashboardController {
             @PathVariable UUID advocateId,
             @RequestParam(defaultValue = "7") int withinDays) {
         permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
+        requireSelfOrAdmin(advocateId);
         return responseHandler.ok(lawyerDashboardService.getLawyerHearings(advocateId, withinDays),
                 "Lawyer hearings fetched successfully");
     }
@@ -65,7 +72,19 @@ public class LawyerDashboardController {
             @PathVariable UUID advocateId,
             @RequestParam(defaultValue = "30") int withinDays) {
         permissionEvaluator.require("CASE_MANAGEMENT:VIEW");
+        requireSelfOrAdmin(advocateId);
         return responseHandler.ok(lawyerDashboardService.getLawyerDeadlines(advocateId, withinDays),
                 "Lawyer deadlines fetched successfully");
+    }
+
+    // An advocate may read only their own dashboard; SUPER_ADMIN and FIRM_ADMIN may read anyone's.
+    private void requireSelfOrAdmin(UUID advocateId) {
+        AuthenticatedUser user = currentUserResolver.getCurrentUser();
+        if (user == null || user.isSuperAdmin() || user.isFirmAdmin()) {
+            return;
+        }
+        if (!advocateId.equals(user.getId())) {
+            throw new ForbiddenException("You can only view your own lawyer dashboard");
+        }
     }
 }

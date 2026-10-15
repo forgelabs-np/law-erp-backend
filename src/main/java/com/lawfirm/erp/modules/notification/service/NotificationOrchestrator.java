@@ -17,15 +17,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Core pipeline step: turns one NotificationEvent into one persisted
- * Notification per recipient (the in-app channel), plus PENDING
- * notification_delivery rows for fallible channels the recipient's
- * preferences ask for (EMAIL today — ALERT types default on, and so does
- * CASE_ASSIGNED so an assignment reaches the assignee's inbox without them
- * opting in; the other SYSTEM types default off. All of them stay overridable
- * except the ALERT opt-out, which is locked).
- */
 @Service
 @Slf4j
 public class NotificationOrchestrator {
@@ -75,7 +66,7 @@ public class NotificationOrchestrator {
                         .recipientUserId(recipientId)
                         .channel(DeliveryChannel.EMAIL)
                         .status(DeliveryStatus.PENDING)
-                        .nextAttemptAt(LocalDateTime.now()) // due immediately — sweep runs every minute
+                        .nextAttemptAt(LocalDateTime.now())
                         .build());
             }
         }

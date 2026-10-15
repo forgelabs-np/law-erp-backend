@@ -7,10 +7,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 
-/**
- * Daily job (8:00 AM) that emails T-1 hearing reminders to the attending
- * advocate and linked clients — see HearingReminderServiceImpl.
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -18,7 +14,7 @@ public class HearingReminderScheduler {
 
     private final HearingReminderService hearingReminderService;
 
-    @Scheduled(cron = "0 0 8 * * *") // Every day at 8:00 AM
+    @Scheduled(cron = "0 0 8 * * *")
     public void sendTomorrowReminders() {
         LocalDate tomorrow = LocalDate.now().plusDays(1);
         int sent = hearingReminderService.sendRemindersForDate(tomorrow);

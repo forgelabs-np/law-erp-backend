@@ -1,6 +1,162 @@
 # Project State
 
 ## Current Focus
+**2026-10-08 — Hibernate query-performance pass (Tier 1-3); 671 tests green.**
+Audited all 48 repositories + associations: only 4 used `JOIN FETCH`, none `@EntityGraph`. Fixed:
+`default_batch_fetch_size: 100` (Tier 1); six fetch fixes — `@EntityGraph` on `findAllWithRoleAndFirmPaged`
+(role+firm), `findAllFirmAdmins`/`findFirmAdminsByFirmId` (firm), `CustomerProfileRepository.findMatches`
+(user), plus batched queries in `ClientPortalServiceImpl.listMyProjects` and `ProjectDashboardServiceImpl`
+(was N+1 across three levels); and four Tier-3 unbounded/in-memory paths — `searchUsers`/`listUsers` now
+page in SQL via new `UserRepository.searchPaged` (the old code loaded the whole user set and sliced in
+Java), `getUserProfile` now uses `AuditLogRepository.countByFirmAndUser` instead of loading every audit
+row for `getTotalElements()`, the global dashboard uses counts + a leaf-id projection instead of loading
+every `Matter`, and the scraper matcher uses `findByActiveTrueAndCaseStatus`. Left alone on purpose:
+`getAllFirms()` (paging would break the FE contract) and `User.role` EAGER (joined, not N+1; LAZY breaks
+`getAuthorities()`). `FetchGraphQueryTest` (H2) guards the fetch joins and was proven non-vacuous. Full
+detail in `memory/2026-10-08.md`.
+
+## Previous Focus (2026-10-08, earlier)
+**2026-10-08 — finished the 2026-10-07 firm brand/logo work (it never compiled); 659 tests green.**
+The build breaks were the brand work's own (5 missing `FirmConstants` summaries, `ObjectProvider`
+`.orElseThrow` on a non-Optional, `put()` missing its size arg, `FakeStorageService` missing the new
+`presignFirmLogo`, and a `@RequestPart` DTO that can never bind a file part), not `SystemConfigService`.
+`logoAllowed` now defaults **off** (entity + migration). Logo storage fixed: extension-aware presign
+(was hardcoded `logo.png`), inline not `attachment`, and `deleteFirmLogo` strips the presign query
+string (the prior object was never deleted). Logo validation now throws `BusinessRuleException` (400,
+real message) like the document module, instead of a masked 502. **`isPersonalColor` was only in the
+notes — now implemented**: `FirmProfileResponse` boolean, and `MeResponse.firm.isPersonalColor` sent
+true only when a brand hex is set, **omitted entirely otherwise**. See `memory/2026-10-08.md`.
+
+## Previous Focus (2026-10-07)
+**2026-10-07 — closed out the 2026-10-05 E2E report's open items (D6, D7, T1, T4, T5, T6); 627 tests green.**
+D7: a client is now created with `mustChangePassword=true`, so its first portal sign-in is a forced
+rotation exactly like an employee's. D6: `GlobalExceptionHandler` already surfaced
+`BadCredentialsException` messages (unlogged 2026-10-06 work), but that turned `/auth/login` into a
+**username oracle** — every account-state reason was thrown *before* the password was compared.
+`performAuthentication` was reordered: firm/suspended → user lookup → lockout → **password proof** →
+inactive/blocked/wrong-door/portal-disabled. **`AuthenticationManager` was replaced by
+`passwordEncoder.matches`** because `DaoAuthenticationProvider` refuses a disabled/locked account in
+its pre-authentication checks (before the password), which would make those reasons unreachable; it
+also looked the user up globally while this flow resolves them per firm. New probes
+FINDING-4a/4b/4c/5. Per the standing convention the dev MFA bypass moved out of yml-only into a new
+`MFA_DEV_BYPASS` system-config key (`seed=false`, yml as the pre-seed fallback; production mode still
+blocks it). **Live verification:** the dev PostgreSQL still had `users.mfa_secret = varchar(64)` —
+`V2026_10_06__widen_mfa_secret.sql` was unrun, so encrypted secrets could not fit; applied over
+JDBC. The E2E ran against **real PostgreSQL** in a disposable `e2e_scratch` schema (186 s, pass), and
+a real HTTP upload through the **real MinIO** returned `ACTIVE` with the presigned download
+byte-identical. Also repaired the unlogged 2026-10-06 session's collateral: the test profile never
+armed the new MFA-bypass flag (the E2E was red) and `AuthSecurityQaTest` needed the client rotation.
+Reported not fixed: `documents_status_check` still permits `PENDING_UPLOAD`. Full detail in
+`memory/2026-10-07.md`.
+
+## Previous Focus (2026-10-05)
+**2026-10-05 — full-journey E2E pass (super admin → firm admin → employee/client); 3 auth/config bugs found and fixed.** Added `FullLifecycleE2ETest`, which walks the whole lifecycle over real HTTP with real logins (SA register → MFA setup → firm + firm admin → forced rotation + MFA → employee create/login → client portal), closing the gap left by suites that mint tokens directly. Probes found and fixed: (1) a **second super admin** could register (guard was per-username, not singleton); (2) `LOGIN_MAX_ATTEMPTS`/`LOGIN_LOCK_MINUTES` in `system_config` were **dead** — `AuthServiceImpl` used a yml `@Value` + hardcoded 30 min, so the admin lockout settings did nothing; (3) the first-login **password-change token was replayable** (usable twice within its 10 min). 616 → 620 tests green. **Same day, separate bug:** document upload failed on PostgreSQL with `23514` on `matter_timeline_event_type_check` — `V2026_09_28__document_store_constraints.sql` had never been applied (Hibernate `ddl-auto=update` never ALTERs an existing enum CHECK). Applied it over JDBC (13 → 14 values incl. `DOCUMENT_UPLOADED`, verified by a rolled-back insert) and fixed a secondary orphaned-object leak in `DocumentServiceImpl.upload` (a post-`put` failure left the stored object behind). Added `MigrationConstraintDriftTest` to fail the build when an enum value lacks a migration. 623 tests green. Reported not fixed: `GlobalExceptionHandler` masks every `BadCredentialsException` as "Invalid username or password", and clients are not forced to rotate the firm-admin-set password. Full detail in `memory/2026-10-05.md`.
+
+## Earlier Focus (2026-10-03)
+**2026-10-03 — the document upload flow is now ONE call; there is no confirm and no PENDING_UPLOAD.**
+`POST /api/v1/firm/documents` (multipart: `file` + `matterNumber`/`projectCode` + optional
+`courtCaseRef`) stores the file and returns the document **ACTIVE** immediately. The 3-step flow only
+existed because bytes went straight to storage and only the browser knew when the upload finished; to
+finish it server-side the API now receives the file, so bytes pass through the app (ok at the 50 MiB
+cap). `StorageService.presignUpload` → `put`; `initiateUpload`/`confirmUpload` → `upload`. Deleted
+`UploadTicket`, `InitiateUploadRequest`, `ConfirmUploadRequest`, `UploadTicketResponse`,
+`PendingUploadSweeper`, `DocumentStatus.PENDING_UPLOAD`, `Document.uploadExpiresAt` and the sweeper
+query; added multipart limits in `application.yml`. Chosen scope: **full replacement**. 616 tests
+green. Legacy `PENDING_UPLOAD` dev rows deleted. **The running app still serves the old build and
+needs a restart.** Full detail in `memory/2026-10-03.md`.
+
+### Same day — local object storage restored; MinIO's upstream distribution is gone. MinIO pulled
+its distribution on 2026-09-11: `minio/minio` is 404 on Docker Hub, the quay.io mirror now 401s, and
+the official binaries at `dl.min.io` return **410 Gone**. `docker-compose.yml` now uses the **Bitnami
+legacy image** `bitnamilegacy/minio:2025.7.23-debian-12-r5` (still ships the real MinIO server,
+`RELEASE.2025-07-23`) as a **local-only stopgap** — same `MINIO_ROOT_USER/PASSWORD`, same ports, volume
+moved to `/bitnami/minio/data`. Docker Desktop was started, container `tarikh-minio` is healthy on
+`:9000`, and the `tarikh-documents` bucket was created by hand (the app's startup bootstrap had already
+run while storage was down). **Production still needs a maintained S3-compatible backend** — Bitnami
+legacy is frozen (last push 2025-08-19). **No `isProduction` storage branch was added** — the user
+chose to keep local MinIO, so dev/server stays Spring-profile-driven (the `APP_PRODUCTION` flag only
+drives the MFA dev-bypass and nothing in `common/storage/**` reads it). Handover written:
+**`docs/minioConfiguration.md`** (architecture, 3-step upload, config layers, prod env vars, local
+Docker setup + data path, key layout, quota, dev-vs-prod table, troubleshooting). The MinIO data dir
+was then switched from the hidden Docker named volume to a **bind mount** `./data/minio` (git-ignored)
+so the tree is visible on disk. Two things corrected along the way: this MinIO build has **no web
+console** (`:9001` is mapped but nothing listens — API only), and **objects are not plain files** even
+when bind-mounted (each object is a directory with `xl.meta`), so real bytes still need `mc cp`/a
+presigned URL/the app.
+
+### Same day — `download-url` 400 diagnosis
+**2026-10-03 — `GET /firm/documents/13/download-url` returning 400 was diagnosed, not a bug.**
+Document 13 is `PENDING_UPLOAD` (never confirmed: `etag`/`uploaded_by_user_id` null), so
+`downloadUrl` correctly refuses it. Live dev Postgres confirms it is the only document row; object
+storage is down (`localhost:9000` refused, Docker daemon off), so the upload could not have landed.
+`PendingUploadSweeper` will delete the row ~15 min after `upload_expires_at`. **Diagnosis only — no
+code change.** Full detail in `memory/2026-10-03.md`.
+
+### Previous focus (2026-10-01)
+**2026-10-01 — storage settings are now DB config; Super Admin is refused on every document endpoint;
+the list also embeds a presigned `documentUrl`.** The `STORAGE` config group was added to
+`ConfigKeyRegistry` and is read via `SystemConfigService` runtime helpers, so the tunables live in
+`system_config`, not `application.yml`: `STORAGE_MAX_FILE_SIZE_BYTES`,
+`STORAGE_UPLOAD_EXPIRY_SECONDS`, `STORAGE_DOWNLOAD_EXPIRY_SECONDS`, `STORAGE_DEFAULT_QUOTA_BYTES`,
+`DOCUMENT_MAX_FILENAME_LENGTH`. Consumers were switched over (`DocumentServiceImpl`,
+`StorageQuotaService`, `StorageUsageBootstrap`, `DocumentStoragePath`); the yml value is kept as the
+pre-seed fallback and the first seed captures it. The MinIO connection settings stay in yml (startup +
+infra secrets). **See “Configuration Conventions” below — this is the standing rule for values that
+might change.** Documents are firm records, so a platform (SA) session gets **403** on all document
+paths — enforced in `DocumentServiceImpl.requireFirmId()` because `PermissionEvaluator` exempts SA from
+permission checks (a seed-only change would not have blocked them). The `DOCUMENT_MANAGEMENT` matrix's
+SUPER_ADMIN column moved `FULL → NO_ACCESS` as well. The other 2026-10-01 change: the document list now
+embeds a presigned `documentUrl` per row. The FE reported
+that `GET /api/v1/firm/documents?page=0&size=60` sent no URL — it was metadata-only by design, with
+links coming from `GET /documents/{id}/download-url`. `documentUrl` was added to `DocumentResponse`,
+populated **only for `ACTIVE`** docs (pending/archived → null) in `DocumentServiceImpl.withDocumentUrl`.
+The `download-url` endpoint **stays** — it is still the one that writes a `DOCUMENT_DOWNLOADED` audit
+row; the embedded link is a convenience. Two known consequences, documented in the DTO/service javadoc
+and `docs/frontend-guide.md` §9–§10: the embedded URL expires (~15 min) so a long-lived page should fall
+back to `download-url` on click, and downloads via `documentUrl` are **not audited**. Tests: 3 new in
+`DocumentServiceImplTest.ListDocuments` (39 green) + `DocumentQaTest` 21 green. **Uncommitted on `devG`.**
+
+### Previous focus (2026-09-28) — Phase 1 document store
+**2026-09-28 — Phase 1 document store shipped: MinIO-backed, bound to a case or a project, with a
+per-firm storage allocation. 613 tests green (+125).**
+
+Documents upload **straight to object storage** — the bytes never pass through the API. Nothing is
+readable until `confirm` succeeds, and confirm is where trust is withdrawn: it re-reads the object and
+checks its real size against the declared size plus its **file signature** against the declared type,
+deleting the object on every rejection so a failed upload leaves no orphan. A renamed executable with a
+spoofed header dies there. **Presigned POST policy, not PUT** — a PUT URL cannot cap the size written
+to it (MinIO would take one PUT up to 5 GB), whereas the POST policy signs `content-length-range`,
+`eq key` and `eq Content-Type`, so storage itself enforces all three.
+
+A document belongs to **exactly one** of a case (`matterNumber`) or a project (`projectCode`) — DB
+check constraint plus a service check — with an optional `courtCaseId` tag mirroring
+`MatterTimelineEvent`. Downloads gate on `:VIEW`, **not** `:DOWNLOAD`, because the seeded `READ_ONLY`
+(paralegal) and `OWN` (client) roles hold only `ACCESS + VIEW`; gating on `:DOWNLOAD` would lock both
+out of reading any file (the shape of QA finding F-14). Sharing is a single flag rather than a grant
+table. `DELETE` **archives** — the quota is released, the bytes are kept.
+
+Quota lives in its own `firm_storage_usage` table and is **Super-Admin-only** (`PUT/GET
+/api/v1/super-admin/firms/{firmId}/storage-quota|storage-usage`) on purpose: a firm admin must not be
+able to raise their own limit, which a firm-config key would have allowed. `0 = unlimited`; a firm's
+first write gets 5 GiB.
+
+**Three real bugs fixed in shared code, previously green:** `AuditSpelHelper` never bound `#result`
+(every `#result.x` expression threw and was swallowed) and `AuditAspect.getCurrentUser()` matched the
+SecurityContext principal against the wrong type — together these meant **no `@Audit` method anywhere in
+the app had ever written a row**. Also fixed: `etag` overflow from a client-supplied value,
+`MatterScopeGuard` ignoring `Matter.clientUserId`, project membership demanded for staff reads, and two
+disagreeing upload whitelists (`.tiff`/`.zip` unreachable, `.gif`/`.svg` failing with a confusing
+message) — now derived from one source.
+
+Handover written: `docs/document-store-module.pdf` (13-section implementation write-up) and
+**`docs/frontend-guide.md`** (the FE contract — the three-step upload with copy-pasteable code, every
+payload, the permission matrix, a 30-row error table, quota semantics, 17 gotchas).
+
+**Owed:** the migration SQL is unrun against a real PostgreSQL, and "MinIO really rejects an oversized
+POST" is unconfirmed on the live build (early releases ignored `content-length-range`; if so, add a
+`stat`-based backstop — confirm already re-checks size). All of it is **uncommitted** on `devG`.
+
+### Previous focus (2026-09-25) — firm Edit no longer demands the admin password: new `PUT /api/v1/super-admin/firms/{firmId}`.
 **2026-09-25 — firm Edit no longer demands the admin password: new `PUT /api/v1/super-admin/firms/{firmId}`.**
 The console's Edit dialog was POSTing to **create** — the only endpoint binding `CreateFirmRequest` — so
 validation answered "Admin password is required", and would have answered "Firm code already exists"
@@ -66,10 +222,41 @@ native `date(...)` aggregates, and the manual UI checklist sign-off.
 refresh-token work, the reset-mail changes (firm-admin + Super Admin paths), the `AUTH-14`
 extension and `docs/frontend-reset-password-guide.md`. 2026-09-25 adds `UpdateFirmRequest`,
 `FirmServiceImpl.updateFirm` + `PUT /api/v1/super-admin/firms/{firmId}`, `FirmServiceUpdateTest`,
-`SuperAdminQaTest` SA-04b/SA-04c and the Postman request. (`production` still carries the uncommitted
-2026-09-21 F-1..F-15 batch; PR #29 was merged into it from `devG`.)
-**Build command on this machine:** `JAVA_HOME="$HOME/.jdks/corretto-21.0.11" ./mvnw -o test` — the
-env default is a JDK this module cannot build with.
+`SuperAdminQaTest` SA-04b/SA-04c and the Postman request. **2026-09-28 adds the whole document store**
+(`common/storage/**`, `modules/document/**`, `StorageQuotaController`, the audit-aspect fixes, the
+`MatterScopeGuard` fix, minio + okhttp-jvm deps, `docker-compose.yml`, the `V2026_09_28` migration, 125
+tests and two docs).(`production` still carries the uncommitted 2026-09-21 F-1..F-15 batch; PR #29 was merged into it
+from `devG`.) 2026-10-03 adds the one-call document upload + the MinIO stopgap; 2026-10-05 the
+E2E suite, the auth/config fixes, the migration drift guard and the repo-wide comment strip;
+**2026-10-06 the auth/RBAC hardening pass** (MFA-secret encryption, `EncryptedStringConverter`, the
+`V2026_10_06` migration, config-driven access-token expiry); **2026-10-07** the D6/D7 fixes, the
+`MFA_DEV_BYPASS` config key, the D6/D7 probes and the test-profile MFA-bypass flag; **2026-10-08**
+the firm brand/logo completion (659 tests green). **Nothing since 2026-09-23 has been committed.**
+**Build command on this machine:** plain `./mvnw -o test` — `JAVA_HOME` is already set correctly
+(`C:\Users\Dev\.jdks\ms-21.0.12`) and works. (The old instruction here pointed at
+`$HOME/.jdks/corretto-21.0.11`, which does not exist on this machine — corrected 2026-09-28.)
+
+## Configuration Conventions
+**Anything that might change at runtime is a config value, not a constant.** Never hardcode a
+threshold, limit, timeout, expiry, quota or filename length in code and never bury a tunable in
+`application.yml` only.
+
+- **GLOBAL (platform-wide)** → `system_config` table, owned by `SystemConfigService`. **FIRM
+  (per-firm override)** → `firm_configs`, owned by `FirmConfigService`.
+- Every key is declared **once** in `ConfigKeyRegistry` (`common/config/ConfigKeyRegistry.java`),
+  with its group, input type, allowed values, default and `seed` flag. `DataInitializer` calls
+  `SystemConfigService.seedGlobalDefaults()` at boot (insert-if-missing — an admin-edited value is
+  never overwritten). There is no separate seeder class; `ConfigKeyRegistry` + `DataInitializer`
+  **are** the seeder.
+- Add a **runtime helper** on the service next to the existing ones (`loginMaxAttempts()`,
+  `storageMaxFileSizeBytes()`, …) that reads the key and falls back to a code default when absent.
+  Callers ask the service, never the repository.
+- **Pre-seed fallback:** when a value used to live in `application.yml`, the service keeps the yml
+  value as the fallback and the first seed captures it, so an existing deployment is unchanged.
+  (See `APP_PRODUCTION` and the `STORAGE` group.)
+- **Connection/infra secrets** (MinIO endpoint/credentials, SMTP host) stay in yml/env — the MinIO
+  client is built at startup and these are environment-bound. Policy values go to the DB.
+- Groups in the DB drive the admin Settings UI; a new group (e.g. `STORAGE`) appears automatically.
 
 ## Tech Stack
 - Spring Boot (Java), PostgreSQL (Supabase), Hibernate `ddl-auto: update` — no Flyway
@@ -117,7 +304,35 @@ env default is a JDK this module cannot build with.
 - **SA password reset** — `POST /api/v1/super-admin/users/{userId}/reset-password` (verified)
 - **Postman** — sections 8-11 for all new endpoints
 
+## Today (2026-10-07)
+**Firm branding + logo + profile frontend contract** (shipped 2026-10-08 — see Current Focus). New firm
+columns `logoAllowed` (default off), `brandPrimaryHex`/`brandSecondaryHex` (nullable hex, length 7);
+strict hex via `BrandColorValidator`; `isPersonalColor` on `MeResponse.firm`/`FirmProfileResponse` (firm
+colors shown when at least one set, otherwise app default); logo upload goes through new
+`FirmStorageService` -> `StorageService` under `firms/{firmId}/logo.{ext}` (png/jpg/jpeg/webp, ≤ 200 KiB,
+prior logo removed on overwrite); presigned logo URL via `StorageService.presignFirmLogo(String)` on
+`MinioStorageService`. Endpoints (firm-admin only): `GET/PUT /api/v1/firm/brand/theme`,
+`GET/POST /api/v1/firm/brand/logo`, `PATCH /api/v1/firm/brand/logo/allowed`; change-own-password
+unchanged at `POST /api/v1/me/change-password`. Written `docs/firm-brand-profile-guide.md`.
+
+`V2026_10_07__add_firm_brand_columns.sql` **applied** to the dev PostgreSQL (remote Supabase) on
+2026-10-08 over JDBC — `logo_allowed boolean NOT NULL DEFAULT false` + both `varchar(7)` hex columns
+verified. **Remaining (environment):** confirm the logo upload round-trips through real MinIO like the
+document upload did — Docker was down on 2026-10-08. 
+
 ## Deep History Index
+- `memory/2026-10-08.md` — finishing the firm brand/logo build: the real compile breaks (missing constants, `ObjectProvider` misuse, `put()` arity, an unbindable `@RequestPart` DTO), `logoAllowed` default flipped off, the four logo-storage bugs (hardcoded `logo.png`, attachment disposition, query-string delete key, post-mutation "old" audit values), why logo validation moved to `BusinessRuleException`, and the `isPersonalColor` contract (present true when set, omitted when not)
+- `memory/2026-10-07.md` — D6 login-message ordering (why the password is proved before any state is named, and why `AuthenticationManager` was dropped), D7 client rotation, `MFA_DEV_BYPASS` as a system-config key, the live-Postgres schema check that caught the unrun `mfa_secret` migration, the real-PostgreSQL E2E run, and the live MinIO upload + presigned round-trip; the QA-harness raw-password gotcha
+- `memory/2026-10-06.md` — **reconstructed** unlogged hardening pass: MFA-secret encryption at rest + its migration, dev-MFA-bypass flag, access-token expiry from config, atomic refresh rotation, MFA-attempt throttling, password policy on change/reset, `handleBadCredentials` surfacing messages, and the two collateral breaks (red suite, unrun migration) that 2026-10-07 repaired
+- `docs/e2e-report-2026-10-05.md` — full-lifecycle E2E test report: journey steps, 623-green result, defects D1–D5 with evidence, D6/D7 reported-not-fixed, live migration note, TODO and enhancements
+- `memory/2026-10-05.md` — full-journey E2E (`FullLifecycleE2ETest`) + the three fixed defects (multiple super admins, dead login-lockout config, replayable password-change token), the document migration + orphan-leak fix, and the comment strip
+- `memory/2026-10-03.md` — doc 13 `download-url` 400 explained: row is `PENDING_UPLOAD` (never
+  confirmed), object storage down; the endpoint is behaving as designed. No code change.
+- `memory/2026-10-01.md` — document list gains an embedded presigned `documentUrl` (ACTIVE-only); why
+  `download-url` is kept alongside it, and the expiry + no-audit-row trade-offs; **Super Admin refused
+  on every document endpoint** (docs are firm records — enforced in `requireFirmId`, since SA bypasses
+  permission checks); the "remove the assignment check" idea considered and rejected (per-case
+  assignment stays)
 - `memory/2026-09-25.md` — firm Edit POSTed to create ("Admin password is required"): new
   `PUT /super-admin/firms/{firmId}` + `UpdateFirmRequest`; why the immutables are rejected rather
   than ignored, null-vs-blank field semantics, and the "oldest FIRM_ADMIN is primary" rule

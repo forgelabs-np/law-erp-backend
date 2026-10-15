@@ -1,6 +1,7 @@
 package com.lawfirm.erp.customer.repository;
 
 import com.lawfirm.erp.customer.entity.CustomerProfile;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,6 +15,8 @@ public interface CustomerProfileRepository extends JpaRepository<CustomerProfile
 
     Optional<CustomerProfile> findByNationalId(String nationalId);
 
+    // PartyMatchService reads the matched user, so fetch it rather than a proxy per match (N+1).
+    @EntityGraph(attributePaths = {"user"})
     @Query("SELECT c FROM CustomerProfile c JOIN c.user u WHERE c.firm.id = :firmId " +
            "AND (:fullName IS NULL OR LOWER(u.fullName) LIKE LOWER(CONCAT('%', CAST(:fullName AS string), '%'))) " +
            "AND (:mobileNo IS NULL OR u.mobileNo = :mobileNo) " +

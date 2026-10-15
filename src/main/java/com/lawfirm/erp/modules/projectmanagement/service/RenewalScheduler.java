@@ -9,10 +9,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 
-/**
- * Scheduled job that runs daily to mark overdue renewal instances.
- * PENDING instances with dueDate < today are marked OVERDUE.
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -20,7 +16,7 @@ public class RenewalScheduler {
 
     private final RenewalInstanceRepository instanceRepository;
 
-    @Scheduled(cron = "0 0 8 * * *") // Every day at 8:00 AM
+    @Scheduled(cron = "0 0 8 * * *")
     @Transactional
     public void markOverdueInstances() {
         LocalDate today = LocalDate.now();

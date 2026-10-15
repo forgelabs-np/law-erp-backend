@@ -6,12 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
-/**
- * In-process event bus listener — the seam where a message broker would
- * plug in later. Async on the shared taskExecutor so producers never wait
- * on persistence; in a separate bean (not the orchestrator) so @Async goes
- * through the proxy, mirroring AsyncAuditWriter.
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j

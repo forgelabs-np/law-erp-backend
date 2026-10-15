@@ -33,12 +33,6 @@ public class SuperAdminAuditController {
     private final AuditLogRepository auditLogRepository;
     private final ResponseHandler responseHandler;
 
-    /**
-     * Get all audit logs across all firms — no firm context required.
-     * Optional filters: action, date range, userType, userId.
-     *
-     * UserType values: S (SUPER_ADMIN), A (FIRM), F (FIRM_USER), C (CLIENT)
-     */
     @GetMapping
     @Operation(summary = SuperAdminConstants.GET_ALL_AUDIT_LOGS_SUMMARY, description = SuperAdminConstants.GET_ALL_AUDIT_LOGS_DESCRIPTION)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getAllAuditLogs(
@@ -53,7 +47,6 @@ public class SuperAdminAuditController {
         LocalDateTime from = fromDate != null ? fromDate.atStartOfDay() : null;
         LocalDateTime to = toDate != null ? toDate.atTime(LocalTime.MAX) : null;
 
-        // Normalize userType: accept full enum names (FIRM, FIRM_USER, etc.) and map to char
         String userTypeChar = resolveUserTypeChar(userType);
 
         Page<AuditLog> result = auditLogRepository.findAllWithFilters(
@@ -63,10 +56,6 @@ public class SuperAdminAuditController {
         return responseHandler.ok(result, "Audit logs fetched successfully");
     }
 
-    /**
-     * Maps UserType enum names to the single-char stored in audit_logs.user_type.
-     * Accepts: S, A, F, C (char) or SUPER_ADMIN, FIRM, FIRM_USER, CLIENT (enum name).
-     */
     private String resolveUserTypeChar(String userType) {
         if (userType == null || userType.isBlank()) return null;
         String upper = userType.trim().toUpperCase();
@@ -79,9 +68,6 @@ public class SuperAdminAuditController {
         };
     }
 
-    /**
-     * Get audit logs for a specific firm — super admin doesn't need firm context.
-     */
     @GetMapping("/firms/{firmId}")
     @Operation(summary = SuperAdminConstants.GET_FIRM_AUDIT_LOGS_SUMMARY, description = SuperAdminConstants.GET_FIRM_AUDIT_LOGS_DESCRIPTION)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getFirmAuditLogs(
@@ -101,9 +87,6 @@ public class SuperAdminAuditController {
         return responseHandler.ok(result, "Firm audit logs fetched successfully");
     }
 
-    /**
-     * Get audit logs for a specific user across all firms.
-     */
     @GetMapping("/users/{userId}")
     @Operation(summary = SuperAdminConstants.GET_USER_AUDIT_LOGS_SUMMARY, description = SuperAdminConstants.GET_USER_AUDIT_LOGS_DESCRIPTION)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getUserAuditLogs(
@@ -122,9 +105,6 @@ public class SuperAdminAuditController {
         return responseHandler.ok(result, "User audit logs fetched successfully");
     }
 
-    /**
-     * Get entity history across all firms.
-     */
     @GetMapping("/entities/{entityType}/{entityId}")
     @Operation(summary = SuperAdminConstants.GET_ENTITY_HISTORY_SUMMARY, description = SuperAdminConstants.GET_ENTITY_HISTORY_DESCRIPTION)
     public ResponseEntity<ApiResponse<Page<AuditLog>>> getEntityHistory(

@@ -93,12 +93,6 @@ public class CalendarController {
         return firmId;
     }
 
-    /**
-     * Parses a date query parameter leniently so the frontend can send either:
-     *   - plain date:        2026-08-01
-     *   - ISO datetime:      2026-08-01T10:00:00
-     *   - ISO instant:       2026-08-01T10:00:00.000Z  /  +05:45 offsets
-     */
     private LocalDate parseDate(String value, LocalDate fallback) {
         if (value == null || value.isBlank()) {
             return fallback;

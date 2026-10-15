@@ -20,7 +20,6 @@ public class RoleResponse {
     private LocalDateTime updatedAt;
     private List<PermissionResponse> permissions;
 
-    // ── User association ───────────────────────────────────────────────────
-    private Integer userCount;          // How many users hold this role
-    private List<String> assignedUserNames; // User full names assigned to this role
+    private Integer userCount;
+    private List<String> assignedUserNames;
 }

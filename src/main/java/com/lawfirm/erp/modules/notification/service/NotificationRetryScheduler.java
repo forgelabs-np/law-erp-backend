@@ -17,17 +17,10 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/**
- * Every minute: picks up PENDING/RETRYING deliveries that are due and
- * hands each to its channel's dispatcher. SENT is terminal; FAILED gets
- * exponential backoff (1m → 5m → 30m) until the DB-driven attempt cap, then
- * DEAD. One row's failure never stops the sweep.
- */
 @Component
 @Slf4j
 public class NotificationRetryScheduler {
 
-    /** Fallback, also the registry seed default. */
     static final int DEFAULT_MAX_ATTEMPTS = 3;
     private static final long[] BACKOFF_MINUTES = {1, 5, 30};
 
@@ -69,7 +62,6 @@ public class NotificationRetryScheduler {
     private void processOne(NotificationDelivery delivery) {
         NotificationDispatcher dispatcher = dispatchers.get(delivery.getChannel());
         if (dispatcher == null) {
-            // No implementation for this channel yet — dead-letter rather than loop forever.
             delivery.setStatus(DeliveryStatus.DEAD);
             delivery.setErrorMessage("No dispatcher registered for channel " + delivery.getChannel());
             deliveryRepository.save(delivery);
@@ -79,7 +71,6 @@ public class NotificationRetryScheduler {
         Notification notification = notificationRepository.findById(delivery.getNotificationId())
                 .orElse(null);
         if (notification == null) {
-            // Parent notification gone (shouldn't happen) — dead-letter rather than loop.
             delivery.setStatus(DeliveryStatus.DEAD);
             delivery.setErrorMessage("Parent notification no longer exists");
             deliveryRepository.save(delivery);

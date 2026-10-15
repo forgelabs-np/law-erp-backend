@@ -1,5 +1,7 @@
 package com.lawfirm.erp.modules.scraper.service;
 
+import com.lawfirm.erp.auth.security.FirmContextHolder;
+import com.lawfirm.erp.common.exception.ForbiddenException;
 import com.lawfirm.erp.modules.scraper.client.CourtSiteClient;
 import com.lawfirm.erp.modules.scraper.config.ScraperProperties;
 import com.lawfirm.erp.modules.scraper.converter.NepaliDateUtil;
@@ -83,9 +85,6 @@ public class ScraperServiceImpl implements ScraperService {
 
     @Override
     public List<Integer> getActiveCourts() {
-        // Courts we actually track (ACTIVE client cases) intersected with courts the registry
-        // still marks active — deactivating a row in scraper_courts must stop scraping it even
-        // when client cases reference it (the kill-switch documented on Court.isActive).
         Set<Integer> tracked = new HashSet<>(clientCaseRepository.findDistinctActiveCourtIds());
         return courtRepository.findActiveCourtIds().stream()
                 .filter(tracked::contains)
@@ -160,30 +159,49 @@ public class ScraperServiceImpl implements ScraperService {
     }
 
     @Override
-    public ClientCase linkCourtCaseToScraper(Integer courtId, String courtCaseNumber, 
+    public Optional<ClientCase> findClientCaseByCaseNo(String caseNoInternal, UUID firmId) {
+        // A null firmId means system/super-admin context — unscoped. Firm users only see their own.
+        if (firmId == null) {
+            return clientCaseRepository.findByCaseNoInternal(caseNoInternal);
+        }
+        return clientCaseRepository.findByCaseNoInternalAndFirmId(caseNoInternal, firmId);
+    }
+
+    @Override
+    public ClientCase linkCourtCaseToScraper(Integer courtId, String courtCaseNumber,
                                               String caseNoInternal, UUID clientId) {
-        // Try to find existing client case by court's official number
+        UUID firmId = FirmContextHolder.getFirmId();
         Optional<ClientCase> existing = clientCaseRepository.findByCourtIdAndCaseNoBs(courtId, courtCaseNumber);
-        
+
         if (existing.isPresent()) {
-            // Update existing case if needed
             ClientCase clientCase = existing.get();
+            // Never let one firm hijack a court case already tracked by another.
+            if (firmId != null && clientCase.getFirmId() != null
+                    && !firmId.equals(clientCase.getFirmId())) {
+                throw new ForbiddenException(
+                        "This court case is already tracked by another firm");
+            }
+            boolean changed = false;
             if (!caseNoInternal.equals(clientCase.getCaseNoInternal())) {
                 clientCase.setCaseNoInternal(caseNoInternal);
-                return clientCaseRepository.save(clientCase);
+                changed = true;
             }
-            return clientCase;
+            if (clientCase.getFirmId() == null && firmId != null) {
+                clientCase.setFirmId(firmId);
+                changed = true;
+            }
+            return changed ? clientCaseRepository.save(clientCase) : clientCase;
         }
-        
-        // Create new client case
+
         ClientCase newCase = new ClientCase();
         newCase.setClientId(clientId);
+        newCase.setFirmId(firmId);
         newCase.setCourtId(courtId);
         newCase.setCaseNoBs(courtCaseNumber);
         newCase.setCaseNoInternal(caseNoInternal);
         newCase.setCaseStatus(com.lawfirm.erp.modules.scraper.enums.ClientCaseStatus.ACTIVE);
         newCase.setActive(true);
-        
+
         return clientCaseRepository.save(newCase);
     }
 
@@ -194,7 +212,11 @@ public class ScraperServiceImpl implements ScraperService {
 
     @Override
     public List<ClientCase> getClientCases(UUID clientId) {
-        return clientCaseRepository.findByClientIdAndActive(clientId, true);
+        UUID firmId = FirmContextHolder.getFirmId();
+        if (firmId == null) {
+            return clientCaseRepository.findByClientIdAndActive(clientId, true);
+        }
+        return clientCaseRepository.findByClientIdAndFirmIdAndActive(clientId, firmId, true);
     }
 
     @Override

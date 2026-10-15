@@ -13,7 +13,6 @@ import java.util.UUID;
 @Data
 public class CreateEmployeeRequest {
 
-    // ── Auth fields (go to users table) ──────────────────────────────────────
     @NotBlank(message = "Username is required")
     @Size(min = 3, max = 50)
     @Pattern(regexp = "^[a-zA-Z0-9._-]+$",
@@ -37,19 +36,18 @@ public class CreateEmployeeRequest {
     private String fullName;
 
     @NotNull(message = "Role is required")
-    private UUID roleId;   // Must be a firm-scoped role (isSystem = false)
+    private UUID roleId;
 
-    // ── Profile fields (go to employee_profiles table)
     @Size(max = 100)
-    private String designation;      // "Senior Advocate", "Paralegal" etc.
+    private String designation;
 
     @Size(max = 50)
-    private String barCouncilNo;     // Required for advocates, optional for others
+    private String barCouncilNo;
 
     @Size(max = 100)
-    private String specialization;   // "Criminal Law", "Civil Law" etc.
+    private String specialization;
 
-    private LocalDate joiningDate;   // Defaults to today if not provided
+    private LocalDate joiningDate;
 
     @Size(max = 100)
     private String emergencyContactName;

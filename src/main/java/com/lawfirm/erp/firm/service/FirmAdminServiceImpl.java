@@ -33,15 +33,7 @@ public class FirmAdminServiceImpl implements FirmAdminService {
     private final PermissionEvaluator permissionEvaluator;
     private final AuditService auditService;
 
-    // RoleRepository removed entirely — we never look up roles here.
-    // We query users directly using role.roleCode in JPQL.
-    // This avoids the NonUniqueResultException caused by system + firm-scoped
-    // roles having the same roleCode.
 
-    /**
-     * All firm admins across all firms — Super Admin only.
-     * Uses UserRepository.findAllFirmAdmins() which queries users directly.
-     */
     public List<FirmAdminResponse> getAllFirmAdmins() {
         return userRepository.findAllFirmAdmins()
                 .stream()
@@ -49,9 +41,6 @@ public class FirmAdminServiceImpl implements FirmAdminService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * All firm admins for a specific firm — Super Admin only.
-     */
     public List<FirmAdminResponse> getFirmAdminsByFirmId(UUID firmId) {
         firmRepository.findById(firmId)
                 .orElseThrow(() -> new ResourceNotFoundException("Firm not found"));
@@ -62,9 +51,6 @@ public class FirmAdminServiceImpl implements FirmAdminService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Get one firm admin by their user ID.
-     */
     public FirmAdminResponse getFirmAdminById(UUID adminId) {
         User user = userRepository.findById(adminId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -74,10 +60,6 @@ public class FirmAdminServiceImpl implements FirmAdminService {
         return toResponse(user);
     }
 
-    /**
-     * Toggle firm admin active/inactive — Super Admin only.
-     * Invalidates the user's JWT immediately.
-     */
     @Transactional
     public FirmAdminResponse toggleFirmAdminStatus(UUID adminId) {
         User user = userRepository.findById(adminId)
@@ -89,7 +71,6 @@ public class FirmAdminServiceImpl implements FirmAdminService {
         user.setActive(newStatus);
         userRepository.save(user);
 
-        // Invalidate JWT — must re-login after status change
         userRepository.incrementPermissionVersion(adminId);
         permissionEvaluator.clearUserCache(adminId);
 
@@ -105,10 +86,6 @@ public class FirmAdminServiceImpl implements FirmAdminService {
         return toResponse(user);
     }
 
-    /**
-     * Validates user is a FIRM_USER with FIRM_ADMIN roleCode.
-     * Does NOT call roleRepository — checks the role already loaded on the user.
-     */
     private void validateIsFirmAdmin(User user) {
         if (user.getUserType() != UserType.FIRM) {
             throw new BusinessRuleException("User is not a firm admin");

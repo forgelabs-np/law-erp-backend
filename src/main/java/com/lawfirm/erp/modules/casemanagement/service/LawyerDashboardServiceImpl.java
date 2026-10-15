@@ -47,13 +47,13 @@ public class LawyerDashboardServiceImpl implements LawyerDashboardService {
         List<CourtCase> activeCases = advocateCases.stream()
                 .filter(cc -> cc.getStatus() == CourtCaseStatus.ACTIVE || cc.getStatus() == CourtCaseStatus.JUDGMENT_AWAITED)
                 .collect(Collectors.toList());
-        
+
         LawyerDashboardResponse.DashboardStats stats = buildStats(activeCases);
         List<LawyerDashboardResponse.CriticalCase> criticalCases = buildCriticalCases(activeCases);
         List<LawyerDashboardResponse.UpcomingHearing> hearings = buildUpcomingHearings(advocateCases, 7);
         List<LawyerDashboardResponse.UpcomingDeadline> deadlines = buildUpcomingDeadlines(activeCases, 30);
         List<LawyerDashboardResponse.CaseUpdate> recentUpdates = new ArrayList<>();
-        
+
         return LawyerDashboardResponse.builder()
                 .stats(stats).criticalCases(criticalCases).upcomingHearings(hearings)
                 .upcomingDeadlines(deadlines).recentUpdates(recentUpdates).build();
@@ -67,10 +67,10 @@ public class LawyerDashboardServiceImpl implements LawyerDashboardService {
         List<CourtCase> activeCases = advocateCases.stream()
                 .filter(cc -> cc.getStatus() == CourtCaseStatus.ACTIVE || cc.getStatus() == CourtCaseStatus.JUDGMENT_AWAITED)
                 .collect(Collectors.toList());
-        
+
         List<LawyerDashboardResponse.CriticalCase> cases = buildCriticalCases(activeCases);
         LawyerDashboardResponse.DashboardStats stats = buildStats(activeCases);
-        
+
         return LawyerDashboardResponse.CaseSummary.builder()
                 .advocateId(advocateId).advocateName("Advocate").cases(cases).stats(stats).build();
     }
@@ -94,10 +94,10 @@ public class LawyerDashboardServiceImpl implements LawyerDashboardService {
         List<CourtCase> activeCases = advocateCases.stream()
                 .filter(cc -> cc.getStatus() == CourtCaseStatus.ACTIVE || cc.getStatus() == CourtCaseStatus.JUDGMENT_AWAITED)
                 .collect(Collectors.toList());
-        
+
         List<LawyerDashboardResponse.UpcomingDeadline> deadlines = buildUpcomingDeadlines(activeCases, withinDays);
         int urgentDeadlines = (int) deadlines.stream().filter(d -> d.isUrgent()).count();
-        
+
         return LawyerDashboardResponse.DeadlineSummary.builder()
                 .advocateId(advocateId).advocateName("Advocate")
                 .deadlines(deadlines).totalDeadlines(deadlines.size()).urgentDeadlines(urgentDeadlines).build();
@@ -109,7 +109,7 @@ public class LawyerDashboardServiceImpl implements LawyerDashboardService {
         long casesWithPendingDeadlines = activeCases.stream().filter(this::hasPendingDeadline).count();
         long casesAwaitingJudgment = activeCases.stream()
                 .filter(cc -> cc.getStage() == CourtCaseStage.JUDGMENT_AWAITED).count();
-        
+
         return LawyerDashboardResponse.DashboardStats.builder()
                 .totalActiveCases(totalActiveCases).casesWithUpcomingHearings(casesWithUpcomingHearings)
                 .casesWithPendingDeadlines(casesWithPendingDeadlines).casesAwaitingJudgment(casesAwaitingJudgment)
@@ -123,7 +123,7 @@ public class LawyerDashboardServiceImpl implements LawyerDashboardService {
             LocalDate nextHearing = getNextHearingDate(cc);
             LocalDate deadline = getDeadline(cc);
             String urgencyReason = determineUrgencyReason(cc, nextHearing, deadline);
-            
+
             return LawyerDashboardResponse.CriticalCase.builder()
                     .courtCaseId(cc.getId()).ourCourtCaseRef(cc.getOurCourtCaseRef())
                     .matterTitle(matter != null ? matter.getTitle() : null)
@@ -139,12 +139,11 @@ public class LawyerDashboardServiceImpl implements LawyerDashboardService {
         List<LawyerDashboardResponse.UpcomingHearing> hearings = new ArrayList<>();
         LocalDate today = LocalDate.now();
         LocalDate cutoff = today.plusDays(withinDays);
-        
-        // Batch-fetch matters to avoid N+1
+
         Set<UUID> matterIds = advocateCases.stream().map(CourtCase::getMatterId).collect(Collectors.toSet());
         Map<UUID, Matter> matters = matterRepository.findAllById(matterIds).stream()
                 .collect(Collectors.toMap(Matter::getId, m -> m));
-        
+
         for (CourtCase cc : advocateCases) {
             Optional<ClientCase> clientCase = scraperService.findClientCaseByCaseNo(cc.getOurCourtCaseRef());
             if (clientCase.isPresent()) {
@@ -173,7 +172,7 @@ public class LawyerDashboardServiceImpl implements LawyerDashboardService {
         List<LawyerDashboardResponse.UpcomingDeadline> deadlines = new ArrayList<>();
         LocalDate today = LocalDate.now();
         LocalDate cutoff = today.plusDays(withinDays);
-        
+
         for (CourtCase cc : activeCases) {
             if (cc.getWrittenStatementDeadline() != null && !cc.getWrittenStatementDeadline().isBefore(today) && !cc.getWrittenStatementDeadline().isAfter(cutoff)) {
                 Matter matter = matterRepository.findById(cc.getMatterId()).orElse(null);
@@ -185,7 +184,7 @@ public class LawyerDashboardServiceImpl implements LawyerDashboardService {
                         .description("Written statement filing deadline").daysRemaining((int) daysRemaining)
                         .isUrgent(daysRemaining <= 3).build());
             }
-            
+
             if (cc.getAppealDeadline() != null && !cc.getAppealDeadline().isBefore(today) && !cc.getAppealDeadline().isAfter(cutoff) && !cc.isAppealLapsed()) {
                 Matter matter = matterRepository.findById(cc.getMatterId()).orElse(null);
                 long daysRemaining = ChronoUnit.DAYS.between(today, cc.getAppealDeadline());

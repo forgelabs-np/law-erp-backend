@@ -20,4 +20,9 @@ public class UpdateFirmProfileRequest {
     private String jurisdiction;
 
     private String logoUrl;
+
+    private Boolean logoAllowed;
+
+    private String brandPrimaryHex;
+    private String brandSecondaryHex;
 }

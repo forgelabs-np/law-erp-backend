@@ -30,7 +30,6 @@ public class GlobalDashboardController {
     public ResponseEntity<ApiResponse<GlobalDashboardResponse>> getDashboard(
             @RequestParam(defaultValue = "30") int days) {
         permissionEvaluator.require("DASHBOARD_MANAGEMENT:VIEW");
-        // SUPER_ADMIN sees all firms; FIRM_ADMIN sees own firm only — enforced in service
         if (!currentUserResolver.isSuperAdmin() && currentUserResolver.getCurrentFirmId() == null) {
             throw new ForbiddenException("Firm context required");
         }

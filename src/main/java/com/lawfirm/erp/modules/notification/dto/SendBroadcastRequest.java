@@ -15,7 +15,6 @@ public class SendBroadcastRequest {
     @Size(max = 2000, message = "Body must be at most 2000 characters")
     private String body;
 
-    /** "ALL" or a role code (e.g. ADVOCATE, PARALEGAL, CLIENT). */
     @NotBlank(message = "Audience is required")
     private String audience;
 }

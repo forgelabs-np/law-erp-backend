@@ -12,10 +12,6 @@ import lombok.Setter;
 
 import java.util.UUID;
 
-/**
- * Master data — a district of Nepal (second-level administrative division),
- * mapped to its province. Seeded from {@code classpath:master-data/nepal/districts.json}.
- */
 @Entity
 @Table(name = "master_district", indexes = {
         @Index(name = "idx_md_code", columnList = "code", unique = true),
@@ -27,15 +23,12 @@ import java.util.UUID;
 @NoArgsConstructor
 public class District extends ActiveAuditableEntity {
 
-    /** Generated slug (e.g. KATHMANDU) — not an official ISO code; use nameEn for identity. */
     @Column(length = 20, nullable = false, unique = true)
     private String code;
 
-    /** References Province.id (UUID). */
     @Column(nullable = false)
     private UUID provinceId;
 
-    /** Denormalized for convenient responses. */
     @Column(length = 8, nullable = false)
     private String provinceCode;
 

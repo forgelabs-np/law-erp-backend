@@ -1,15 +1,13 @@
 package com.lawfirm.erp.auth.security;
 
 import lombok.Data;
-import org.springframework.stereotype.Component;
-import org.springframework.web.context.annotation.RequestScope;
 
 import java.util.List;
 import java.util.UUID;
 
+// Plain request-scoped DTO: JwtAuthFilter builds one per request and stashes it as the
+// "authenticatedUser" request attribute. It is deliberately NOT a Spring bean — nothing injects it.
 @Data
-@Component
-@RequestScope
 public class AuthenticatedUser {
     private UUID id;
     private String username;

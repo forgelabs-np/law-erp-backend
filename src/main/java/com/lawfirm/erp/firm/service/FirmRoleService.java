@@ -14,7 +14,6 @@ public interface FirmRoleService {
 
     List<RoleResponse> getFirmRoles();
 
-    /** Phase 5: SA on-behalf creation — explicit firm id, no firm security context. */
     RoleResponse createRoleForFirm(UUID firmId, RoleRequest request);
 
     FirmRolePermissionsResponse getRolePermissions(UUID roleId);

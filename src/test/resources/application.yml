@@ -35,6 +35,13 @@ jwt:
 security:
   max-login-attempts: 5
 
+app:
+  # The dev MFA bypass ("123456") is opt-in and never armed in prod; the test profile arms it
+  # explicitly, like application-dev.yml does, so the E2E journey can confirm MFA setup.
+  # This is the pre-seed fallback for the MFA_DEV_BYPASS system config key.
+  security:
+    mfa-dev-bypass: true
+
 super-admin:
   registration-secret: test-super-admin-secret-key-12345
 

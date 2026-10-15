@@ -9,10 +9,6 @@ import org.springframework.stereotype.Service;
 import java.time.Year;
 import java.util.List;
 
-/**
- * Matter number: {firmCode}-MAT-{year}-{seq:05d} — generated once, never changes.
- * e.g. APX-MAT-2026-00001
- */
 @Service
 @RequiredArgsConstructor
 public class MatterNumberGenerator {

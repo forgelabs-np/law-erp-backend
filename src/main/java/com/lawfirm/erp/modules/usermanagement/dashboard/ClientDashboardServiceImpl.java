@@ -44,7 +44,6 @@ public class ClientDashboardServiceImpl implements ClientDashboardService {
         UUID firmId = getRequiredFirmId(scope);
         UUID userId = scope.getUserId();
 
-        // Client sees only matters where they are linked as a client via MatterParty
         List<UUID> clientMatterIds = matterPartyRepository.findByFirmIdAndClientId(firmId, userId)
                 .stream().map(MatterParty::getMatterId).collect(java.util.stream.Collectors.toList());
         List<Matter> matters = clientMatterIds.isEmpty() ? List.of()
@@ -59,36 +58,29 @@ public class ClientDashboardServiceImpl implements ClientDashboardService {
                 .filter(m -> m.getStatus() == MatterStatus.CLOSED)
                 .collect(java.util.stream.Collectors.toList());
 
-        // Get leaf court cases for client's matters
         List<UUID> leafIds = matters.stream().map(Matter::getCurrentCourtCaseId).filter(Objects::nonNull).collect(java.util.stream.Collectors.toList());
         Map<UUID, Matter> matterMap = matters.stream().collect(Collectors.toMap(Matter::getId, m -> m));
         Map<UUID, CourtCase> ccMap = leafIds.isEmpty() ? Map.of()
                 : courtCaseRepository.findAllById(leafIds).stream()
                 .collect(Collectors.toMap(CourtCase::getId, c -> c));
 
-        // Get events for client's court cases
         Map<UUID, List<CourtEvent>> eventsByCC = leafIds.isEmpty() ? Map.of()
                 : courtEventRepository.findByCourtCaseIdInAndFirmIdOrderBySequenceNoAsc(leafIds, firmId)
                 .stream().collect(Collectors.groupingBy(CourtEvent::getCourtCaseId));
 
         LocalDate today = LocalDate.now();
 
-        // Client's matters list
         List<ClientDashboardResponse.MyMatter> myMatters = buildMyMatters(matters, ccMap, eventsByCC, today);
 
-        // Next hearing across all matters
         ClientDashboardResponse.MyNextHearing nextHearing = findNextHearing(eventsByCC, ccMap, matterMap, today);
 
-        // Upcoming events (next 30 days)
         List<ClientDashboardResponse.MyUpcomingEvent> upcomingEvents = buildUpcomingEvents(
                 eventsByCC, ccMap, matterMap, today, today.plusDays(30));
 
-        // Client's invoices — Invoice has no clientId field, so we show all firm invoices
         // TODO: filter by client once Invoice gets a clientId FK
         List<Invoice> clientInvoices = invoiceRepository.findByFirmId(firmId, PageRequest.of(0, 100)).getContent();
         ClientDashboardResponse.MyInvoiceStats invoiceStats = buildInvoiceStats(clientInvoices);
 
-        // Outstanding invoices
         List<ClientDashboardResponse.MyOutstandingInvoice> outstanding = buildOutstandingInvoices(clientInvoices, today);
 
         return ClientDashboardResponse.builder()
@@ -113,7 +105,6 @@ public class ClientDashboardServiceImpl implements ClientDashboardService {
         return matters.stream().map(m -> {
             CourtCase cc = m.getCurrentCourtCaseId() != null ? ccMap.get(m.getCurrentCourtCaseId()) : null;
 
-            // Find last event date
             LocalDate lastUpdate = null;
             if (m.getCurrentCourtCaseId() != null) {
                 List<CourtEvent> events = eventsByCC.getOrDefault(m.getCurrentCourtCaseId(), List.of());
@@ -124,7 +115,6 @@ public class ClientDashboardServiceImpl implements ClientDashboardService {
                         .orElse(null);
             }
 
-            // Find next hearing
             LocalDate nextHearingDate = null;
             if (m.getCurrentCourtCaseId() != null) {
                 List<CourtEvent> events = eventsByCC.getOrDefault(m.getCurrentCourtCaseId(), List.of());

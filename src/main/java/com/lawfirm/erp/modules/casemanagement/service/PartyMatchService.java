@@ -16,10 +16,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/**
- * Dedup on party entry: matches the entered name/phone/email against existing
- * client profiles and matter parties within the same firm, ranked HIGH/MEDIUM/LOW.
- */
 @Service
 @RequiredArgsConstructor
 public class PartyMatchService {

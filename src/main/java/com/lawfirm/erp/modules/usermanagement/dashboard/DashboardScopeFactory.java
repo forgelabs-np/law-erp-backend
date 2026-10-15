@@ -8,10 +8,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 
-/**
- * Builds a {@link DashboardScope} from the authenticated user.
- * One scope per request, passed to the appropriate dashboard service.
- */
 @Component
 @RequiredArgsConstructor
 public class DashboardScopeFactory {

@@ -9,12 +9,6 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * One out-of-band dispatch attempt record for one notification recipient.
- * Only fallible channels (EMAIL today) are tracked — the in-app channel's
- * record is the notification row itself. The retry sweep requeues
- * RETRYING rows with backoff until attempts are exhausted (DEAD).
- */
 @Entity
 @Table(name = "notification_deliveries", indexes = {
         @Index(name = "idx_notifdel_due", columnList = "status, nextAttemptAt"),
@@ -51,7 +45,6 @@ public class NotificationDelivery extends AuditableEntity {
 
     private LocalDateTime lastAttemptedAt;
 
-    /** When the retry sweep may next pick this row up. */
     @Column(name = "next_attempt_at")
     private LocalDateTime nextAttemptAt;
 

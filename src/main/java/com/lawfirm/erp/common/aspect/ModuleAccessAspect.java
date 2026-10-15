@@ -1,13 +1,11 @@
 package com.lawfirm.erp.common.aspect;
 
+import com.lawfirm.erp.auth.security.AuthenticatedUser;
+import com.lawfirm.erp.auth.security.CurrentUserResolver;
 import com.lawfirm.erp.auth.security.FirmContextHolder;
+import com.lawfirm.erp.auth.security.PermissionEvaluator;
 import com.lawfirm.erp.common.annotation.RequiresModule;
 import com.lawfirm.erp.common.exception.ForbiddenException;
-import com.lawfirm.erp.firm.entity.FirmModule;
-import com.lawfirm.erp.firm.repository.FirmModuleRepository;
-import com.lawfirm.erp.firm.service.ModuleAccessResolver;
-import com.lawfirm.erp.rbac.entity.Module;
-import com.lawfirm.erp.rbac.repository.ModuleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -18,45 +16,36 @@ import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
-import java.util.Map;
 import java.util.UUID;
 
-/**
- * Enforces {@link RequiresModule} at the AOP level — any controller class or method
- * carrying this annotation is checked against the firm's enabled modules before the
- * request enters the service layer.
- */
 @Aspect
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class ModuleAccessAspect {
 
-    private final FirmModuleRepository firmModuleRepository;
-    private final ModuleRepository moduleRepository;
+    private final PermissionEvaluator permissionEvaluator;
+    private final CurrentUserResolver currentUserResolver;
 
     @Around("@annotation(requiresModule) || @within(requiresModule)")
     public Object enforce(ProceedingJoinPoint joinPoint, RequiresModule requiresModule) throws Throwable {
-        // Resolve the module code — method-level annotation overrides class-level
         String moduleCode = resolveModuleCode(joinPoint);
 
         UUID firmId = FirmContextHolder.getFirmId();
         if (firmId == null) {
-            // Super Admin / unscoped — skip module check
+            // Fail closed for firm-bound users: with no firm context the module gate cannot be
+            // evaluated, which is a denial — not a pass. Only platform (super-admin) requests,
+            // which genuinely have no firm, are allowed through.
+            AuthenticatedUser user = currentUserResolver.getCurrentUser();
+            if (user != null && user.getFirmId() != null) {
+                throw new ForbiddenException(
+                        "Module access could not be verified for your account. Please try again.");
+            }
             return joinPoint.proceed();
         }
 
-        Module module = moduleRepository.findByCode(moduleCode).orElse(null);
-        if (module == null) {
-            log.warn("Module '{}' not found in registry — treating as disabled", moduleCode);
-            throw new ForbiddenException(
-                    "Module '" + moduleCode + "' is not available. Please contact your administrator.");
-        }
-
-        Map<UUID, FirmModule> indexed = ModuleAccessResolver.indexByModuleId(
-                firmModuleRepository.findByFirmId(firmId));
-
-        if (!ModuleAccessResolver.isEnabled(module, indexed)) {
+        // Single source of truth for module enablement — see PermissionEvaluator.hasModuleAccess.
+        if (!permissionEvaluator.hasModuleAccess(firmId, moduleCode)) {
             log.info("Module '{}' is not enabled for firm {} — rejecting request", moduleCode, firmId);
             throw new ForbiddenException(
                     "Module '" + moduleCode + "' is not enabled for your firm. Please upgrade your plan.");
@@ -69,20 +58,17 @@ public class ModuleAccessAspect {
         MethodSignature sig = (MethodSignature) joinPoint.getSignature();
         Method method = sig.getMethod();
 
-        // Prefer method-level annotation
         RequiresModule methodAnnotation = AnnotationUtils.findAnnotation(method, RequiresModule.class);
         if (methodAnnotation != null) {
             return methodAnnotation.value();
         }
 
-        // Fall back to class-level annotation
         RequiresModule classAnnotation = AnnotationUtils.findAnnotation(
                 joinPoint.getTarget().getClass(), RequiresModule.class);
         if (classAnnotation != null) {
             return classAnnotation.value();
         }
 
-        // Should never reach here — the pointcut guarantees the annotation exists
         throw new IllegalStateException("No @RequiresModule annotation found on " + method.getName());
     }
 }

@@ -4,7 +4,6 @@ public final class SuperAdminConstants {
 
     private SuperAdminConstants() {}
 
-    // SuperAdminController
     public static final String REGISTER_SUMMARY = "Register Super Admin (One-time only)";
     public static final String REGISTER_DESCRIPTION = "Creates the first super admin. Will fail if already exists.";
 
@@ -17,17 +16,18 @@ public final class SuperAdminConstants {
     public static final String RESET_PASSWORD_SUMMARY = "Reset any user's password";
     public static final String RESET_PASSWORD_DESCRIPTION = "Resets any user's password in any firm. The body is optional and may be bare or {\"data\": …} wrapped: send {\"newPassword\": …} (8–50 chars, also accepted as \"password\") to set a chosen password, or send no body, {} or {\"data\":{}} to have a temporary one generated and returned. Either way the password is e-mailed to the user, who is forced to rotate it on first login. Immediately invalidates the user's existing JWT — they must re-login.";
 
+    public static final String UNLOCK_USER_SUMMARY = "Lift a user's login lockout";
+    public static final String UNLOCK_USER_DESCRIPTION = "Clears a user's failed-login counter and expired/in-force lockout in any firm, without changing the password, MFA or blocked state. Use it when an account is locked after too many wrong passwords instead of editing the database.";
+
     public static final String RESET_MFA_SUMMARY = "Reset user MFA";
     public static final String RESET_MFA_DESCRIPTION = "Super Admin resets a user's MFA authenticator, forcing them to set it up again on next login";
 
-    // SuperAdminConfigController
     public static final String GET_GLOBAL_CONFIG_SUMMARY = "Get all global system config values";
     public static final String UPDATE_GLOBAL_CONFIG_SUMMARY = "Bulk upsert global system config values";
     public static final String DELETE_GLOBAL_CONFIG_SUMMARY = "Delete a global config value";
     public static final String GET_FIRM_CONFIG_SUMMARY = "Get all config values for a specific firm";
     public static final String UPDATE_FIRM_CONFIG_SUMMARY = "Bulk upsert config values for a specific firm";
 
-    // SuperAdminAuditController
     public static final String GET_ALL_AUDIT_LOGS_SUMMARY = "Get all audit logs";
     public static final String GET_ALL_AUDIT_LOGS_DESCRIPTION = "Super Admin views all audit logs across all firms with optional filters";
     public static final String GET_FIRM_AUDIT_LOGS_SUMMARY = "Get audit logs for a firm";
@@ -37,11 +37,9 @@ public final class SuperAdminConstants {
     public static final String GET_ENTITY_HISTORY_SUMMARY = "Get entity history";
     public static final String GET_ENTITY_HISTORY_DESCRIPTION = "Super Admin views history for a specific entity across all firms";
 
-    // Super Admin role override
     public static final String OVERRIDE_ROLE_PERMS_SUMMARY = "Override role permissions for any firm";
     public static final String OVERRIDE_ROLE_PERMS_DESCRIPTION = "Super Admin directly sets permissions on any firm-scoped role, bypassing all ceilings. No restrictions — Super Admin is platform-level.";
 
-    // Super Admin firm-role visibility (delegation chain)
     public static final String GET_FIRM_ROLES_SUMMARY = "List a firm's roles with permissions";
     public static final String GET_FIRM_ROLES_DESCRIPTION = "Super Admin view of any firm's scoped roles: each role's current permissions and how many users hold it. Read-only — use the override endpoint to change permissions.";
 

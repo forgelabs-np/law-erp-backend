@@ -13,7 +13,6 @@ public class UpdateCredentialRequest {
 
     private String usernameOrEmail;
 
-    /** If provided, re-encrypts the password. */
     private String password;
 
     private String contactPerson;

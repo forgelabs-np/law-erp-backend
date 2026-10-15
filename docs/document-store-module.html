@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Document Store Module — Implementation Guide</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  body { font-family: "Segoe UI", Arial, sans-serif; color: #1c2430; font-size: 11.5px; line-height: 1.55; }
+  h1 { font-size: 24px; margin: 0 0 4px; color: #0f172a; }
+  h2 { font-size: 16px; margin: 26px 0 8px; padding-bottom: 5px; border-bottom: 2px solid #d9e2ec; color: #0f172a; }
+  h3 { font-size: 13px; margin: 18px 0 6px; color: #24425f; }
+  .sub { color: #5b6b7c; font-size: 12px; margin-bottom: 18px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 14px; font-size: 10.5px; }
+  th, td { border: 1px solid #cfd8e3; padding: 5px 7px; text-align: left; vertical-align: top; }
+  th { background: #eef2f7; font-weight: 600; }
+  code { background: #f4f6f9; padding: 1px 4px; border-radius: 3px; font-family: Consolas, monospace; font-size: 10.5px; }
+  pre { background: #f7f9fb; border: 1px solid #dde5ee; border-left: 3px solid #4a6fa5; padding: 9px 11px;
+        border-radius: 4px; font-family: Consolas, monospace; font-size: 10px; overflow-x: auto; line-height: 1.45; }
+  .box { border-radius: 5px; padding: 9px 12px; margin: 12px 0; font-size: 10.8px; }
+  .warn { background: #fff6e6; border-left: 4px solid #e0a020; }
+  .ok { background: #eef8f1; border-left: 4px solid #2f9e5f; }
+  .bug { background: #fdeeee; border-left: 4px solid #c0392b; }
+  .note { background: #eef4fb; border-left: 4px solid #3d7ab8; }
+  ul { margin: 6px 0 10px; padding-left: 20px; }
+  li { margin-bottom: 3px; }
+  .tag { display: inline-block; background: #e7eef7; color: #2b4f7d; border-radius: 3px;
+         padding: 1px 6px; font-size: 9.5px; font-weight: 600; margin-right: 4px; }
+  .cover { border-bottom: 3px solid #24425f; padding-bottom: 14px; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Document Store Module</h1>
+  <div class="sub">
+    Case and project documents on MinIO object storage &middot; Phase 1 implementation guide<br/>
+    Branch: <code>devG</code> &middot; 2026-09-28 &middot; 613 tests green (125 new)
+  </div>
+</div>
+
+<h2>1. What Was Built</h2>
+
+<p>A document store where every document belongs to <strong>exactly one owner</strong> — a case
+(<code>Matter</code>) or a project (<code>Project</code>) — with bytes living in MinIO and only
+metadata in PostgreSQL. Two views over the same rows: a per-owner document panel and a firm-wide
+document library.</p>
+
+<table>
+  <tr><th style="width:32%">Area</th><th>Delivered in Phase 1</th></tr>
+  <tr><td>Storage</td><td>Generic MinIO service, bucket bootstrap, presigned POST uploads, presigned GET downloads</td></tr>
+  <tr><td>Metadata</td><td><code>documents</code> table, <code>PENDING_UPLOAD → ACTIVE → ARCHIVED</code> lifecycle</td></tr>
+  <tr><td>Authorization</td><td>Permission gate + row-level scope for firm admins, assigned staff and clients</td></tr>
+  <tr><td>Quota</td><td>Per-firm allocation set by Super Admin, enforced under a row lock at confirm time</td></tr>
+  <tr><td>Integrity</td><td>MIME whitelist, extension whitelist, real size re-check, file-signature (magic byte) check</td></tr>
+  <tr><td>Sharing</td><td>Private by default; a client sees only documents explicitly shared with them</td></tr>
+  <tr><td>Audit</td><td>Upload / download / share / archive recorded against the document, plus case timeline entries</td></tr>
+  <tr><td>Deferred</td><td>Virus scanning, compression, per-firm KMS keys, hard delete &amp; restore (see §11)</td></tr>
+</table>
+
+<h2>2. Architecture — Two Seams</h2>
+
+<p>The design separates <em>moving bytes</em> from <em>owning documents</em>, so the storage layer
+is reusable (invoice PDFs, scraper exports, report generation) and testable without a running
+MinIO.</p>
+
+<h3>2.1 Generic storage layer — <code>com.lawfirm.erp.common.storage</code></h3>
+
+<pre>StorageService            interface: presignUpload, presignDownload, stat, readHead, delete, ensureBucket
+MinioStorageService       the ONLY class that imports io.minio
+StorageProperties         @ConfigurationProperties("storage.minio") — every storage knob
+StorageConfig             MinioClient bean, created only when an endpoint is configured
+StorageBootstrap          creates the bucket at startup; logs instead of failing the boot
+StorageQuotaService       per-firm allocation + usage counter
+FirmStorageUsage          entity: one row per firm (used_bytes, quota_bytes)</pre>
+
+<div class="note">
+<strong>Why an interface matters here.</strong> <code>DocumentService</code> depends on
+<code>StorageService</code>, never on MinIO. The whole test suite substitutes a 60-line in-memory
+double, so 125 tests run with no container, no network and no credentials.
+</div>
+
+<h3>2.2 Document module — <code>com.lawfirm.erp.modules.document</code></h3>
+
+<pre>controller/  DocumentController          firm staff API   (/api/v1/firm/**)
+             ClientDocumentController    client portal    (/api/v1/client/documents)
+service/     DocumentService / DocumentServiceImpl / DocumentMapper
+             DocumentScopeGuard          answers "may the caller see or act on this?"
+             PendingUploadSweeper        discards abandoned uploads
+entity/      Document
+repository/  DocumentRepository          three scoped queries
+util/        DocumentStoragePath         readable, sanitised object keys
+             DocumentTypePolicy          whitelist + file-signature rules
+enums/       DocumentStatus, DocumentVisibility</pre>
+
+<h2>3. Data Model</h2>
+
+<h3>3.1 <code>documents</code></h3>
+
+<table>
+  <tr><th style="width:26%">Column</th><th style="width:20%">Type</th><th>Purpose</th></tr>
+  <tr><td><code>id</code></td><td>BIGINT IDENTITY</td><td>Primary key (per requirement: int, not UUID)</td></tr>
+  <tr><td><code>uuid</code></td><td>UUID, unique</td><td>Stable identity for the audit trail — see below</td></tr>
+  <tr><td><code>firm_id</code></td><td>UUID, NOT NULL</td><td>Tenant key; every query filters on it</td></tr>
+  <tr><td><code>matter_id</code></td><td>UUID, NULL</td><td>Set when the document belongs to a case</td></tr>
+  <tr><td><code>project_id</code></td><td>UUID, NULL</td><td>Set when the document belongs to a project</td></tr>
+  <tr><td><code>court_case_id</code></td><td>UUID, NULL</td><td>Optional tag for one court instance of the matter</td></tr>
+  <tr><td><code>original_filename</code></td><td>VARCHAR(255)</td><td>As uploaded; never used to build the storage key</td></tr>
+  <tr><td><code>content_type</code></td><td>VARCHAR(100)</td><td>From the whitelist</td></tr>
+  <tr><td><code>extension</code></td><td>VARCHAR(10)</td><td>Derived from the content type, not the filename</td></tr>
+  <tr><td><code>size_bytes</code></td><td>BIGINT</td><td>Verified at confirm; quota counts this</td></tr>
+  <tr><td><code>storage_key</code></td><td>VARCHAR(500)</td><td>Object key. Authoritative pointer to the file</td></tr>
+  <tr><td><code>etag</code></td><td>VARCHAR(64)</td><td>From storage on confirm; normalised, never trusted raw</td></tr>
+  <tr><td><code>visibility</code></td><td>VARCHAR(10)</td><td><code>PRIVATE</code> (default) or <code>SHARED</code></td></tr>
+  <tr><td><code>status</code></td><td>VARCHAR(20)</td><td><code>PENDING_UPLOAD</code>, <code>ACTIVE</code>, <code>ARCHIVED</code></td></tr>
+  <tr><td><code>uploaded_by_user_id</code></td><td>UUID</td><td>Who confirmed the upload</td></tr>
+  <tr><td><code>upload_expires_at</code></td><td>TIMESTAMP</td><td>Upload window; drives the sweeper</td></tr>
+  <tr><td><code>archived_at</code>, <code>archived_by_user_id</code></td><td>—</td><td>Soft-delete trail</td></tr>
+  <tr><td>audit columns</td><td>—</td><td><code>created_at/by</code>, <code>updated_at/by</code></td></tr>
+</table>
+
+<p><strong>Indexes:</strong> <code>(firm_id, matter_id, status)</code>,
+<code>(firm_id, project_id, status)</code>, <code>(firm_id, created_at)</code>.</p>
+
+<div class="box warn">
+<strong>Why two nullable owner columns instead of <code>owner_type</code> + <code>owner_id</code>?</strong>
+Both sides are queried and indexed independently and need real foreign keys; a discriminator column
+cannot be joined or indexed per side. A database check constraint enforces the XOR
+(<code>documents_owner_xor_check</code>), and the service enforces it before insert.
+</div>
+
+<div class="box bug">
+<strong>Why the document also carries a <code>uuid</code>.</strong> <code>audit_logs.entity_id</code>
+is a <code>UUID</code> column, and <code>AuditAspect</code> only accepts a UUID or a UUID-parsable
+string. A numeric primary key therefore produced <code>entityId = null</code> — the audit row would
+have existed but pointed at nothing. The document's <code>uuid</code> is what the audit trail records.
+</div>
+
+<h3>3.2 <code>firm_storage_usage</code></h3>
+
+<table>
+  <tr><th style="width:26%">Column</th><th style="width:20%">Type</th><th>Purpose</th></tr>
+  <tr><td><code>id</code></td><td>BIGINT IDENTITY</td><td>Primary key</td></tr>
+  <tr><td><code>firm_id</code></td><td>UUID, unique, NOT NULL</td><td>One row per firm</td></tr>
+  <tr><td><code>used_bytes</code></td><td>BIGINT</td><td>Bytes currently counted against the firm</td></tr>
+  <tr><td><code>quota_bytes</code></td><td>BIGINT</td><td>Allocated bytes. <code>0</code> means unlimited</td></tr>
+</table>
+
+<div class="note">
+<strong>Why quota lives here and not in <code>firm_configs</code>.</strong> <code>FirmConfigService</code>
+is writable by a Firm Admin through the firm settings API. If the allocation were a firm config key,
+a Firm Admin could raise their own limit. Keeping it in a table with a Super-Admin-only endpoint makes
+allocation a platform decision, and puts the counter and the limit in the same row so one lock covers both.
+</div>
+
+<h2>4. Storage Layout</h2>
+
+<pre>firms/{firmId}/cases/{matterNumber}/{objectId}/{filename}
+firms/{firmId}/projects/{projectCode}/{objectId}/{filename}
+
+firms/8c2f1a3e-.../cases/MT-2026-00041/b606d326-.../petition.pdf
+firms/8c2f1a3e-.../projects/ABC-PRJ-2026-00007/f9aba4b5-.../agreement.pdf</pre>
+
+<ul>
+  <li><strong>Case number / project code in the path</strong> — what a human browsing the MinIO console
+      expects to see. Both are firm-unique and effectively immutable
+      (<code>projectCode</code> is declared <code>updatable = false</code>).</li>
+  <li><strong>A UUID folder per document</strong> — filenames can collide, so the readable part never
+      has to be uniquified. The id is generated at ticket time, because the row needs its key before insert.</li>
+  <li><strong><code>firmId</code> first, not a firm code</strong> — tier one must be immutable; a firm code
+      can change and would orphan every object beneath it.</li>
+  <li><strong>Filename sanitised</strong> — path separators, control characters and leading dots removed,
+      length capped at 120 keeping the extension.</li>
+  <li><strong><code>storage_key</code> is authoritative.</strong> If a case number were ever changed, existing
+      rows still point at the real object; the readable path is a convenience, not a lookup key.</li>
+  <li><strong>Uploads cannot escape the firm prefix.</strong> The POST policy pins an exact key, and every
+      generated key starts with <code>firms/{firmId}/</code>.</li>
+</ul>
+
+<p>S3 has no real folders — slashes in the key are simply what MinIO renders as a tree.</p>
+
+<h2>5. Upload Flow</h2>
+
+<p>Bytes never pass through the application. The client uploads straight to MinIO against a presigned
+POST policy, so a 50 MB file costs the API process nothing.</p>
+
+<pre>POST /api/v1/firm/documents/upload-ticket
+  → validate owner (exactly one of matterNumber / projectCode) and the caller's access
+  → validate filename extension + content type against the whitelist
+  → validate declared size against the 50 MB cap
+  → advisory quota check (fail fast, before any bytes move)
+  → insert Document (status = PENDING_UPLOAD, upload_expires_at = now + 30 min)
+  → return { documentId, uploadUrl, fields{key, Content-Type, policy, x-amz-signature}, expiresAt }
+
+Client POSTs `fields` + the file, as multipart/form-data, straight to MinIO
+
+POST /api/v1/firm/documents/{id}/confirm
+  → status must still be PENDING_UPLOAD and within the window
+  → stat(key): object must exist, real size must be <= the cap and EQUAL the declared size
+  → readHead(key, 4096): file signature must match the declared content type
+  → quotaService.reserve(firmId, size)   ← row lock, or the object is deleted and the call fails
+  → status = ACTIVE, uploaded_by = caller, etag stored
+  → case documents append a matter timeline event</pre>
+
+<h3>5.1 Why presigned POST rather than presigned PUT</h3>
+
+<p>A presigned <em>PUT</em> URL is a bearer credential for one key and cannot limit the size
+written to it — MinIO would accept a single PUT up to 5 GB. The 50 MB cap and the quota check would
+then be advisory, only discovered after the bytes had landed. A POST <em>policy</em> carries explicit
+conditions that storage itself enforces:</p>
+
+<table>
+  <tr><th style="width:34%">Policy condition</th><th>Effect</th></tr>
+  <tr><td><code>content-length-range</code> 1 → 50 MB</td><td>An oversized upload is refused before it is stored</td></tr>
+  <tr><td><code>eq</code> on <code>key</code></td><td>The object can only be written to the exact key issued</td></tr>
+  <tr><td><code>eq</code> on <code>Content-Type</code></td><td>A file cannot be stored under a different declared type</td></tr>
+</table>
+
+<p>Every condition is inside the signature, so a tampered field is rejected by storage rather than
+silently accepted.</p>
+
+<h3>5.2 Defence in depth on the file itself</h3>
+
+<p>A declared <code>Content-Type</code> is attacker-controlled, so it is only the first gate.
+<code>confirm</code> re-reads the object and checks its leading bytes:</p>
+
+<table>
+  <tr><th style="width:34%">Declared type</th><th>Required signature</th></tr>
+  <tr><td><code>application/pdf</code></td><td><code>%PDF</code></td></tr>
+  <tr><td>docx / xlsx / pptx / zip</td><td><code>PK</code> (ZIP container)</td></tr>
+  <tr><td><code>image/jpeg</code> / <code>image/png</code></td><td><code>FF D8 FF</code> / <code>89 50 4E 47</code></td></tr>
+  <tr><td><code>image/tiff</code></td><td><code>II*\0</code> or <code>MM\0*</code></td></tr>
+  <tr><td>doc / xls / ppt</td><td>OLE2 header <code>D0 CF 11 E0 A1 B1 1A E1</code></td></tr>
+  <tr><td><code>text/plain</code>, <code>text/csv</code></td><td>No signature — rejected if a NUL byte appears in the head</td></tr>
+</table>
+
+<p>An executable renamed to <code>petition.pdf</code> with a spoofed header fails here, and the
+object is deleted rather than left in the bucket.</p>
+
+<h3>5.3 One whitelist, not two</h3>
+
+<p>The store originally consulted two different lists: <code>DocumentTypePolicy.ALLOWED_TYPES</code> for
+the content type, and the application-wide <code>AllowedExtensions</code> enum for the filename. They did
+not agree.</p>
+
+<table>
+  <tr><th style="width:30%">Case</th><th>Old behaviour</th></tr>
+  <tr><td><code>scan.tiff</code>, <code>bundle.zip</code></td><td>Content type is whitelisted, but the extension
+      gate refused them — so two supported types were unreachable</td></tr>
+  <tr><td><code>animation.gif</code>, <code>logo.svg</code></td><td>Passed the extension gate, then failed the
+      content-type gate with an unrelated-sounding message</td></tr>
+</table>
+
+<p><code>DocumentTypePolicy</code> now derives its accepted extensions <em>from</em>
+<code>ALLOWED_TYPES</code> (<code>allowedExtensions()</code>, plus the <code>jpeg</code> alias), so the two
+gates cannot drift apart again and the error message lists exactly the set that works:
+<code>pdf&nbsp;doc&nbsp;docx&nbsp;xls&nbsp;xlsx&nbsp;ppt&nbsp;pptx&nbsp;txt&nbsp;csv&nbsp;jpg&nbsp;jpeg&nbsp;png&nbsp;tiff&nbsp;zip</code>.
+Three tests pin the agreement in both directions, including that an extension with no allowed content
+type is refused at the first gate.</p>
+
+<h3>5.4 Quota enforcement and the compensation path</h3>
+
+<p>The authoritative check happens at confirm, inside one transaction:</p>
+
+<pre>lock the firm's usage row (SELECT ... FOR UPDATE)
+  quota = 0            → unlimited, never refused
+  used + size > quota  → delete the object, throw a readable error
+  otherwise            → used_bytes += size</pre>
+
+<div class="box warn">
+<strong>The compensating delete is not optional.</strong> By the time confirm runs, the bytes are
+already in the bucket. Refusing the upload without deleting the object would leak storage forever and
+leave an orphan nothing points at. There are three such paths — oversized, size mismatch, signature
+mismatch — plus the quota path, and each one deletes the object before failing.
+</div>
+
+<p>The lock is what stops two concurrent confirms from both fitting into the last of the allocation.
+The pre-flight check at ticket time reads the counter without the lock, purely so an over-quota upload
+is refused before the client bothers sending anything.</p>
+
+<h2>6. Authorization</h2>
+
+<p>Three layers, all of which must pass.</p>
+
+<table>
+  <tr><th style="width:12%">Layer</th><th style="width:26%">Mechanism</th><th>What it decides</th></tr>
+  <tr><td>1</td><td><code>JwtAuthFilter</code></td><td>Valid token, active user, firm not suspended — already enforced per request</td></tr>
+  <tr><td>2</td><td><code>PermissionEvaluator.require(...)</code></td><td>Which <em>actions</em> the caller's role may take</td></tr>
+  <tr><td>3</td><td><code>DocumentScopeGuard</code> + repository queries</td><td>Which <em>documents</em> those actions apply to</td></tr>
+</table>
+
+<h3>6.1 Who sees what</h3>
+
+<table>
+  <tr><th style="width:22%">Caller</th><th>Documents reachable</th></tr>
+  <tr><td>Firm admin (<code>FIRM</code>)</td><td>Every document in the firm. Not narrowed by assignment</td></tr>
+  <tr><td>Super admin</td><td>Platform-wide; allocates space per firm</td></tr>
+  <tr><td>Firm staff (<code>FIRM_USER</code>)</td><td>Only cases in <code>case_assignments</code> and projects in <code>project_members</code> — <em>and</em> only the actions the firm admin granted their role</td></tr>
+  <tr><td>Client (<code>CLIENT</code>)</td><td>Only their own case/project, only <code>SHARED</code>, only <code>ACTIVE</code>. Never uploads or changes anything</td></tr>
+</table>
+
+<div class="note">
+<strong>"The firm admin must give permission"</strong> is satisfied by the existing role/permission
+system the firm admin already manages in Role Management — no second, per-document grant table was
+introduced. The three permissions are <code>DOCUMENT_MANAGEMENT:VIEW</code> (view + download),
+<code>:UPLOAD</code> (upload + confirm) and <code>:EDIT</code> (archive), plus <code>:SHARE</code>
+for making a document client-visible.
+</div>
+
+<h3>6.2 How the scope is expressed in SQL</h3>
+
+<p>Three separate queries, one per scope. The caller's scope selects exactly one of them, so no request
+can widen its own result set by changing a parameter. Scope is expressed as subqueries, which means an
+employee with no assignments naturally gets an empty page rather than needing an empty-<code>IN</code> guard.</p>
+
+<pre>Firm admin   findForFirm(firmId, filters)
+
+Firm staff   findAssignedTo(firmId, userId, filters)
+             ... AND ( d.matterId  IN (SELECT ca.matterId  FROM CaseAssignment ca WHERE ca.userId = :userId)
+                    OR d.projectId IN (SELECT pm.projectId FROM ProjectMember pm  WHERE pm.userId = :userId) )
+
+Client       findVisibleToClient(firmId, userId, SHARED, ACTIVE, filters)
+             ... AND d.visibility = 'SHARED' AND d.status = 'ACTIVE'
+             ... AND ( d.matterId  IN (SELECT m.id FROM Matter m WHERE m.clientUserId = :userId)
+                    OR d.matterId  IN (SELECT mp.matterId FROM MatterParty mp
+                                        WHERE mp.clientId = :userId AND mp.isOurClient = true)
+                    OR d.projectId IN (SELECT p.id FROM Project p WHERE p.clientUserId = :userId) )</pre>
+
+<p>The client query deliberately ignores any <code>visibility</code> or <code>status</code> filter the
+caller supplies, and the party branch keeps matters created before the <code>clientUserId</code> column
+existed visible to their client.</p>
+
+<div class="box ok">
+<strong>Cross-firm requests return 404, not 403.</strong> Every document lookup goes through
+<code>findByIdAndFirmId(id, callerFirmId)</code>, so another firm's row simply does not exist as far as
+the caller is concerned. This avoids confirming that a guessed id is real.
+</div>
+
+<h2>7. Sharing With Clients</h2>
+
+<p>Uploads start <code>PRIVATE</code> — no document reaches a client by accident, which matters when
+the same case holds internal notes, fee memos and strategy drafts. A user holding
+<code>DOCUMENT_MANAGEMENT:SHARE</code> promotes a document to <code>SHARED</code>:</p>
+
+<pre>PATCH /api/v1/firm/documents/{id}/visibility   { "data": { "visibility": "SHARED" } }</pre>
+
+<p>Each change is audited. Archived documents cannot be shared, and a client's effective access is the
+intersection of <em>shared</em> and <em>their own case</em> — either alone is not enough.</p>
+
+<h2>8. Per-Firm Storage Allocation</h2>
+
+<p>The platform decides how much space each firm gets: 5 GB for firm A, 10 GB for firm B.</p>
+
+<table>
+  <tr><th style="width:44%">Endpoint</th><th>Actor</th></tr>
+  <tr><td><code>PUT /api/v1/super-admin/firms/{firmId}/storage-quota</code></td><td>Super Admin (<code>@PreAuthorize("hasRole('SUPER_ADMIN')")</code>)</td></tr>
+  <tr><td><code>GET /api/v1/super-admin/firms/{firmId}/storage-usage</code></td><td>Super Admin</td></tr>
+  <tr><td><code>GET /api/v1/firm/documents/storage-usage</code></td><td>Any firm user with <code>:VIEW</code> — own firm only</td></tr>
+</table>
+
+<pre>PUT .../storage-quota   { "data": { "quotaBytes": 10737418240 } }     // 10 GB
+
+{
+  "usedBytes": 3221225472, "quotaBytes": 10737418240,
+  "availableBytes": 7516192768, "usedPercent": 30.0, "unlimited": false
+}</pre>
+
+<ul>
+  <li><code>quotaBytes: 0</code> means unlimited — the default for a firm with no explicit allocation is
+      <code>DEFAULT_STORAGE_QUOTA_BYTES</code> (5 GB).</li>
+  <li>A newly created firm gets its row lazily on first upload; firms that predate the feature are
+      backfilled at startup by <code>StorageUsageBootstrap</code>.</li>
+  <li>Lowering an allocation never deletes existing documents — it only blocks new uploads.</li>
+  <li>Archiving a document releases its bytes immediately.</li>
+  <li>An Employee with a role lacking these permissions cannot read the firm's usage.</li>
+</ul>
+
+<h2>9. Lifecycle, Audit and Timeline</h2>
+
+<h3>9.1 Status transitions</h3>
+
+<pre>ticket issued  → PENDING_UPLOAD
+confirm ok     → ACTIVE              (counts against quota)
+DELETE         → ARCHIVED            (bytes released; file KEPT)
+window lapsed  → row discarded by the sweeper (never became a document)</pre>
+
+<div class="box warn">
+<strong>Delete is always a soft delete.</strong> The stored object is never removed: legal documents
+are kept for retention. Hard deletion after a retention period is deliberately a separate, explicitly
+authorised operation and is not part of Phase 1.
+</div>
+
+<h3>9.2 Audit entries</h3>
+
+<table>
+  <tr><th style="width:26%">Action</th><th style="width:20%">Audit action</th><th>Recorded when</th></tr>
+  <tr><td>Upload confirmed</td><td><code>DOCUMENT_UPLOADED</code></td><td>A file passes every check and becomes </code>ACTIVE</code></td></tr>
+  <tr><td>Download link issued</td><td><code>DOCUMENT_DOWNLOADED</code></td><td>Every presigned download URL</td></tr>
+  <tr><td>Visibility changed</td><td><code>DOCUMENT_SHARED</code></td><td>Private ⇄ shared, including who did it</td></tr>
+  <tr><td>Archived</td><td><code>DOCUMENT_DELETED</code></td><td>Soft delete</td></tr>
+</table>
+
+<p>Each row carries the firm, the user, the document's <code>uuid</code> as <code>entity_id</code>,
+and a human-readable summary. <strong>Presigned URLs are never logged</strong> — the audit summary
+contains only the filename, because the URL is itself a credential. A test asserts that no audit
+summary ever contains <code>http</code>.</p>
+
+<div class="box bug">
+<strong>Two pre-existing bugs found and fixed while wiring this up.</strong> The <code>@Audit</code>
+annotation mechanism had never worked at all:
+<ol>
+  <li><code>AuditAspect</code> resolved the caller only from the SecurityContext principal, but the
+      principal is an <code>AuthenticatedDetail</code>; the <code>AuthenticatedUser</code> is published
+      as a <em>request attribute</em> (which is how <code>AuditServiceImpl</code> reads it). The aspect
+      therefore returned early for every request.</li>
+  <li><code>AuditSpelHelper</code> set the result as the SpEL <em>root object</em> but never bound
+      <code>#result</code> as a variable, so every documented <code>#result.x</code> expression threw
+      and evaluated to null.</li>
+</ol>
+Together these meant no annotated method ever wrote an audit row. Both are fixed centrally, so every
+existing <code>@Audit</code> endpoint across the application now records properly.
+</div>
+
+<h3>9.3 Case timeline</h3>
+
+<p>A confirmed document on a case appends a <code>MatterTimelineEvent</code>
+(<code>DOCUMENT_UPLOADED</code>, title <code>"Document uploaded: petition.pdf"</code>, tagged with the
+court instance when one was given), so uploads appear alongside hearings and judgments in the case feed.
+Projects have no timeline entity, so project documents do not create one.</p>
+
+<h2>10. API Reference</h2>
+
+<h3>10.1 Firm staff — <code>/api/v1/firm</code></h3>
+
+<table>
+  <tr><th style="width:52%">Endpoint</th><th style="width:22%">Permission</th><th>Notes</th></tr>
+  <tr><td><code>POST /documents/upload-ticket</code></td><td><code>:UPLOAD</code></td><td>Body: matterNumber <em>or</em> projectCode, filename, contentType, sizeBytes, optional courtCaseRef</td></tr>
+  <tr><td><code>POST /documents/{id}/confirm</code></td><td><code>:UPLOAD</code></td><td>Body optional</td></tr>
+  <tr><td><code>GET /documents</code></td><td><code>:VIEW</code></td><td>Library. Filters: status, visibility, search, page, size</td></tr>
+  <tr><td><code>GET /matters/{matterNumber}/documents</code></td><td><code>:VIEW</code></td><td>Case panel</td></tr>
+  <tr><td><code>GET /projects/{projectCode}/documents</code></td><td><code>:VIEW</code></td><td>Project panel</td></tr>
+  <tr><td><code>GET /documents/{id}/download-url</code></td><td><code>:VIEW</code></td><td>15-minute presigned URL</td></tr>
+  <tr><td><code>PATCH /documents/{id}/visibility</code></td><td><code>:SHARE</code></td><td>PRIVATE ⇄ SHARED</td></tr>
+  <tr><td><code>DELETE /documents/{id}</code></td><td><code>:EDIT</code></td><td>Archive (soft)</td></tr>
+  <tr><td><code>GET /documents/storage-usage</code></td><td><code>:VIEW</code></td><td>Own firm only</td></tr>
+</table>
+
+<h3>10.2 Client portal — <code>/api/v1/client/documents</code></h3>
+
+<table>
+  <tr><th style="width:52%">Endpoint</th><th>Notes</th></tr>
+  <tr><td><code>GET /</code></td><td>Own case/project, shared and active only. Optional matterNumber / projectCode / search</td></tr>
+  <tr><td><code>GET /{id}/download-url</code></td><td>Shared documents on the caller's own case only</td></tr>
+</table>
+
+<div class="note">
+<strong>Download is gated on <code>:VIEW</code>, not a separate <code>:DOWNLOAD</code>.
+</strong> In this product "view" means access to the document, and the seeded matrix gives
+<code>READ_ONLY</code> roles (paralegal) and clients only <code>ACCESS + VIEW</code>. Gating downloads
+on <code>:DOWNLOAD</code> would have locked paralegals and clients out of reading any file at all —
+the same shape as QA finding F-14.
+</div>
+
+<h2>11. Configuration</h2>
+
+<pre># application.yml
+storage:
+  minio:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    bucket: ${MINIO_BUCKET:tarikh-documents}
+    region: ${MINIO_REGION:us-east-1}
+    upload-expiry-seconds: 1800      # 30 minutes
+    download-expiry-seconds: 900     # 15 minutes
+    max-file-size-bytes: 52428800    # 50 MB
+    default-quota-bytes: 5368709120  # 5 GB for a firm with no explicit allocation</pre>
+
+<div class="box warn">
+<strong><code>MINIO_ENDPOINT</code> must be reachable from the browser.</strong> Presigned URLs are
+generated against it and the browser fetches the file directly. An internal-only hostname
+(<code>http://minio:9000</code>) works from the API container but breaks every upload at runtime.
+Storage also needs a CORS rule allowing the frontend origin's POST — a missing rule surfaces as an
+opaque browser error, not an auth error.
+</div>
+
+<p>Local MinIO: <code>docker compose up -d</code> (API on <code>localhost:9000</code>, console on
+<code>localhost:9001</code>). The bucket is created automatically at startup and stays private.</p>
+
+<h3>11.1 Database migration</h3>
+
+<p>Hibernate <code>ddl-auto=update</code> creates the two new tables, but it does not create check
+constraints. Run once per environment:</p>
+
+<pre>src/main/resources/db/migration/V2026_09_28__document_store_constraints.sql</pre>
+
+<p>It adds <code>documents_owner_xor_check</code> and rebuilds the enum check on
+<code>matter_timeline.event_type</code> to include the new <code>DOCUMENT_UPLOADED</code> value — the
+same trap that needed a migration when <code>permissions.action</code> gained new values.</p>
+
+<h3>11.2 Dependencies</h3>
+
+<pre>io.minio:minio:8.6.0
+com.squareup.okhttp3:okhttp-jvm:5.1.0   ← required, see note</pre>
+
+<div class="box warn">
+<strong>Why <code>okhttp-jvm</code> is declared explicitly.</strong> MinIO 8.6.0 depends on okhttp 5.x,
+but the <code>okhttp</code> artifact at 5.x is a Kotlin-multiplatform metadata jar containing
+<em>no classes</em> — the JVM classes live in <code>okhttp-jvm</code>. Gradle resolves that variant from
+module metadata; Maven does not, so without this line compilation fails on
+<code>okhttp3.HttpUrl</code>. MinIO 8.x (the pre-9.0 line) is pinned deliberately: 9.0.0 was a full
+rewrite of the SDK.
+</div>
+
+<h2>12. Testing</h2>
+
+<table>
+  <tr><th style="width:54%">Suite</th><th style="width:14%">Tests</th><th>Focus</th></tr>
+  <tr><td><code>DocumentStoragePathTest</code></td><td>9</td><td>Key layout, path-traversal, sanitising, long names</td></tr>
+  <tr><td><code>DocumentTypePolicyTest</code></td><td>45</td><td>Whitelist, extensions, every file signature</td></tr>
+  <tr><td><code>StorageQuotaServiceTest</code></td><td>14</td><td>Quota arithmetic, unlimited mode, counter floors, allocation</td></tr>
+  <tr><td><code>DocumentServiceImplTest</code></td><td>36</td><td>Flows and authorization with all collaborators mocked</td></tr>
+  <tr><td><code>DocumentQaTest</code></td><td>21</td><td>End-to-end over real HTTP + real security</td></tr>
+</table>
+
+<p><strong>Full suite: 613 tests, 0 failures, 0 errors.</strong></p>
+
+<h3>12.1 How the E2E suite drives a real upload</h3>
+
+<p>An in-memory <code>StorageService</code> replaces MinIO. The test calls the real ticket endpoint,
+reads the generated key out of the response, "uploads" genuine file bytes under that key, then calls
+confirm — so the size check, the magic-byte check, the quota reservation and the audit write all run
+for real:</p>
+
+<pre>JsonNode ticket = POST /firm/documents/upload-ticket { matterNumber, filename, contentType, sizeBytes }
+storageService.put(ticket.fields.key, DocumentTestFiles.pdf("..."))   // the browser's POST
+POST /firm/documents/{documentId}/confirm  →  200 ACTIVE</pre>
+
+<p>Documents with real signatures (<code>%PDF</code>, <code>PK</code>, <code>FF D8 FF</code>,
+<code>89 50 4E 47</code>) are used, and the disguised-executable test uploads a genuine
+<code>MZ</code> header under a PDF label to prove the signature check rejects it.</p>
+
+<h3>12.2 Authorization covered</h3>
+
+<ul>
+  <li>Firm admin sees every document in the firm, case and project alike</li>
+  <li>Assigned advocate sees only their case's document; an unassigned advocate sees an empty library</li>
+  <li>A project member sees and may add to their project; a non-member may not upload to it</li>
+  <li>Client cannot see an unshared document, then can after sharing; cannot upload, share or archive</li>
+  <li>Client cannot reach another client's case even when a document on it is shared</li>
+  <li>Another firm's admin sees an empty library and gets 404 on ids that exist in firm A</li>
+  <li>A role with <code>:VIEW</code> only can read but not upload; a role with no document permission cannot list</li>
+  <li>A firm admin cannot raise its own storage allocation</li>
+  <li>Audit rows exist for all four actions and never contain a URL</li>
+</ul>
+
+<h2>13. Known Limitations &amp; Next Phases</h2>
+
+<table>
+  <tr><th style="width:34%">Not in Phase 1</th><th>Note</th></tr>
+  <tr><td>Virus scanning</td><td><code>PENDING_SCAN</code> / <code>QUARANTINED</code> statuses were deliberately left out rather than sitting dead in the enum. The <code>StorageService</code> seam is where a scan step drops in</td></tr>
+  <tr><td>Compression</td><td>Tested expectation: gzip barely helps docx/xlsx (already ZIP) or images, and only text benefits. Sizes are stored as one <code>size_bytes</code>; a split original/stored pair comes with the feature</td></tr>
+  <tr><td>Per-firm KMS keys</td><td>Bucket-level encryption only. Per-firm keys need KES and a key per <code>firm_storage_config</code> row</td></tr>
+  <tr><td>Hard delete / restore</td><td>Archiving never destroys the file. Un-archiving and retention-based purging are separate operations needing their own authorization and audit</td></tr>
+  <tr><td>Multipart upload</td><td>Single POST up to 50 MB. Larger files need a multipart flow with part-level presigning</td></tr>
+  <tr><td>Bulk upload &amp; export</td><td>No ZIP-a-case or bulk-upload endpoint yet; <code>:DOWNLOAD</code> remains reserved for that</td></tr>
+</table>
+
+<h3>13.1 Operational notes</h3>
+
+<ul>
+  <li><strong>Backups are now two systems.</strong> Postgres holds metadata, MinIO holds every file.
+      A database-only restore yields rows whose <code>storage_key</code> points at missing objects.</li>
+  <li>The bucket must stay private. Nothing should ever be served without a presigned URL.</li>
+  <li>Pre-signed URL lifetimes are configuration, not code: shorten them if a firm's threat model demands it.</li>
+  <li>The sweeper runs every 15 minutes and discards <code>PENDING_UPLOAD</code> rows past their
+      30-minute window, removing any partial object.</li>
+</ul>
+
+<h3>13.2 Verification commands</h3>
+
+<pre>./mvnw -o test                                       # full suite
+./mvnw -o test -Dtest=DocumentQaTest                 # end-to-end authorization suite
+./mvnw -o test -Dtest='Document*Test,StorageQuotaServiceTest'</pre>
+
+<p>Run the migration SQL against a Postgres environment before the first boot on it, then confirm:</p>
+
+<pre>SELECT COUNT(*) FROM documents WHERE (matter_id IS NOT NULL) = (project_id IS NOT NULL);  -- must be 0</pre>
+
+<p>Finally, verify against real MinIO that your server version <em>rejects an oversized POST</em>
+(a 2016 bug report describes old releases ignoring <code>content-length-range</code>). If it does not,
+a <code>stat</code>-based size backstop is needed.</p>
+
+</body>
+</html>

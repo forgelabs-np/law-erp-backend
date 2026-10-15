@@ -7,12 +7,6 @@ import lombok.*;
 import java.time.LocalDate;
 import java.util.UUID;
 
-/**
- * Tracks every hearing-reminder email sent by the scheduler.
- * The unique key (courtEventId + recipientType + recipientEmail + scheduledDate)
- * makes the job idempotent: re-runs and restarts never send a duplicate email,
- * and the table doubles as testable evidence of what the scheduler did.
- */
 @Entity
 @Table(name = "hearing_reminder_log",
         uniqueConstraints = @UniqueConstraint(

@@ -24,11 +24,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/**
- * Per-firm settings. Values live in {@code firm_configs}, one row per firm + key, and are
- * read from the DB every time they are needed so a Firm Admin change is live on the next
- * request. Platform-wide values live in {@link SystemConfigService}.
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -38,16 +33,12 @@ public class FirmConfigService {
     private final SystemConfigService systemConfigService;
     private final ConfigEncryptionUtil configEncryptionUtil;
 
-    // FIRM scope keys
     public static final String KEY_BRAND_COLOR_PRIMARY = "BRAND_COLOR_PRIMARY";
     public static final String KEY_BRAND_COLOR_SECONDARY = "BRAND_COLOR_SECONDARY";
     public static final String KEY_EMAIL_FOOTER_TEXT = "EMAIL_FOOTER_TEXT";
     public static final String KEY_EMAIL_SIGNATURE = "EMAIL_SIGNATURE";
     public static final String KEY_TIMEZONE = "TIMEZONE";
 
-    // ========================================================================
-    // Reads
-    // ========================================================================
 
     public Optional<String> get(UUID firmId, String key) {
         return firmConfigRepository.findByFirmIdAndConfigKey(firmId, key)
@@ -59,18 +50,12 @@ public class FirmConfigService {
         return toValueMap(firmConfigRepository.findByFirmId(firmId));
     }
 
-    /** This firm's values over the platform defaults. */
     public Map<String, String> getEffectiveConfig(UUID firmId) {
         Map<String, String> effective = new HashMap<>(systemConfigService.getAllGlobal());
         effective.putAll(getAll(firmId));
         return effective;
     }
 
-    /**
-     * This firm's settings with metadata. Registry keys with no row for this firm get
-     * their default value, so a new firm's settings screen still lists everything it can
-     * set — FIRM keys are deliberately not boot-seeded.
-     */
     public List<SystemConfigSettingView> getSettings(UUID firmId) {
         List<FirmConfig> rows = firmConfigRepository.findByFirmId(firmId);
         List<SystemConfigSettingView> views = new ArrayList<>(toViews(rows));
@@ -102,9 +87,6 @@ public class FirmConfigService {
                 .collect(Collectors.toList());
     }
 
-    // ========================================================================
-    // Writes
-    // ========================================================================
 
     @Transactional
     public FirmConfig set(UUID firmId, String key, String value) {
@@ -132,9 +114,6 @@ public class FirmConfigService {
         log.info("Deleted firm config: firmId={}, key={}", firmId, key);
     }
 
-    // ========================================================================
-    // Private helpers
-    // ========================================================================
 
     private List<SystemConfigSettingView> toViews(List<FirmConfig> rows) {
         return rows.stream()
@@ -153,7 +132,6 @@ public class FirmConfigService {
                 .collect(Collectors.toList());
     }
 
-    /** Hard-unique per firm (firm_id is NOT NULL), but decrypt failures are still skipped rather than fatal. */
     private Map<String, String> toValueMap(List<FirmConfig> rows) {
         Map<String, String> values = new LinkedHashMap<>();
         Map<String, LocalDateTime> stamps = new HashMap<>();
@@ -199,7 +177,6 @@ public class FirmConfigService {
         return config.getConfigValue();
     }
 
-    /** Blocks delete of rows whose value is locked (allowEdit=false, already set). */
     private void checkNotLocked(UUID firmId, String key) {
         firmConfigRepository.findByFirmIdAndConfigKey(firmId, key)
                 .ifPresent(row -> {
@@ -233,7 +210,6 @@ public class FirmConfigService {
         }
 
         // Only registry-declared FIRM keys are writable — without this a firm admin could
-        // create rows for platform keys and override the GLOBAL value.
         SettingDef def = ConfigKeyRegistry.requireFirm(key);
         FirmConfig config = firmConfigRepository.findByFirmIdAndConfigKey(firmId, key).orElse(null);
 

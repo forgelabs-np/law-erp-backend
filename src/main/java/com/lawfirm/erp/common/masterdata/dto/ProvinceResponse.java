@@ -6,9 +6,6 @@ import lombok.Data;
 import java.io.Serializable;
 import java.util.UUID;
 
-/**
- * Serializable so cached entries stay safe if the cache ever moves off-heap.
- */
 @Data
 @Builder
 public class ProvinceResponse implements Serializable {

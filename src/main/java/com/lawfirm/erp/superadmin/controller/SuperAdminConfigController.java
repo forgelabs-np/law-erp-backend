@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** Super Admin manages GLOBAL and per-firm SystemConfig values. */
 @RestController
 @RequestMapping("/api/v1/super-admin")
 @RequiredArgsConstructor
@@ -37,7 +36,6 @@ public class SuperAdminConfigController {
     private final ResponseHandler responseHandler;
     private final PermissionEvaluator permissionEvaluator;
 
-    // Global config
 
     @GetMapping("/config")
     @Operation(summary = SuperAdminConstants.GET_GLOBAL_CONFIG_SUMMARY,
@@ -80,7 +78,6 @@ public class SuperAdminConfigController {
         return responseHandler.ok(null, "Config key deleted: " + key);
     }
 
-    // Per-firm config
 
     @GetMapping("/firms/{firmId}/config")
     @Operation(summary = SuperAdminConstants.GET_FIRM_CONFIG_SUMMARY,

@@ -4,11 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-/**
- * Redeems the one-time token e-mailed by {@code POST /auth/forgot-password}.
- * The password rules here are the single policy for the whole product (8–50 chars);
- * they deliberately match {@link ChangePasswordRequest}.
- */
 @Data
 public class PasswordResetRequest {
 

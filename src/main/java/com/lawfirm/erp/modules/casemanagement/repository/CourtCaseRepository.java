@@ -25,10 +25,8 @@ public interface CourtCaseRepository extends JpaRepository<CourtCase, UUID> {
 
     List<CourtCase> findByParentCourtCaseId(UUID parentCourtCaseId);
 
-    /** All decided cases whose appeal window has lapsed — used by the cross-firm deadline watcher. */
     List<CourtCase> findByStatusAndAppealDeadlineBefore(CourtCaseStatus status, LocalDate date);
 
-    /** Firm-scoped watch list: decided, not lapsed, deadline closing within the window. */
     List<CourtCase> findByFirmIdAndStatusAndAppealDeadlineBetweenAndAppealLapsedFalse(
             UUID firmId, CourtCaseStatus status, LocalDate from, LocalDate to);
 
@@ -36,19 +34,12 @@ public interface CourtCaseRepository extends JpaRepository<CourtCase, UUID> {
 
     boolean existsByParentCourtCaseId(UUID parentCourtCaseId);
 
-    /** Returns the set of parentCourtCaseIds that have at least one child. */
     @Query("SELECT DISTINCT cc.parentCourtCaseId FROM CourtCase cc WHERE cc.parentCourtCaseId IN :parentIds")
     Set<UUID> findParentIdsWithChildren(@Param("parentIds") Collection<UUID> parentIds);
 
-    /** Court case IDs for given matter IDs — for employee calendar filtering. */
     @Query("SELECT cc.id FROM CourtCase cc WHERE cc.matterId IN :matterIds")
     List<UUID> findIdsByMatterIdIn(@Param("matterIds") Collection<UUID> matterIds);
 
-    /**
-     * Get distinct courts where the firm has active cases.
-     * Returns court names grouped by court level with case counts.
-     * Used for scraper integration to know which courts to scrape.
-     */
     @Query("SELECT cc.courtName, cc.courtLevel, COUNT(cc) as caseCount " +
            "FROM CourtCase cc " +
            "WHERE cc.firmId = :firmId AND cc.status = 'ACTIVE' " +
@@ -56,18 +47,10 @@ public interface CourtCaseRepository extends JpaRepository<CourtCase, UUID> {
            "ORDER BY cc.courtLevel, cc.courtName")
     List<Object[]> findDistinctActiveCourtsByFirmId(@Param("firmId") UUID firmId);
 
-    /**
-     * Get all active court cases for a specific court name.
-     * Used to link case management cases to scraper client cases.
-     */
     @Query("SELECT cc FROM CourtCase cc " +
            "WHERE cc.firmId = :firmId AND cc.courtName = :courtName AND cc.status = 'ACTIVE'")
     List<CourtCase> findByFirmIdAndCourtNameAndStatusActive(
             @Param("firmId") UUID firmId, @Param("courtName") String courtName);
 
-    /**
-     * Get all court cases for a specific advocate.
-     * Used for lawyer dashboard and case assignment views.
-     */
     List<CourtCase> findByFirmIdAndAdvocateId(@Param("firmId") UUID firmId, @Param("advocateId") UUID advocateId);
 }

@@ -78,7 +78,8 @@ class HearingMatchingServiceTest {
     @DisplayName("Creates a match for an active client case and dispatches a notification")
     void matchesAndNotifies() {
         List<HearingMatch> savedMatches = new ArrayList<>();
-        when(clientCaseRepository.findAll()).thenReturn(List.of(activeCase()));
+        when(clientCaseRepository.findByActiveTrueAndCaseStatus(ClientCaseStatus.ACTIVE))
+                .thenReturn(List.of(activeCase()));
         when(dailyRepository.findByCourtIdAndCaseNoInternalAndHearingDateAdGreaterThanEqualOrderByHearingDateAdAsc(
                 any(), any(), any())).thenReturn(List.of(hearing()));
         when(weeklyRepository.findByCourtIdAndCaseNoInternalAndHearingDateAdGreaterThanEqualOrderByHearingDateAdAsc(
@@ -115,7 +116,8 @@ class HearingMatchingServiceTest {
     @Test
     @DisplayName("Skips already-matched rows — no duplicate matches")
     void dedupes() {
-        when(clientCaseRepository.findAll()).thenReturn(List.of(activeCase()));
+        when(clientCaseRepository.findByActiveTrueAndCaseStatus(ClientCaseStatus.ACTIVE))
+                .thenReturn(List.of(activeCase()));
         when(dailyRepository.findByCourtIdAndCaseNoInternalAndHearingDateAdGreaterThanEqualOrderByHearingDateAdAsc(
                 any(), any(), any())).thenReturn(List.of(hearing()));
         when(weeklyRepository.findByCourtIdAndCaseNoInternalAndHearingDateAdGreaterThanEqualOrderByHearingDateAdAsc(
@@ -158,7 +160,8 @@ class HearingMatchingServiceTest {
     @DisplayName("A failing dispatcher never blocks matching — the match stays un-notified for retry")
     void dispatcherFailureDoesNotBlock() {
         List<HearingMatch> savedMatches = new ArrayList<>();
-        when(clientCaseRepository.findAll()).thenReturn(List.of(activeCase()));
+        when(clientCaseRepository.findByActiveTrueAndCaseStatus(ClientCaseStatus.ACTIVE))
+                .thenReturn(List.of(activeCase()));
         when(dailyRepository.findByCourtIdAndCaseNoInternalAndHearingDateAdGreaterThanEqualOrderByHearingDateAdAsc(
                 any(), any(), any())).thenReturn(List.of(hearing()));
         when(weeklyRepository.findByCourtIdAndCaseNoInternalAndHearingDateAdGreaterThanEqualOrderByHearingDateAdAsc(

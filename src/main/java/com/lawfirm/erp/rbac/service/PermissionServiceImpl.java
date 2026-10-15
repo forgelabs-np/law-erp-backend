@@ -61,7 +61,6 @@ public class PermissionServiceImpl implements PermissionService {
             log.info("Permission updated: {} by admin: {}", permission.getCode(), adminId);
             permission = permissionRepository.save(permission);
 
-            // ✅ AUDIT: Permission updated
             auditService.log(
                     AuditAction.PERMISSION_UPDATED,
                     AuditEntity.PERMISSION,
@@ -76,7 +75,6 @@ public class PermissionServiceImpl implements PermissionService {
             assignToSystemRoles(permission);
             linkPermissionToModule(permission, request.getModuleCode());
 
-            // ✅ AUDIT: Permission created
             auditService.log(
                     AuditAction.PERMISSION_CREATED,
                     AuditEntity.PERMISSION,
@@ -110,7 +108,6 @@ public class PermissionServiceImpl implements PermissionService {
         permissionRepository.delete(permission);
         log.info("Permission deleted: {} by admin: {}", permission.getCode(), adminId);
 
-        // ✅ AUDIT: Permission deleted
         auditService.log(
                 AuditAction.PERMISSION_DELETED,
                 AuditEntity.PERMISSION,
@@ -132,7 +129,6 @@ public class PermissionServiceImpl implements PermissionService {
         log.info("Permission {} toggled to {} by admin: {}",
                 permission.getCode(), permission.isActive(), adminId);
 
-        // ✅ AUDIT: Permission status toggled
         auditService.log(
                 permission.isActive() ? AuditAction.PERMISSION_ACTIVATED : AuditAction.PERMISSION_DEACTIVATED,
                 AuditEntity.PERMISSION,
@@ -168,13 +164,11 @@ public class PermissionServiceImpl implements PermissionService {
     public GroupedPermissionResponse findAllGroupedByModule() {
         List<Module> modules = moduleRepository.findAllWithParentOrderByDisplayOrder();
 
-        // Batch-load all module-permission mappings in one query (eliminates N+1)
         List<UUID> moduleIds = modules.stream().map(Module::getId).collect(Collectors.toList());
         List<com.lawfirm.erp.rbac.entity.ModulePermission> allMappings = moduleIds.isEmpty()
                 ? List.of()
                 : modulePermissionRepository.findByModuleIdIn(moduleIds);
 
-        // Group permissions by module ID
         Map<UUID, List<Permission>> permsByModule = allMappings.stream()
                 .collect(Collectors.groupingBy(
                         mp -> mp.getModule().getId(),
@@ -205,7 +199,6 @@ public class PermissionServiceImpl implements PermissionService {
                 .build();
     }
 
-    // ─── Private Methods ─────────────────────────────────────────────────────
 
     private Permission findExistingPermission(PermissionRequest request) {
         if (request.getId() != null) {
@@ -262,11 +255,6 @@ public class PermissionServiceImpl implements PermissionService {
         });
     }
 
-    /**
-     * Links a custom permission to its module in the ModulePermission junction table.
-     * Without this, custom permissions are invisible in /permissions/grouped because
-     * the grouped query reads from ModulePermission, not from Permission directly.
-     */
     private void linkPermissionToModule(Permission permission, String moduleCode) {
         if (moduleCode == null || moduleCode.isBlank()) {
             return;

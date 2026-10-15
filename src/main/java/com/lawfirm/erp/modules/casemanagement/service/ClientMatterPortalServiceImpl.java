@@ -27,14 +27,6 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/**
- * "My cases" for the client portal.
- *
- * <p>Ownership comes from two sources so pre-existing data keeps working:
- * {@code matters.clientUserId} (the first-class link added with this feature) and a
- * {@code MatterParty} marked {@code isOurClient} with a {@code clientId}. Anything else in
- * the firm is invisible here, regardless of the client's role permissions.
- */
 @Service
 @RequiredArgsConstructor
 public class ClientMatterPortalServiceImpl implements ClientMatterPortalService {
@@ -79,9 +71,7 @@ public class ClientMatterPortalServiceImpl implements ClientMatterPortalService 
         return toResponse(matter, currentCases.get(matter.getCurrentCourtCaseId()), nextHearings);
     }
 
-    // ── Helpers ─────────────────────────────────────────────────────────────
 
-    /** Only an enabled client-portal account may use this surface. */
     private UUID requirePortalAccess() {
         UUID clientId = readScopeGuard.currentUserId();
         User user = clientId == null ? null : userRepository.findById(clientId).orElse(null);
@@ -105,7 +95,6 @@ public class ClientMatterPortalServiceImpl implements ClientMatterPortalService 
         Map<UUID, Matter> owned = new LinkedHashMap<>();
         matterRepository.findByClientUserIdAndFirmIdOrderByCreatedAtDesc(clientId, firmId)
                 .forEach(m -> owned.put(m.getId(), m));
-        // Backward compatibility: matters where the client was only recorded as a party
         for (MatterParty party : matterPartyRepository.findByClientIdAndFirmIdAndOurClientTrue(clientId, firmId)) {
             if (!owned.containsKey(party.getMatterId())) {
                 matterRepository.findByIdAndFirmId(party.getMatterId(), firmId)
@@ -132,7 +121,6 @@ public class ClientMatterPortalServiceImpl implements ClientMatterPortalService 
                 .collect(Collectors.toMap(CourtCase::getId, Function.identity()));
     }
 
-    /** Earliest still-scheduled hearing at or after today, per court case. */
     private Map<UUID, LocalDateTime> nextHearings(Collection<CourtCase> courtCases, UUID firmId) {
         List<UUID> caseIds = courtCases.stream().map(CourtCase::getId).collect(Collectors.toList());
         if (caseIds.isEmpty()) {

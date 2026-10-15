@@ -11,23 +11,18 @@ import java.util.UUID;
 @Mapper
 public interface RoleMapper {
 
-    // Parameterless methods
     List<RoleResponse> findAllRoles();
     List<RoleResponse> findAllActiveRoles();
     List<RoleResponse> findSystemRoles();
     List<RoleResponse> findCustomRoles();
 
-    // Paginated versions
     List<RoleResponse> findAllRolesWithPagination(@Param("limit") Integer limit, @Param("offset") Integer offset);
 
-    // Single record
     RoleResponse findRoleById(@Param("roleId") UUID roleId);
 
-    // By user/firm
     List<RoleResponse> findRolesByUserId(@Param("userId") UUID userId);
     List<RoleResponse> findRolesByFirmId(@Param("firmId") UUID firmId);
 
-    // Search
     List<RoleResponse> searchRoles(@Param("search") String search,
                                    @Param("activeOnly") Boolean activeOnly,
                                    @Param("systemOnly") Boolean systemOnly,
@@ -37,6 +32,5 @@ public interface RoleMapper {
     long countRoles(@Param("activeOnly") Boolean activeOnly,
                     @Param("excludeSystem") Boolean excludeSystem);
 
-    // Statistics
     Map<String, Object> getRoleStatistics(@Param("roleId") UUID roleId);
 }

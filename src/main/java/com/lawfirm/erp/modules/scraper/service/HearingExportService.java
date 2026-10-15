@@ -25,9 +25,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-// Weekly offline snapshot of the previous Mon–Sun window (DB stays the system of record).
-// UTF-8 BOM so Excel renders Devanagari; quoted fields; temp-file + atomic rename so a
-// failed run never leaves a half-written file.
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -73,7 +70,7 @@ public class HearingExportService {
         }
 
         StringBuilder csv = new StringBuilder();
-        csv.append('\uFEFF'); // UTF-8 BOM — Excel renders Devanagari correctly
+        csv.append('\uFEFF');
         csv.append(HEADER).append('\n');
         for (Row r : rows) {
             csv.append(quote(r.courtId())).append(',')

@@ -95,8 +95,6 @@ public class UserManagementController {
     @Operation(summary = UserManagementConstants.GET_ACTIVITY_SUMMARY, description = UserManagementConstants.GET_ACTIVITY_DESCRIPTION)
     public ResponseEntity<ApiResponse<List<UserProfileResponse.ActivityEntry>>> getUserActivity(
             @PathVariable UUID userId,
-            // NOTE: the list/search checks do not cover this route — a caller reaching it
-            // directly (URL/deep-link) would otherwise read any user's activity by UUID.
             @RequestParam(required = false)
                 @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false)
@@ -119,6 +117,16 @@ public class UserManagementController {
         return responseHandler.ok(
                 userManagementService.resetPassword(userId, payload),
                 "Password reset successfully. User must re-login.");
+    }
+
+    @PostMapping("/{userId}/unlock")
+    @Operation(summary = "Lift a user's login lockout",
+            description = "Clears the user's failed-login counter and lockout without changing their "
+                    + "password, MFA or active state. Scoped to the caller's firm.")
+    public ResponseEntity<ApiResponse<Void>> unlockUser(@PathVariable UUID userId) {
+        permissionEvaluator.require("USER_MANAGEMENT:EDIT");
+        userManagementService.unlockUser(userId);
+        return responseHandler.ok(null, "Lockout lifted. The user can sign in again.");
     }
 
     @PostMapping("/{userId}/reset-mfa")
@@ -144,7 +152,6 @@ public class UserManagementController {
     public ResponseEntity<ApiResponse<BulkOperationResult>> bulkDeactivate(
             @RequestBody(required = false) String body) {
         permissionEvaluator.require("USER_MANAGEMENT:DELETE");
-        // Body may wear the {data} envelope or be the bare payload - the screens send it bare.
         BulkDeactivateRequest payload = requestBodyBinder.bind(body, BulkDeactivateRequest.class);
         return responseHandler.ok(
                 userManagementService.bulkDeactivate(payload),

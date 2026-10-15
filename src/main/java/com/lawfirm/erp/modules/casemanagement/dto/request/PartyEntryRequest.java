@@ -24,11 +24,6 @@ public class PartyEntryRequest {
 
     private UUID clientId;
 
-    /**
-     * Whether the firm represents this party. Jackson would otherwise name this property
-     * {@code ourClient} (Lombok's {@code isOurClient()} getter), silently ignoring the
-     * documented {@code isOurClient} key — so both spellings are accepted explicitly.
-     */
     @JsonProperty("isOurClient")
     @JsonAlias("ourClient")
     private boolean isOurClient;

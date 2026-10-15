@@ -24,14 +24,12 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
 
     Page<Project> findByFirmIdAndClientUserId(UUID firmId, UUID clientUserId, Pageable pageable);
 
-    /** Projects where the user is a member — for non-admin users. */
     @Query("SELECT p FROM Project p WHERE p.firmId = :firmId AND p.id IN " +
            "(SELECT pm.projectId FROM ProjectMember pm WHERE pm.userId = :userId)")
     Page<Project> findProjectsByMemberUserId(@Param("firmId") UUID firmId,
                                               @Param("userId") UUID userId,
                                               Pageable pageable);
 
-    /** Projects where the user is a member, filtered by status. */
     @Query("SELECT p FROM Project p WHERE p.firmId = :firmId AND p.status = :status AND p.id IN " +
            "(SELECT pm.projectId FROM ProjectMember pm WHERE pm.userId = :userId)")
     Page<Project> findProjectsByMemberUserIdAndStatus(@Param("firmId") UUID firmId,
@@ -39,7 +37,6 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
                                                        @Param("status") ProjectStatus status,
                                                        Pageable pageable);
 
-    /** Projects visible to a specific client user (client portal). */
     List<Project> findByClientUserIdAndActive(UUID clientUserId, boolean active);
 
     boolean existsByProjectCodeAndFirmId(String projectCode, UUID firmId);

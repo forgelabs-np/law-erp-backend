@@ -15,21 +15,18 @@ public class FirmRolePermissionsResponse {
     private String roleName;
     private String roleCode;
 
-    // What this role currently has assigned
     private List<PermissionResponse> currentPermissions;
 
-    // Full ceiling — everything this role TYPE is allowed to have
-    // assigned = true means it's currently active on this role
     private List<AvailablePermission> availablePermissions;
 
     @Data
     @Builder
     public static class AvailablePermission {
         private UUID id;
-        private String code;        // "CASE_MANAGEMENT:VIEW"
-        private String action;      // "VIEW"
-        private String moduleCode;  // "CASE_MANAGEMENT"
+        private String code;
+        private String action;
+        private String moduleCode;
         private String description;
-        private boolean assigned;   // true = currently on this role
+        private boolean assigned;
     }
 }

@@ -10,7 +10,6 @@ import lombok.Data;
 @Data
 public class CreateFirmRequest {
 
-    // Firm details
     @NotBlank(message = "Law firm code is required")
     @Pattern(regexp = "^[A-Z0-9_]+$", message = "Law firm code must be uppercase letters, numbers, and underscores only")
     @Size(min = 3, max = 30)
@@ -29,7 +28,6 @@ public class CreateFirmRequest {
     private String address;
     private String jurisdiction;
 
-    // Firm Admin credentials
     @NotBlank(message = "Admin username is required")
     @Size(min = 3, max = 50)
     private String adminUsername;
@@ -49,7 +47,6 @@ public class CreateFirmRequest {
     @NotBlank(message = "Admin full name is required")
     private String adminFullName;
 
-    // ── Trial ─────────────────────────────────────────────────────────
     private Boolean isTrial = false;
 
     private Integer trialDays;

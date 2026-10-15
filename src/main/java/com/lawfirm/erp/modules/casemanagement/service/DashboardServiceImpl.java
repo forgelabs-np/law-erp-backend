@@ -43,7 +43,6 @@ public class DashboardServiceImpl implements DashboardService {
                 && currentUserResolver.getCurrentUser().getRoles() != null
                 && currentUserResolver.getCurrentUser().getRoles().contains("FIRM_ADMIN");
 
-        // For ADVOCATE/PARALEGAL: only show assigned matters
         List<UUID> assignedMatterIds = isAdmin ? null : assignmentService.getAssignedMatterIds(currentUserId, firmId);
 
         List<Matter> matters = getFilteredMatters(firmId, assignedMatterIds);
@@ -51,7 +50,6 @@ public class DashboardServiceImpl implements DashboardService {
                 .filter(m -> m.getStatus() == MatterStatus.ACTIVE)
                 .collect(Collectors.toList());
 
-        // Fetch all leaf court cases for positioning
         List<UUID> leafIds = matters.stream()
                 .map(Matter::getCurrentCourtCaseId)
                 .filter(Objects::nonNull)
@@ -61,7 +59,6 @@ public class DashboardServiceImpl implements DashboardService {
                 : courtCaseRepository.findAllById(leafIds).stream()
                         .collect(Collectors.toMap(CourtCase::getId, Function.identity()));
 
-        // Batch: latest event + event counts per court case
         Map<UUID, LocalDate> latestEventDate = leafIds.isEmpty() ? Map.of()
                 : courtEventRepository.findLatestPeshiByCourtCaseIds(leafIds).stream()
                         .collect(Collectors.toMap(r -> (UUID) r[0], r -> (LocalDate) r[1]));
@@ -70,18 +67,15 @@ public class DashboardServiceImpl implements DashboardService {
                 : courtEventRepository.countByCourtCaseIds(leafIds).stream()
                         .collect(Collectors.toMap(r -> (UUID) r[0], r -> ((Number) r[1]).intValue()));
 
-        // All events for leaf court cases, grouped once (avoids N+1 per matter)
         Map<UUID, List<CourtEvent>> eventsByCourtCase = leafIds.isEmpty() ? Map.of()
                 : courtEventRepository.findByCourtCaseIdInAndFirmIdOrderBySequenceNoAsc(leafIds, firmId)
                         .stream()
                         .collect(Collectors.groupingBy(CourtEvent::getCourtCaseId));
 
-        // Today's events
         List<CourtEvent> todayEvents = getTodayEvents(firmId, isAdmin ? null : currentUserId);
         Map<UUID, CourtEvent> todayEventMap = todayEvents.stream()
                 .collect(Collectors.toMap(CourtEvent::getId, Function.identity()));
 
-        // Batch resolve court cases + matters for today's events
         Set<UUID> todayCCIds = todayEvents.stream()
                 .map(CourtEvent::getCourtCaseId).collect(Collectors.toSet());
         Map<UUID, CourtCase> todayCCMap = todayCCIds.isEmpty() ? Map.of()
@@ -94,7 +88,6 @@ public class DashboardServiceImpl implements DashboardService {
                 : matterRepository.findAllById(todayMatterIds).stream()
                         .collect(Collectors.toMap(Matter::getId, Function.identity()));
 
-        // Batch resolve advocate names for today's events
         Set<UUID> advocateIds = todayEvents.stream()
                 .map(CourtEvent::getAttendingAdvocateId)
                 .filter(Objects::nonNull).collect(Collectors.toSet());
@@ -102,7 +95,6 @@ public class DashboardServiceImpl implements DashboardService {
                 : userRepository.findAllById(advocateIds).stream()
                         .collect(Collectors.toMap(User::getId, User::getFullName));
 
-        // Build today's event summaries
         List<DashboardResponse.TodayEventSummary> todaySummaries = todayEvents.stream()
                 .map(e -> {
                     CourtCase cc = todayCCMap.get(e.getCourtCaseId());
@@ -126,7 +118,6 @@ public class DashboardServiceImpl implements DashboardService {
                 })
                 .collect(Collectors.toList());
 
-        // Build case positioning
         Map<UUID, String> advocateFullNameMap = buildAdvocateMap(matters, courtCaseMap);
 
         List<CasePositioningResponse> positioning = matters.stream()
@@ -135,7 +126,6 @@ public class DashboardServiceImpl implements DashboardService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
-        // Stale: 90+ days since last hearing
         LocalDate staleCutoff = LocalDate.now().minusDays(STALE_THRESHOLD_DAYS);
         List<CasePositioningResponse> stale = positioning.stream()
                 .filter(p -> {
@@ -164,14 +154,13 @@ public class DashboardServiceImpl implements DashboardService {
 
     private List<Matter> getFilteredMatters(UUID firmId, List<UUID> assignedMatterIds) {
         if (assignedMatterIds != null && assignedMatterIds.isEmpty()) {
-            return List.of(); // ADVOCATE/PARALEGAL with no assignments
+            return List.of();
         }
         if (assignedMatterIds != null) {
             return matterRepository.findAllById(assignedMatterIds).stream()
                     .filter(m -> m.getFirmId().equals(firmId))
                     .collect(Collectors.toList());
         }
-        // FIRM_ADMIN: all matters
         return matterRepository.findByFirmId(firmId, org.springframework.data.domain.Pageable.unpaged())
                 .getContent();
     }
@@ -199,11 +188,9 @@ public class DashboardServiceImpl implements DashboardService {
         int daysSince = lastDate != null
                 ? (int) ChronoUnit.DAYS.between(lastDate, LocalDate.now()) : -1;
 
-        // Latest event details (last hearing)
         List<CourtEvent> events = eventsByCourtCase.getOrDefault(leafId, List.of());
         CourtEvent lastHolding = events.isEmpty() ? null : events.get(events.size() - 1);
 
-        // Next scheduled event
         CourtEvent nextEvent = events.stream()
                 .filter(e -> e.getStatus() == CourtEventStatus.SCHEDULED)
                 .findFirst().orElse(null);

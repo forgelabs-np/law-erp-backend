@@ -4,7 +4,6 @@ public final class MasterDataConstants {
 
     private MasterDataConstants() {}
 
-    // MasterDataController
     public static final String GET_PROVINCES_SUMMARY = "All provinces";
     public static final String GET_PROVINCES_DESCRIPTION = "All 7 Nepal provinces (cached). Each includes districtCount.";
 

@@ -9,21 +9,6 @@ import org.hibernate.annotations.UuidGenerator;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Lightweight audit log — ~150 bytes per row.
- *
- * Key decisions:
- *  - action     CHAR(30)    fixed-width, enum-backed, fast equality scans
- *  - entity_type CHAR(20)   fixed-width, enum-backed
- *  - user_type  CHAR(1)     single char: 'S'=SUPER_ADMIN 'F'=FIRM_USER 'C'=CLIENT
- *  - summary    VARCHAR(200) human-readable line — replaces jsonb payload entirely
- *  - ip_address VARCHAR(45) IPv6 max = 39 chars
- *
- * Indexes:
- *   - (firm_id, created_at DESC) — firm admin timeline, most common query
- *   - (firm_id, user_id, created_at DESC) — "what did advocate X do?"
- *   - (action, created_at DESC) — super admin action filter
- */
 @Entity
 @Table(
         name = "audit_logs",
@@ -46,13 +31,13 @@ public class AuditLog {
     private UUID id;
 
     @Column(name = "firm_id")
-    private UUID firmId;                    // null only for SUPER_ADMIN actions
+    private UUID firmId;
 
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
     @Column(name = "user_type", nullable = false, length = 15)
-    private String userType;                // 'S'=SUPER_ADMIN 'A'=FIRM 'F'=FIRM_USER 'C'=CLIENT
+    private String userType;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30, columnDefinition = "CHAR(30)")
@@ -63,22 +48,13 @@ public class AuditLog {
     private AuditEntity entityType;
 
     @Column(name = "entity_id")
-    private UUID entityId;                  // UUID of the affected row
+    private UUID entityId;
 
-    // ── Context ──────────────────────────────────────────────────────────
-    /**
-     * Human-readable one-liner for the timeline UI.
-     * Examples:
-     *   "Created employee john.doe@firm.com (ADVOCATE)"
-     *   "Changed case #142 status: OPEN → CLOSED"
-     *   "Uploaded document: contract_v2.pdf"
-     * Keep it under 200 chars. No JSON, no object dumps.
-     */
     @Column(length = 200)
     private String summary;
 
     @Column(name = "ip_address", length = 45)
-    private String ipAddress;               // IPv6 max = 39 chars
+    private String ipAddress;
 
     @Column(name = "created_at", updatable = false, nullable = false)
     private LocalDateTime createdAt;
@@ -88,7 +64,6 @@ public class AuditLog {
         if (createdAt == null) createdAt = LocalDateTime.now();
     }
 
-    // ── Convenience factory ───────────────────────────────────────────────
     public static AuditLog of(UUID firmId, UUID userId, String userTypeChar,
                               AuditAction action, AuditEntity entityType,
                               UUID entityId, String summary, String ipAddress) {

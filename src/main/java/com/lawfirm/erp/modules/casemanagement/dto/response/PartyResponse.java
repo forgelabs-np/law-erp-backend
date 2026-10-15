@@ -24,7 +24,6 @@ public class PartyResponse {
     private UUID clientId;
     private boolean isOurClient;
 
-    /** Compatibility alias — see {@link MatterPartyResponse#isOurClientFlag()}. */
     @JsonProperty("isOurClient")
     public boolean isOurClientFlag() {
         return isOurClient;

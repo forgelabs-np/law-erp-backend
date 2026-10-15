@@ -12,7 +12,6 @@ import java.util.UUID;
 @Repository
 public interface RenewalTypeRepository extends JpaRepository<RenewalType, Long> {
 
-    /** System defaults (firm_id IS NULL) + firm-scoped custom types. */
     @Query("SELECT rt FROM RenewalType rt WHERE rt.active = true " +
            "AND (rt.firmId IS NULL OR rt.firmId = :firmId)")
     List<RenewalType> findAvailableForFirm(@Param("firmId") UUID firmId);

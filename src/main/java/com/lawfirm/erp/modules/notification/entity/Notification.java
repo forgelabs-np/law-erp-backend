@@ -9,10 +9,6 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * One in-app notification for exactly one recipient (fan-out happens at
- * write time, so per-user queries stay trivial). Tenant-scoped via firmId.
- */
 @Entity
 @Table(name = "notifications", indexes = {
         @Index(name = "idx_notif_recipient_read", columnList = "recipientUserId, readAt"),
@@ -46,22 +42,15 @@ public class Notification extends AuditableEntity {
     @Column(nullable = false, columnDefinition = "text")
     private String body;
 
-    /** Polymorphic link back to the source entity (e.g. "MATTER", "INVOICE"). */
     @Column(name = "reference_type", length = 40)
     private String referenceType;
 
     @Column(name = "reference_id")
     private UUID referenceId;
 
-    /** Null = unread. */
     @Column(name = "read_at")
     private LocalDateTime readAt;
 
-    /**
-     * Optional idempotency key (type + referenceId + time-bucket by convention).
-     * Unique index lets a retried/duplicate event be skipped — Postgres allows
-     * multiple NULLs, so notifications without dedup coexist fine.
-     */
     @Column(name = "dedup_key", length = 200)
     private String dedupKey;
 

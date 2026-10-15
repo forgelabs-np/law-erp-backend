@@ -4,6 +4,7 @@ import com.lawfirm.erp.auth.security.ReadScopeGuard;
 import com.lawfirm.erp.modules.casemanagement.entity.Matter;
 import com.lawfirm.erp.modules.casemanagement.entity.MatterParty;
 import com.lawfirm.erp.modules.casemanagement.repository.MatterPartyRepository;
+import com.lawfirm.erp.modules.casemanagement.repository.MatterRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -11,27 +12,18 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
-/**
- * One place that answers "may the caller see this matter?".
- *
- * <p>Case management is client-linked through {@code Matter.clientUserId}. Matters created
- * before that column existed carry the client only as a party ({@code isOurClient = true}),
- * so the link is resolved from either source — which also means rows already in production
- * behave correctly without a backfill.
- */
 @Component
 @RequiredArgsConstructor
 public class MatterScopeGuard {
 
     private final MatterPartyRepository matterPartyRepository;
+    private final MatterRepository matterRepository;
     private final ReadScopeGuard readScopeGuard;
 
-    /** True when the caller is a client-portal account (must only see its own matters). */
     public boolean isClientScope() {
         return readScopeGuard.isClientScope();
     }
 
-    /** The client a matter belongs to — first-class column first, then a marked party. */
     public UUID ownerClientId(Matter matter) {
         if (matter.getClientUserId() != null) {
             return matter.getClientUserId();
@@ -45,23 +37,32 @@ public class MatterScopeGuard {
                 .orElse(null);
     }
 
-    /** Throws unless the caller may see this matter. Staff always pass. */
     public void requireVisible(Matter matter) {
         readScopeGuard.requireOwnClientRecord(ownerClientId(matter), "this matter");
     }
 
-    /** Convenience for callers that already hold a matter id. */
     public void requireVisible(UUID matterId, UUID firmId, String what) {
         if (!isClientScope()) {
             return;
         }
-        UUID owner = matterPartyRepository
-                .findByMatterIdInAndFirmIdAndOurClientTrue(List.of(matterId), firmId)
-                .stream()
-                .map(MatterParty::getClientId)
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElse(null);
+        // Load once and reject a matter outside the caller's firm *before* touching ownership, so a
+        // client can never use the id to probe another firm's matter.
+        Matter matter = matterRepository.findById(matterId).orElse(null);
+        if (matter == null || (firmId != null && !firmId.equals(matter.getFirmId()))) {
+            readScopeGuard.requireOwnClientRecord(null, what);
+            return;
+        }
+
+        UUID owner = matter.getClientUserId();
+        if (owner == null) {
+            owner = matterPartyRepository
+                    .findByMatterIdInAndFirmIdAndOurClientTrue(List.of(matterId), firmId)
+                    .stream()
+                    .map(MatterParty::getClientId)
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse(null);
+        }
         readScopeGuard.requireOwnClientRecord(owner, what);
     }
 }

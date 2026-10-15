@@ -8,7 +8,6 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 
-// One row of the daily cause list. Upsert key: (courtId, caseNoInternal, hearingDateBs).
 @Entity
 @Table(name = "scraper_daily_hearings", uniqueConstraints = {
         @UniqueConstraint(name = "uq_scraper_daily_key",
@@ -40,11 +39,9 @@ public class DailyHearing {
     @Column(length = 60, nullable = false)
     private String caseNoInternal;
 
-    // इजलाश — bench number, daily feed only.
     @Column(length = 10)
     private String bench;
 
-    // क्र. स. — serial within the bench; Devanagari letters (क, ख) kept as-is.
     @Column(length = 10)
     private String serialNo;
 

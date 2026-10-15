@@ -9,10 +9,6 @@ import lombok.Setter;
 
 import java.util.UUID;
 
-/**
- * Party identity at Matter level — created once, deduplicated via party matching.
- * Role flips on appeal are modeled in CourtCaseRole, not here.
- */
 @Entity
 @Table(name = "matter_parties", indexes = {
         @Index(name = "idx_mp_matter", columnList = "matterId"),

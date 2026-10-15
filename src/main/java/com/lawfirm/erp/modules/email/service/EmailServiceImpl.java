@@ -124,9 +124,6 @@ public class EmailServiceImpl implements EmailService {
 
         String subject = "Password reset for " + firmName;
 
-        // The password IS put in the e-mail. The console's reset dialog never renders the
-        // API's generated temporary password, so "the admin hands it over" left the user
-        // with a credential nobody ever saw. It still forces a rotation on first login.
         Context ctx = new Context();
         ctx.setVariable("firmName", firmName);
         ctx.setVariable("fullName", fullName);
@@ -285,7 +282,6 @@ public class EmailServiceImpl implements EmailService {
                 "email/notification", ctx, toEmail, AuditEntity.USER);
     }
 
-    /** @return true when the email was handed to the SMTP server. */
     private boolean sendHtmlEmail(UUID firmId, UUID triggeredByUserId, String toEmail, String subject,
                                   String template, Context ctx, String recipientIdentifier,
                                   AuditEntity auditEntity) {
@@ -347,7 +343,6 @@ public class EmailServiceImpl implements EmailService {
             }
         }
 
-        // Which sender actually ran is the first question when mail "just does not arrive",
         // so this branch is logged at INFO rather than DEBUG.
         log.info("Using Spring auto-configured mail sender from spring.mail.* for firm: {}", firmId);
         return defaultMailSender;
@@ -363,10 +358,7 @@ public class EmailServiceImpl implements EmailService {
             return dbFrom.get();
         }
         if (defaultMailSender instanceof JavaMailSenderImpl impl) {
-            // Only the authenticated account may be used as the From address, and only when it
-            // actually looks like one: a corrupted spring.mail.username (stray text, no @ domain)
             // would otherwise be handed to InternetAddress and fail every send with an illegal
-            // address — the same root cause class as the SMTP auth failure it also causes.
             String candidate = impl.getUsername();
             if (candidate != null && candidate.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")) {
                 return candidate;
@@ -387,10 +379,6 @@ public class EmailServiceImpl implements EmailService {
         return "NepalCRM Platform";
     }
 
-    /**
-     * Deepest cause's message. JavaMail wraps the useful detail (e.g. "535-5.7.8 Username
-     * and Password not accepted") under a generic MailAuthenticationException message.
-     */
     private static String rootCause(Throwable e) {
         Throwable cause = e;
         while (cause.getCause() != null && cause.getCause() != cause) {

@@ -13,11 +13,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 
-/**
- * Sends notification emails through the platform's email module (same SMTP
- * resolution chain as every other email). Never throws: failure is recorded
- * on the delivery row for the retry sweep.
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j

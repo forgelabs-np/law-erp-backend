@@ -25,7 +25,6 @@ public class CreateRenewalRequest {
     @NotNull(message = "Start date is required")
     private LocalDate startDate;
 
-    /** NULL = ongoing recurring (generate 3 years ahead by default). */
     private LocalDate endDate;
 
     private UUID assignedToId;

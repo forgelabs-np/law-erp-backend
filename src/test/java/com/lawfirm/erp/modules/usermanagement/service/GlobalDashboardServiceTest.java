@@ -13,7 +13,6 @@ import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.audit.entity.AuditLog;
 import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
-import com.lawfirm.erp.modules.casemanagement.entity.Matter;
 import com.lawfirm.erp.modules.casemanagement.enums.MatterStatus;
 import com.lawfirm.erp.modules.casemanagement.repository.CourtEventRepository;
 import com.lawfirm.erp.modules.casemanagement.repository.MatterRepository;
@@ -24,6 +23,7 @@ import com.lawfirm.erp.modules.scraper.repository.WeeklyHearingRepository;
 import com.lawfirm.erp.modules.usermanagement.dto.response.GlobalDashboardResponse;
 import com.lawfirm.erp.rbac.entity.Role;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -102,14 +102,6 @@ class GlobalDashboardServiceTest {
         return f;
     }
 
-    private Matter matter(UUID id, MatterStatus status) {
-        Matter m = new Matter();
-        m.setId(id);
-        m.setFirmId(firmId);
-        m.setStatus(status);
-        return m;
-    }
-
     @Test
     void firmAdminGetsFirmScopedData() {
         FirmContextHolder.set(firmId, "APX");
@@ -128,8 +120,8 @@ class GlobalDashboardServiceTest {
         when(firmRepository.findById(firmId)).thenReturn(Optional.of(firm(firmId, FirmStatus.ACTIVE)));
 
         // CaseStats
-        when(matterRepository.findByFirmId(eq(firmId), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(matter(UUID.randomUUID(), MatterStatus.ACTIVE))));
+        when(matterRepository.countByFirmId(firmId)).thenReturn(1L);
+        when(matterRepository.findLeafCourtCaseIdsByFirmId(firmId)).thenReturn(List.of());
         when(matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.ACTIVE)).thenReturn(1L);
         when(matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.CLOSED)).thenReturn(0L);
         when(courtEventRepository.findByFirmIdAndScheduledDate(eq(firmId), any(LocalDate.class)))
@@ -172,9 +164,7 @@ class GlobalDashboardServiceTest {
 
         // CaseStats — for super admin, firmId is null so count() and findAll() are used
         when(matterRepository.count()).thenReturn(2L);
-        when(matterRepository.findAll()).thenReturn(
-                List.of(matter(UUID.randomUUID(), MatterStatus.ACTIVE),
-                        matter(UUID.randomUUID(), MatterStatus.CLOSED)));
+        when(matterRepository.findLeafCourtCaseIds()).thenReturn(List.of());
         when(courtEventRepository.findByScheduledDate(any(LocalDate.class))).thenReturn(List.of());
 
         // Audit + Scraper
@@ -223,8 +213,8 @@ class GlobalDashboardServiceTest {
         when(firmRepository.findById(firmId)).thenReturn(Optional.of(firm(firmId, FirmStatus.ACTIVE)));
 
         // CaseStats
-        when(matterRepository.findByFirmId(eq(firmId), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of()));
+        when(matterRepository.countByFirmId(firmId)).thenReturn(0L);
+        when(matterRepository.findLeafCourtCaseIdsByFirmId(firmId)).thenReturn(List.of());
         when(matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.ACTIVE)).thenReturn(0L);
         when(matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.CLOSED)).thenReturn(0L);
         when(courtEventRepository.findByFirmIdAndScheduledDate(eq(firmId), any(LocalDate.class)))
@@ -271,8 +261,8 @@ class GlobalDashboardServiceTest {
         when(firmRepository.findById(firmId)).thenReturn(Optional.of(firm(firmId, FirmStatus.ACTIVE)));
 
         // CaseStats
-        when(matterRepository.findByFirmId(eq(firmId), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of()));
+        when(matterRepository.countByFirmId(firmId)).thenReturn(0L);
+        when(matterRepository.findLeafCourtCaseIdsByFirmId(firmId)).thenReturn(List.of());
         when(matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.ACTIVE)).thenReturn(2L);
         when(matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.CLOSED)).thenReturn(0L);
         when(courtEventRepository.findByFirmIdAndScheduledDate(eq(firmId), any(LocalDate.class)))
@@ -329,5 +319,40 @@ class GlobalDashboardServiceTest {
         assertNotNull(resp.getFirmTrends());
         assertEquals(8, resp.getFirmTrends().size());
         assertEquals(0L, resp.getFirmTrends().get(0).getTotalFirms());
+    }
+
+    @Test
+    @DisplayName("Stale matters count matters without a leaf plus leaves with no recent peshi")
+    void staleMattersCountsNullLeafMatters() {
+        FirmContextHolder.set(firmId, "APX");
+        when(currentUserResolver.isSuperAdmin()).thenReturn(false);
+        stubEmptyTrends(firmId);
+
+        when(userRepository.countByFirmId(firmId)).thenReturn(0L);
+        when(userRepository.countActiveByFirmId(firmId)).thenReturn(0L);
+        when(userRepository.countByFirmIdAndRoleCode(eq(firmId), anyString())).thenReturn(0L);
+        when(userRepository.findByFirmIdAndUserType(firmId, UserType.CLIENT)).thenReturn(List.of());
+        when(firmRepository.findById(firmId)).thenReturn(Optional.of(firm(firmId, FirmStatus.ACTIVE)));
+
+        // 3 matters, but only 1 has a leaf court case; that leaf has no recent peshi -> all 3 stale.
+        when(matterRepository.countByFirmId(firmId)).thenReturn(3L);
+        when(matterRepository.countByFirmIdAndStatus(eq(firmId), any(MatterStatus.class))).thenReturn(0L);
+        when(matterRepository.findLeafCourtCaseIdsByFirmId(firmId))
+                .thenReturn(List.of(UUID.randomUUID()));
+        when(courtEventRepository.findLatestPeshiByCourtCaseIds(anyList())).thenReturn(new ArrayList<>());
+        when(courtEventRepository.findByFirmIdAndScheduledDate(eq(firmId), any(LocalDate.class)))
+                .thenReturn(List.of());
+
+        when(auditLogRepository.findRecentByFirm(eq(firmId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        when(courtRepository.count()).thenReturn(0L);
+        when(dailyHearingRepository.count()).thenReturn(0L);
+        when(weeklyHearingRepository.count()).thenReturn(0L);
+        when(hearingMatchRepository.count()).thenReturn(0L);
+        when(dailyHearingRepository.findMaxScrapedDate()).thenReturn(Optional.empty());
+
+        GlobalDashboardResponse resp = service.getDashboard();
+
+        assertEquals(3L, resp.getCaseStats().getStaleMatters());
     }
 }

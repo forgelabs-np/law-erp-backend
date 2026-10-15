@@ -15,17 +15,14 @@ public interface MatterPartyRepository extends JpaRepository<MatterParty, UUID> 
 
     List<MatterParty> findByMatterIdAndFirmId(UUID matterId, UUID firmId);
 
-    /** Our-client parties for a batch of matters — hearing-reminder recipient resolution. */
     @Query("SELECT p FROM MatterParty p WHERE p.matterId IN :matterIds AND p.firmId = :firmId AND p.isOurClient = true")
     List<MatterParty> findByMatterIdInAndFirmIdAndOurClientTrue(@Param("matterIds") List<UUID> matterIds,
                                                                 @Param("firmId") UUID firmId);
 
     Optional<MatterParty> findByIdAndFirmId(UUID id, UUID firmId);
 
-    /** All parties for a given firm+client combination. */
     List<MatterParty> findByFirmIdAndClientId(UUID firmId, UUID clientId);
 
-    /** Every matter where this client account is recorded as "our client". */
     @Query("SELECT p FROM MatterParty p WHERE p.clientId = :clientId AND p.firmId = :firmId AND p.isOurClient = true")
     List<MatterParty> findByClientIdAndFirmIdAndOurClientTrue(@Param("clientId") UUID clientId,
                                                               @Param("firmId") UUID firmId);

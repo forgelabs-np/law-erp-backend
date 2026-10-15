@@ -17,7 +17,6 @@ public class UpdateCourtCaseRequest {
 
     private String judgeName;
 
-    // Criminal trial-level
     private String firNumber;
 
     private LocalDate firDate;
@@ -32,7 +31,6 @@ public class UpdateCourtCaseRequest {
 
     private BailStatus bailStatus;
 
-    // Civil trial-level
     private LocalDate mediationDate;
 
     private String mediationOutcome;

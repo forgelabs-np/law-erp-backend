@@ -149,6 +149,25 @@ if (data.status === 'PASSWORD_CHANGE_REQUIRED') {
 A user who has been reset can **never** skip this: every login keeps returning
 `PASSWORD_CHANGE_REQUIRED` until they rotate. There is no access token to leak in the meantime.
 
+### 4a-1. Login failures now name the real reason
+
+A failed login is still a **401**, but the `message` is the specific, already-sanitised reason — render
+it verbatim instead of substituting your own copy:
+
+| `message` | Cause |
+|---|---|
+| `Invalid username or password` | wrong password, unknown username or firm code |
+| `Account locked. Try again in N minute(s).` | too many failed attempts |
+| `Your account is inactive. Contact your firm admin.` | account deactivated |
+| `Your account has been blocked. Contact support.` | account blocked |
+| `Your firm account has been suspended. Please contact support.` | firm suspended or expired |
+| `Client portal access is disabled for your account. Please contact your firm.` | portal revoked |
+| `Super admin must use /super-admin/login` | Super Admin on the firm screen |
+| `Clients must sign in through the client portal` | client on the staff screen |
+
+Only the credential failure is generic. Every state-naming reason is withheld unless the supplied
+password is already correct, so this cannot be used to probe which usernames exist.
+
 ### 4b. Rotate
 
 ```http
@@ -170,21 +189,17 @@ Handle it exactly like a login result: `SUCCESS` → store tokens and enter the 
 `MFA_SETUP_REQUIRED` / `MFA_REQUIRED` → continue into the MFA screens with the returned `mfaToken`.
 **A rotation by an MFA-enabled user does not hand back tokens.**
 
-### 4c. Errors here are masked — read this before writing the screen
-
-`/auth/change-password` throws `BadCredentialsException` for three different causes, and the global
-handler turns all of them into the **same 401 `"Invalid username or password"`**:
+### 4c. Errors here are specific — branch on them
 
 | Real cause | Response |
 |---|---|
-| `newPassword` ≠ `confirmPassword` | `401 Invalid username or password` |
-| token expired / already used / malformed | `401 Invalid username or password` |
+| `newPassword` ≠ `confirmPassword` | `400 Passwords do not match` |
 | `newPassword` length outside 8–50 | `400 Password must be 8-50 characters` |
+| token expired / already used / malformed | `401 Invalid or expired password-change token` |
 
-So: **validate the match client-side** (never let a mismatch reach the server — you cannot explain
-the resulting 401), and treat any **401 on this screen as "start over"** → clear the stored
+A mismatch is a 400, not a silent success, but still check the match client-side so the user gets the
+message without a round-trip. Treat any **401 on this screen as "start over"** → clear the stored
 `passwordChangeToken`, show "Your reset link expired — please sign in again", and route to login.
-Do not try to distinguish mismatch from expiry from the response.
 
 ---
 

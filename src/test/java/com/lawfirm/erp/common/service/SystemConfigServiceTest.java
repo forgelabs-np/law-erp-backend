@@ -4,6 +4,7 @@ import com.lawfirm.erp.common.dto.SystemConfigSettingView;
 import com.lawfirm.erp.common.entity.SystemConfig;
 import com.lawfirm.erp.common.exception.BusinessRuleException;
 import com.lawfirm.erp.common.repository.SystemConfigRepository;
+import com.lawfirm.erp.common.storage.StorageProperties;
 import com.lawfirm.erp.common.util.ConfigEncryptionUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,12 +36,15 @@ class SystemConfigServiceTest {
     private SystemConfigRepository systemConfigRepository;
 
     private ConfigEncryptionUtil configEncryptionUtil;
+    private StorageProperties storageProperties;
     private SystemConfigService systemConfigService;
 
     @BeforeEach
     void setUp() {
         configEncryptionUtil = new ConfigEncryptionUtil(TEST_AES_KEY);
-        systemConfigService = new SystemConfigService(systemConfigRepository, configEncryptionUtil);
+        storageProperties = new StorageProperties();
+        systemConfigService = new SystemConfigService(
+                systemConfigRepository, configEncryptionUtil, storageProperties);
     }
 
     private SystemConfig row(String key, String value) {
@@ -340,8 +344,8 @@ class SystemConfigServiceTest {
             systemConfigService.seedGlobalDefaults();
 
             ArgumentCaptor<SystemConfig> captor = ArgumentCaptor.forClass(SystemConfig.class);
-            // 12 GLOBAL registry entries are seed=true; APP_NAME already exists → 11 inserts.
-            verify(systemConfigRepository, times(11)).save(captor.capture());
+            // 17 GLOBAL registry entries are seed=true; APP_NAME already exists → 16 inserts.
+            verify(systemConfigRepository, times(16)).save(captor.capture());
 
             List<SystemConfig> saved = captor.getAllValues();
             assertTrue(saved.stream().noneMatch(c -> SystemConfigService.KEY_APP_NAME.equals(c.getConfigKey())));
@@ -375,6 +379,54 @@ class SystemConfigServiceTest {
                     .findFirst().orElseThrow();
             // Unit test never sets app.production → false → "N" (a prod deployment seeds "Y")
             assertEquals("N", appProduction.getConfigValue());
+        }
+    }
+
+    @Nested
+    @DisplayName("STORAGE policy helpers")
+    class StoragePolicy {
+
+        @Test
+        @DisplayName("Policy values fall back to the running yml value when the key is absent")
+        void storageSettings_fallBackToYml() {
+            storageProperties.setMaxFileSizeBytes(1234L);
+            storageProperties.setUploadExpirySeconds(111);
+            storageProperties.setDownloadExpirySeconds(222);
+            storageProperties.setDefaultQuotaBytes(333L);
+            when(systemConfigRepository.findByConfigKey(anyString())).thenReturn(Optional.empty());
+
+            assertEquals(1234L, systemConfigService.storageMaxFileSizeBytes());
+            assertEquals(111, systemConfigService.storageUploadExpirySeconds());
+            assertEquals(222, systemConfigService.storageDownloadExpirySeconds());
+            assertEquals(333L, systemConfigService.storageDefaultQuotaBytes());
+            assertEquals(SystemConfigService.DEFAULT_DOCUMENT_MAX_FILENAME_LENGTH,
+                    systemConfigService.documentMaxFilenameLength());
+        }
+
+        @Test
+        @DisplayName("A stored value wins over the yml fallback")
+        void storageSettings_preferStoredValue() {
+            when(systemConfigRepository.findByConfigKey(SystemConfigService.KEY_STORAGE_MAX_FILE_SIZE_BYTES))
+                    .thenReturn(Optional.of(row(SystemConfigService.KEY_STORAGE_MAX_FILE_SIZE_BYTES, "999")));
+
+            assertEquals(999L, systemConfigService.storageMaxFileSizeBytes());
+        }
+
+        @Test
+        @DisplayName("The first seed captures the yml value so an existing deployment keeps it")
+        void seed_capturesConfiguredYmlValue() {
+            storageProperties.setMaxFileSizeBytes(7_000_000L);
+            when(systemConfigRepository.findByConfigKey(anyString())).thenReturn(Optional.empty());
+
+            systemConfigService.seedGlobalDefaults();
+
+            ArgumentCaptor<SystemConfig> captor = ArgumentCaptor.forClass(SystemConfig.class);
+            verify(systemConfigRepository, atLeastOnce()).save(captor.capture());
+            SystemConfig seeded = captor.getAllValues().stream()
+                    .filter(c -> SystemConfigService.KEY_STORAGE_MAX_FILE_SIZE_BYTES.equals(c.getConfigKey()))
+                    .findFirst().orElseThrow();
+            assertEquals("7000000", seeded.getConfigValue());
+            assertEquals("STORAGE", seeded.getConfigGroup());
         }
     }
 

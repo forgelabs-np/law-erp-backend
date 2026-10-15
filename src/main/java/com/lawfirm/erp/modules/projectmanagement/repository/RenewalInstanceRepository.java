@@ -16,19 +16,16 @@ public interface RenewalInstanceRepository extends JpaRepository<RenewalInstance
 
     List<RenewalInstance> findByRenewalIdAndActive(Long renewalId, boolean active);
 
-    /** Batch fetch instances for multiple renewals — avoids N+1 per renewal. */
     List<RenewalInstance> findByRenewalIdInAndActive(List<Long> renewalIds, boolean active);
 
     long countByRenewalIdAndStatus(Long renewalId, RenewalInstanceStatus status);
 
-    /** Daily overdue scan: mark PENDING instances past their due date. */
     @Modifying
     @Query("UPDATE RenewalInstance ri SET ri.status = com.lawfirm.erp.modules.projectmanagement.enums.RenewalInstanceStatus.OVERDUE " +
            "WHERE ri.status = com.lawfirm.erp.modules.projectmanagement.enums.RenewalInstanceStatus.PENDING " +
            "AND ri.dueDate < :today AND ri.active = true")
     int markOverdueInstances(@Param("today") LocalDate today);
 
-    /** Count overdue instances across all projects for a firm. */
     @Query("SELECT COUNT(ri) FROM RenewalInstance ri " +
            "JOIN Renewal r ON r.id = ri.renewalId " +
            "WHERE r.projectId = :projectId " +
@@ -36,7 +33,6 @@ public interface RenewalInstanceRepository extends JpaRepository<RenewalInstance
            "AND ri.active = true")
     long countOverdueByProjectId(@Param("projectId") java.util.UUID projectId);
 
-    /** Upcoming instances across all projects for a firm. */
     @Query("SELECT COUNT(ri) FROM RenewalInstance ri " +
            "JOIN Renewal r ON r.id = ri.renewalId " +
            "WHERE r.projectId = :projectId " +

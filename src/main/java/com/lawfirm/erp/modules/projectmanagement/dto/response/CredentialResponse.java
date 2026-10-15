@@ -14,7 +14,6 @@ public class CredentialResponse {
     private String siteType;
     private String siteUrl;
     private String usernameOrEmail;
-    /** Always masked in list/detail — use /reveal endpoint to get actual password. */
     @Builder.Default
     private String password = "••••••••";
     private String contactPerson;

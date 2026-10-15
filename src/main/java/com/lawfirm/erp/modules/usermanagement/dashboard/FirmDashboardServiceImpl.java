@@ -54,7 +54,6 @@ public class FirmDashboardServiceImpl implements FirmDashboardService {
     public FirmDashboardResponse getDashboard(DashboardScope scope) {
         UUID firmId = getRequiredFirmId(scope);
 
-        // Pre-fetch leaf court case IDs once — reused by case stats, upcoming hearings, team caseload
         List<UUID> leafIds = matterRepository.findLeafCourtCaseIdsByFirmId(firmId);
 
         return FirmDashboardResponse.builder()
@@ -70,14 +69,12 @@ public class FirmDashboardServiceImpl implements FirmDashboardService {
                 .build();
     }
 
-    /** 4 COUNT queries + 1 stale query, zero full entity loads. */
     private FirmDashboardResponse.CaseStats buildCaseStats(UUID firmId, List<UUID> leafIds) {
         long total = matterRepository.countByFirmId(firmId);
         long active = matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.ACTIVE);
         long dormant = matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.DORMANT);
         long closed = matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.CLOSED);
 
-        // Stale: matters whose leaf court case has no hearing in 90 days
         long stale = 0;
         if (!leafIds.isEmpty()) {
             LocalDate cutoff = LocalDate.now().minusDays(90);
@@ -98,19 +95,16 @@ public class FirmDashboardServiceImpl implements FirmDashboardService {
                 .build();
     }
 
-    /** 1 query for events + 2 batch lookups (advocates + court cases + matters). */
     private List<FirmDashboardResponse.TodayEvent> buildTodayEvents(UUID firmId) {
         List<CourtEvent> events = courtEventRepository.findByFirmIdAndScheduledDate(firmId, LocalDate.now());
         if (events.isEmpty()) return List.of();
 
-        // Batch resolve advocates
         Set<UUID> advocateIds = events.stream()
                 .map(CourtEvent::getAttendingAdvocateId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<UUID, String> advocateNames = advocateIds.isEmpty() ? Map.of()
                 : userRepository.findAllById(advocateIds).stream()
                 .collect(Collectors.toMap(User::getId, User::getFullName));
 
-        // Batch resolve matters via court cases
         Set<UUID> ccIds = events.stream().map(CourtEvent::getCourtCaseId).collect(Collectors.toSet());
         Map<UUID, CourtCase> ccMap = ccIds.isEmpty() ? Map.of()
                 : courtCaseRepository.findAllById(ccIds).stream()
@@ -134,29 +128,24 @@ public class FirmDashboardServiceImpl implements FirmDashboardService {
         }).collect(Collectors.toList());
     }
 
-    /** 1 batch event query + 1 batch court case lookup. No N+1. */
     private List<FirmDashboardResponse.UpcomingHearing> buildUpcomingHearings(UUID firmId, List<UUID> leafIds) {
         if (leafIds.isEmpty()) return List.of();
 
         LocalDate today = LocalDate.now();
         LocalDate cutoff = today.plusDays(14);
 
-        // Batch fetch court cases for names
         Map<UUID, String> courtNames = courtCaseRepository.findAllById(leafIds).stream()
                 .collect(Collectors.toMap(CourtCase::getId, CourtCase::getCourtName));
 
-        // Single batch event query for all leaf cases
         List<CourtEvent> allEvents = courtEventRepository
                 .findByCourtCaseIdInAndFirmIdOrderBySequenceNoAsc(leafIds, firmId);
 
-        // Batch resolve matters for court cases
         Set<UUID> matterIds = courtCaseRepository.findAllById(leafIds).stream()
                 .map(CourtCase::getMatterId).collect(Collectors.toSet());
         Map<UUID, String> matterTitles = matterIds.isEmpty() ? Map.of()
                 : matterRepository.findAllById(matterIds).stream()
                 .collect(Collectors.toMap(m -> m.getId(), m -> m.getTitle()));
 
-        // Build a map from courtCaseId to matter title
         Map<UUID, String> ccToMatterTitle = courtCaseRepository.findAllById(leafIds).stream()
                 .collect(Collectors.toMap(CourtCase::getId, cc -> matterTitles.getOrDefault(cc.getMatterId(), "")));
 
@@ -179,7 +168,6 @@ public class FirmDashboardServiceImpl implements FirmDashboardService {
                 .collect(Collectors.toList());
     }
 
-    /** 2 COUNT queries. */
     private FirmDashboardResponse.InvoiceStats buildInvoiceStats(UUID firmId) {
         long total = invoiceRepository.countByFirmId(firmId);
         long overdue = invoiceRepository.findByFirmIdAndStatus(firmId, InvoiceStatus.OVERDUE,
@@ -196,7 +184,6 @@ public class FirmDashboardServiceImpl implements FirmDashboardService {
                 .build();
     }
 
-    /** 1 paginated query. */
     private List<FirmDashboardResponse.OverdueInvoice> buildOverdueInvoices(UUID firmId) {
         List<Invoice> overdue = invoiceRepository.findByFirmIdAndStatus(firmId, InvoiceStatus.OVERDUE,
                 PageRequest.of(0, 5)).getContent();
@@ -214,7 +201,6 @@ public class FirmDashboardServiceImpl implements FirmDashboardService {
         }).collect(Collectors.toList());
     }
 
-    /** 1 batch query for all renewals + 1 batch query for all instances. No N+1. */
     private FirmDashboardResponse.RenewalStats buildRenewalStats(UUID firmId) {
         LocalDate today = LocalDate.now();
         LocalDate monthEnd = today.plusMonths(1);
@@ -236,14 +222,12 @@ public class FirmDashboardServiceImpl implements FirmDashboardService {
                 .build();
     }
 
-    /** 1 batch query for all renewals + 1 batch query for all instances. No N+1. */
     private List<FirmDashboardResponse.UpcomingRenewal> buildUpcomingRenewals(UUID firmId) {
         LocalDate today = LocalDate.now();
         LocalDate cutoff = today.plusMonths(3);
 
         List<RenewalInstance> allInstances = getAllRenewalInstancesForFirm(firmId);
 
-        // Batch resolve renewal titles and project names
         Set<Long> renewalIds = allInstances.stream().map(RenewalInstance::getRenewalId).collect(Collectors.toSet());
         Map<Long, Renewal> renewalMap = renewalIds.isEmpty() ? Map.of()
                 : renewalRepository.findAllById(renewalIds).stream()
@@ -275,7 +259,6 @@ public class FirmDashboardServiceImpl implements FirmDashboardService {
                 .collect(Collectors.toList());
     }
 
-    /** Shared helper: 1 query for projects + 1 batch query for renewals + 1 batch query for instances. */
     private List<RenewalInstance> getAllRenewalInstancesForFirm(UUID firmId) {
         List<UUID> projectIds = projectRepository.findByFirmId(firmId, PageRequest.of(0, 1000)).getContent()
                 .stream().map(Project::getId).collect(Collectors.toList());
@@ -288,7 +271,6 @@ public class FirmDashboardServiceImpl implements FirmDashboardService {
         return renewalInstanceRepository.findByRenewalIdInAndActive(renewalIds, true);
     }
 
-    /** 1 query for advocates + reuse pre-fetched leafIds. */
     private List<FirmDashboardResponse.TeamCaseload> buildTeamCaseload(UUID firmId, List<UUID> leafIds) {
         List<User> advocates = userRepository.findByFirmIdAndUserType(firmId, UserType.FIRM_USER);
 
@@ -311,7 +293,6 @@ public class FirmDashboardServiceImpl implements FirmDashboardService {
                 .collect(Collectors.toList());
     }
 
-    /** 1 query for logs + 1 batch user lookup. */
     private List<FirmDashboardResponse.RecentActivity> buildRecentActivity(UUID firmId) {
         List<AuditLog> logs = auditLogRepository.findRecentByFirm(firmId, PageRequest.of(0, 10)).getContent();
         if (logs.isEmpty()) return List.of();

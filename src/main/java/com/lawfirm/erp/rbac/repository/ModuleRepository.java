@@ -19,10 +19,6 @@ public interface ModuleRepository extends JpaRepository<Module, UUID> {
     @Query("SELECT m FROM Module m ORDER BY m.displayOrder ASC")
     List<Module> findAllOrderByDisplayOrder();
 
-    /**
-     * All modules ordered by display order, with the parent join-fetched
-     * so the /me module tree can nest sub-modules without N+1 lookups.
-     */
     @Query("SELECT m FROM Module m LEFT JOIN FETCH m.parent ORDER BY m.displayOrder ASC")
     List<Module> findAllWithParentOrderByDisplayOrder();
 

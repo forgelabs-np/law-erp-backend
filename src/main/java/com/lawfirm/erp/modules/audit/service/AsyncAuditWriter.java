@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
-/** Extracted from AuditService so @Async works through proxy injection (not self-invocation). */
 @Component
 @RequiredArgsConstructor
 @Slf4j

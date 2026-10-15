@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** Firm admin manages their firm's brand/display configuration. */
 @RestController
 @RequestMapping("/api/v1/firm/config")
 @RequiredArgsConstructor

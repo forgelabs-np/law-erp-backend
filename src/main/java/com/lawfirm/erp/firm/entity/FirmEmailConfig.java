@@ -7,7 +7,6 @@ import org.hibernate.annotations.UuidGenerator;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/** Per-firm SMTP email config. Password stored AES-256 encrypted, never returned in API. */
 @Entity
 @Table(name = "firm_email_configs")
 @Getter
@@ -22,7 +21,6 @@ public class FirmEmailConfig {
     @Column(updatable = false, nullable = false)
     private UUID id;
 
-    /** One config per firm. FK to firms table. */
     @Column(name = "firm_id", nullable = false, unique = true)
     private UUID firmId;
 
@@ -35,7 +33,6 @@ public class FirmEmailConfig {
     @Column(name = "smtp_username", nullable = false, length = 255)
     private String smtpUsername;
 
-    /** AES-256 encrypted. API returns smtpPasswordSet bool instead. */
     @Column(name = "smtp_password", nullable = false, length = 512)
     private String smtpPassword;
 

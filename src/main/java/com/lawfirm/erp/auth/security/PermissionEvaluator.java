@@ -10,7 +10,6 @@ import com.lawfirm.erp.rbac.repository.ModuleRepository;
 import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -19,21 +18,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * FIX: previously read permissions via UserRoleRepository (the user_roles
- * join table), which is only ever written once - during firm-admin creation
- * in FirmService. Every advocate, paralegal, and client created afterward
- * had zero rows there, so getUserPermissions() silently returned an empty
- * set for them.
- *
- * The actual source of truth for "what role does this user have" is the
- * direct FK: User.role (used everywhere else - JwtUtil, getAuthorities()).
- * This version reads from that instead. user_roles / UserRole stays in the
- * schema for future multi-role support but is not used for permission
- * checks yet.
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -45,14 +30,6 @@ public class PermissionEvaluator {
     private final ModuleRepository moduleRepository;
     private final CurrentUserResolver currentUserResolver;
 
-    /** Cache entry holding permissions and the timestamp when they were loaded. */
-    private record CacheEntry(Set<String> permissions, long loadedAt) {}
-
-    private final ConcurrentHashMap<UUID, CacheEntry> permissionCache = new ConcurrentHashMap<>();
-
-    @Value("${permissions.cache.ttl-ms:300000}") // default 5 minutes
-    private long cacheTtlMs;
-
     public void require(String permissionCode) {
         AuthenticatedUser currentUser = getCurrentUser();
 
@@ -60,11 +37,13 @@ public class PermissionEvaluator {
             throw new ForbiddenException("No authenticated user");
         }
 
-        if (currentUser.isSuperAdmin()) {
+        // Super Admins are platform-level (never firm-scoped) and intentionally bypass firm
+        // permission checks. The firm-id guard makes the bypass unusable on a firm-bound token.
+        if (currentUser.isSuperAdmin() && currentUser.getFirmId() == null) {
             return;
         }
 
-        Set<String> permissions = getUserPermissions(currentUser);
+        Set<String> permissions = loadPermissions(currentUser);
 
         if (!permissions.contains(permissionCode)) {
             log.warn("User {} missing permission: {}", currentUser.getUsername(), permissionCode);
@@ -81,30 +60,13 @@ public class PermissionEvaluator {
         }
     }
 
-    private Set<String> getUserPermissions(AuthenticatedUser authUser) {
-        UUID userId = authUser.getId();
-        CacheEntry entry = permissionCache.get(userId);
-        long now = System.currentTimeMillis();
-
-        // Return cached entry if still valid
-        if (entry != null && (now - entry.loadedAt()) < cacheTtlMs) {
-            return entry.permissions();
-        }
-
-        // Compute fresh permissions (with TTL)
-        CacheEntry fresh = new CacheEntry(loadPermissions(authUser), now);
-        permissionCache.put(userId, fresh);
-        return fresh.permissions();
-    }
-
     private Set<String> loadPermissions(AuthenticatedUser authUser) {
-        // Fast path: use the permission list already populated from JWT in the filter.
-        // Avoids 2 extra DB queries (User + RolePermission) on every request.
+        // Permissions travel on the JWT, so the normal path never touches the DB. The DB lookup is
+        // only a fallback for tokens minted before the claim existed.
         if (authUser.getPermissions() != null && !authUser.getPermissions().isEmpty()) {
             return new HashSet<>(authUser.getPermissions());
         }
 
-        // Fallback: load from DB (for edge cases where JWT didn't carry permissions)
         Set<String> permissions = new HashSet<>();
         User user = userRepository.findById(authUser.getId()).orElse(null);
         if (user == null || user.getRole() == null) {
@@ -137,11 +99,6 @@ public class PermissionEvaluator {
         return null;
     }
 
-    /**
-     * Module access, with sub-modules inheriting their parent's toggle — the same rule
-     * /me and the enable endpoint use. Without it a sub-module shows up in the sidebar
-     * but every API call behind it 403s unless the firm enabled it separately.
-     */
     public boolean hasModuleAccess(UUID firmId, String moduleCode) {
         if (firmId == null || moduleCode == null) {
             return false;
@@ -163,12 +120,11 @@ public class PermissionEvaluator {
         }
     }
 
-    /** Call this whenever a user's role or that role's permissions change. */
+    // Kept as no-ops: there is no server-side permission cache to invalidate any more (permissions
+    // come from the JWT and change on re-login). Callers are unchanged.
     public void clearUserCache(UUID userId) {
-        permissionCache.remove(userId);
     }
 
     public void clearAllCache() {
-        permissionCache.clear();
     }
 }

@@ -23,7 +23,6 @@ public class RenewalType {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** NULL = system-wide default, non-NULL = firm-scoped custom type. */
     private UUID firmId;
 
     @Column(nullable = false, length = 100)

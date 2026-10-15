@@ -11,7 +11,6 @@ import com.lawfirm.erp.firm.entity.Firm;
 import com.lawfirm.erp.firm.repository.FirmRepository;
 import com.lawfirm.erp.modules.audit.entity.AuditLog;
 import com.lawfirm.erp.modules.audit.repository.AuditLogRepository;
-import com.lawfirm.erp.modules.casemanagement.entity.Matter;
 import com.lawfirm.erp.modules.casemanagement.enums.MatterStatus;
 import com.lawfirm.erp.modules.casemanagement.repository.CourtEventRepository;
 import com.lawfirm.erp.modules.casemanagement.repository.MatterRepository;
@@ -48,7 +47,7 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
 
     @Override
     public GlobalDashboardResponse getDashboard() {
-        return getDashboard(30); // default 30 days
+        return getDashboard(30);
     }
 
     @Override
@@ -56,7 +55,6 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
         boolean superAdmin = currentUserResolver.isSuperAdmin();
         UUID firmId = superAdmin ? null : getRequiredFirmId();
 
-        // Clamp days to reasonable range
         int effectiveDays = Math.max(1, Math.min(days, 365));
 
         return GlobalDashboardResponse.builder()
@@ -72,7 +70,6 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
     }
 
     private GlobalDashboardResponse.UserStats buildUserStats(UUID firmId) {
-        // Pure COUNT queries — zero rows loaded into memory
         long total, active;
         if (firmId != null) {
             total = userRepository.countByFirmId(firmId);
@@ -88,7 +85,7 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
         long advocates = firmId != null
                 ? userRepository.countByFirmIdAndRoleCode(firmId, "ADVOCATE")
                 : userRepository.countByUserType(UserType.FIRM_USER)
-                        + userRepository.countByUserType(UserType.FIRM); // rough upper bound
+                        + userRepository.countByUserType(UserType.FIRM);
         long paralegals = firmId != null
                 ? userRepository.countByFirmIdAndRoleCode(firmId, "PARALEGAL")
                 : 0;
@@ -118,7 +115,6 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
                     .map(f -> f.getStatus() == FirmStatus.ACTIVE ? 1L : 0L)
                     .orElse(0L);
         } else {
-            // Only count firms that have at least one FIRM_ADMIN user
             total = firmRepository.countFirmsWithFirmAdmin();
             active = firmRepository.countActiveFirmsWithFirmAdmin();
         }
@@ -130,10 +126,8 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
     }
 
     private GlobalDashboardResponse.CaseStats buildCaseStats(UUID firmId) {
-        // Pure COUNT queries — no full-table scan
-        long total = firmId != null
-                ? matterRepository.findByFirmId(firmId, org.springframework.data.domain.Pageable.unpaged()).getTotalElements()
-                : matterRepository.count();
+        // Counts, not rows: the previous version loaded every Matter entity just to count them.
+        long total = firmId != null ? matterRepository.countByFirmId(firmId) : matterRepository.count();
         long active = firmId != null
                 ? matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.ACTIVE)
                 : 0;
@@ -141,14 +135,11 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
                 ? matterRepository.countByFirmIdAndStatus(firmId, MatterStatus.CLOSED)
                 : 0;
 
-        // Stale matters: only load leaf IDs where currentCourtCaseId is set, limited to firm
-        List<Matter> matters = firmId != null
-                ? matterRepository.findByFirmId(firmId, org.springframework.data.domain.Pageable.unpaged()).getContent()
-                : matterRepository.findAll();
-        List<UUID> leafIds = matters.stream()
-                .map(Matter::getCurrentCourtCaseId)
-                .filter(java.util.Objects::nonNull)
-                .collect(Collectors.toList());
+        // Project only the leaf court-case ids (one row per matter) instead of whole entities. The
+        // list keeps one entry per matter, so the stale count below stays identical to the old one.
+        List<UUID> leafIds = firmId != null
+                ? matterRepository.findLeafCourtCaseIdsByFirmId(firmId)
+                : matterRepository.findLeafCourtCaseIds();
 
         long stale = 0;
         if (!leafIds.isEmpty()) {
@@ -156,14 +147,14 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
             var peshiMap = latestPeshi.stream()
                     .collect(Collectors.toMap(r -> (UUID) r[0], r -> (LocalDate) r[1]));
             LocalDate cutoff = LocalDate.now().minusDays(90);
-            stale = matters.stream()
-                    .filter(m -> {
-                        UUID leafId = m.getCurrentCourtCaseId();
-                        if (leafId == null) return true;
+            long withoutRecentPeshi = leafIds.stream()
+                    .filter(leafId -> {
                         LocalDate last = peshiMap.get(leafId);
                         return last == null || last.isBefore(cutoff);
                     })
                     .count();
+            // Matters with no leaf at all counted as stale before, and still do.
+            stale = (total - leafIds.size()) + withoutRecentPeshi;
         }
 
         int todayEvents = firmId != null
@@ -222,32 +213,26 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
                 .collect(Collectors.toList());
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // Trend computation — cumulative daily growth over the requested window
-    // ═══════════════════════════════════════════════════════════════════════
 
     private List<GlobalDashboardResponse.UserTrend> buildUserTrends(UUID firmId, int days) {
         LocalDateTime from = LocalDate.now().minusDays(days).atStartOfDay();
         LocalDateTime to = LocalDate.now().plusDays(1).atStartOfDay();
 
-        // Query: daily new user counts in the window
         List<Object[]> rows = firmId != null
                 ? userRepository.countDailyByFirmIdAndDateRange(firmId, from, to)
                 : userRepository.countDailyByDateRange(from, to);
 
-        // Index by date for O(1) lookup
         Map<LocalDate, long[]> dailyMap = new LinkedHashMap<>();
         for (Object[] row : rows) {
             LocalDate date = ((java.sql.Date) row[0]).toLocalDate();
             dailyMap.put(date, new long[]{
-                    ((Number) row[1]).longValue(), // total
-                    ((Number) row[2]).longValue(), // active
-                    ((Number) row[3]).longValue(), // inactive
-                    ((Number) row[4]).longValue()  // clients
+                    ((Number) row[1]).longValue(),
+                    ((Number) row[2]).longValue(),
+                    ((Number) row[3]).longValue(),
+                    ((Number) row[4]).longValue()
             });
         }
 
-        // Build cumulative series
         List<GlobalDashboardResponse.UserTrend> trends = new ArrayList<>();
         long cumTotal = 0, cumActive = 0, cumInactive = 0, cumClients = 0;
         for (LocalDate date : allDatesInRange(days)) {
@@ -279,9 +264,9 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
         for (Object[] row : rows) {
             LocalDate date = ((java.sql.Date) row[0]).toLocalDate();
             dailyMap.put(date, new long[]{
-                    ((Number) row[1]).longValue(), // total
-                    ((Number) row[2]).longValue(), // active
-                    ((Number) row[3]).longValue()  // closed
+                    ((Number) row[1]).longValue(),
+                    ((Number) row[2]).longValue(),
+                    ((Number) row[3]).longValue()
             });
         }
 
@@ -297,7 +282,7 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
                     .totalMatters(cumTotal)
                     .activeMatters(cumActive)
                     .closedMatters(cumClosed)
-                    .staleMatters(0) // stale is computed on-demand, not historically
+                    .staleMatters(0)
                     .build());
         }
         return trends;
@@ -313,9 +298,9 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
         for (Object[] row : rows) {
             LocalDate date = ((java.sql.Date) row[0]).toLocalDate();
             dailyMap.put(date, new long[]{
-                    ((Number) row[1]).longValue(), // total
-                    ((Number) row[2]).longValue(), // active
-                    ((Number) row[3]).longValue()  // suspended
+                    ((Number) row[1]).longValue(),
+                    ((Number) row[2]).longValue(),
+                    ((Number) row[3]).longValue()
             });
         }
 
@@ -336,7 +321,6 @@ public class GlobalDashboardServiceImpl implements GlobalDashboardService {
         return trends;
     }
 
-    /** Generate every date in the last N days (inclusive of today). */
     private List<LocalDate> allDatesInRange(int days) {
         List<LocalDate> dates = new ArrayList<>();
         LocalDate end = LocalDate.now();

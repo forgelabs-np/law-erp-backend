@@ -10,8 +10,6 @@ import lombok.Setter;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-// A matched hearing: client case × ingested row, joined on (courtId, caseNoInternal).
-// `notified` dedupes against repeats for the notification worker.
 @Entity
 @Table(name = "scraper_hearing_matches", indexes = {
         @Index(name = "idx_shm_client_date", columnList = "clientCaseId, hearingDateAd")
@@ -52,7 +50,6 @@ public class HearingMatch {
     @Column(length = 200)
     private String orderType;
 
-    // Full row copy from the source feed so matches need no join back.
     @Column(length = 60)
     private String caseNoBs;
 

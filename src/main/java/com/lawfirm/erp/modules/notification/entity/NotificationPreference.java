@@ -7,12 +7,6 @@ import lombok.*;
 
 import java.util.UUID;
 
-/**
- * Per-user, per-type opt in/out of the EMAIL channel. Absent row = default
- * (see NotificationPreferenceServiceImpl): ALERT types are emailed and
- * NON-MUTABLE (a user must not silently miss an appeal deadline);
- * SYSTEM/BROADCAST default to in-app only, mutable.
- */
 @Entity
 @Table(name = "notification_preferences",
         uniqueConstraints = @UniqueConstraint(columnNames = {"userId", "type"}))

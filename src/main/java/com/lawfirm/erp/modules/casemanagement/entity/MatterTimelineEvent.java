@@ -10,10 +10,6 @@ import lombok.Setter;
 
 import java.util.UUID;
 
-/**
- * Immutable event log for a matter. Every entry carries an optional courtCaseId tag
- * so the aggregated multi-year feed can show which court each event belongs to.
- */
 @Entity
 @Table(name = "matter_timeline", indexes = {
         @Index(name = "idx_mt_matter", columnList = "matterId, createdAt DESC"),
@@ -32,7 +28,6 @@ public class MatterTimelineEvent extends AuditableEntity {
     @Column(nullable = false)
     private UUID matterId;
 
-    /** Null for matter-level events (e.g. MATTER_CREATED). */
     private UUID courtCaseId;
 
     @Enumerated(EnumType.STRING)

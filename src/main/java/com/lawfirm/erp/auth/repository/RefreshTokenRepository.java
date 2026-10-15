@@ -13,18 +13,15 @@ import java.util.UUID;
 
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, String> {
 
-    /**
-     * The account's still-active refresh tokens — the "family" that dies together when one
-     * of its members is replayed. Read (rather than a bulk UPDATE) on purpose: the caller
-     * revokes through these entities so the persistence context it keeps reading through
-     * can never hand back a stale, still-"active" sibling row.
-     */
     List<RefreshToken> findByUserIdAndRevokedAtIsNull(UUID userId);
 
-    /**
-     * Opportunistic cleanup — runs inside the refresh transaction instead of a scheduler,
-     * because refresh traffic is exactly where dead rows are noticed.
-     */
+    // Atomic single-use consume: only one concurrent caller can flip usedAt from NULL.
+    @Modifying
+    @Transactional
+    @Query("UPDATE RefreshToken t SET t.usedAt = :now " +
+           "WHERE t.id = :id AND t.usedAt IS NULL AND t.revokedAt IS NULL")
+    int markUsed(@Param("id") String id, @Param("now") LocalDateTime now);
+
     @Modifying
     @Transactional
     @Query("DELETE FROM RefreshToken t WHERE t.expiresAt < :now")

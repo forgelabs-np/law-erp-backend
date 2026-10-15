@@ -19,11 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Reference data for the whole system — Nepal provinces and districts.
- * Reads are served from the {@code masterData} Ehcache (24h TTL); the refresh
- * endpoint re-seeds from classpath JSON, evicts the cache and warms it again.
- */
 @RestController
 @RequestMapping("/api/v1/master-data")
 @RequiredArgsConstructor
@@ -68,7 +63,6 @@ public class MasterDataController {
         masterDataSeeder.seed();
         masterDataService.evictCache();
 
-        // Warm the cache so the first user request doesn't pay a cold miss.
         int provinceCount = masterDataService.getAllProvinces().size();
         masterDataService.getAllDistricts();
 

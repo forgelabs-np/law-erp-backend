@@ -12,7 +12,6 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Per-firm SMTP config. Passwords AES-256 encrypted, never returned in API. */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -25,7 +24,6 @@ public class FirmEmailConfigServiceImpl implements FirmEmailConfigService {
         return firmEmailConfigRepository.findByFirmId(firmId);
     }
 
-    /** Returns config with password decrypted for sending. */
     public Optional<FirmEmailConfig> getDecrypted(UUID firmId) {
         return firmEmailConfigRepository.findByFirmId(firmId)
                 .map(this::decryptPassword);
@@ -42,7 +40,6 @@ public class FirmEmailConfigServiceImpl implements FirmEmailConfigService {
         existing.setSmtpPort(config.getSmtpPort());
         existing.setSmtpUsername(config.getSmtpUsername());
 
-        // Only encrypt+store if a new password was provided
         if (config.getSmtpPassword() != null && !config.getSmtpPassword().isBlank()
                 && !config.getSmtpPassword().equals("__UNCHANGED__")) {
             existing.setSmtpPassword(configEncryptionUtil.encrypt(config.getSmtpPassword()));
@@ -81,12 +78,10 @@ public class FirmEmailConfigServiceImpl implements FirmEmailConfigService {
         log.info("Deleted email config for firm: {}", firmId);
     }
 
-    /** Returns unmanaged copy with decrypted password. Never mutate managed JPA entities in place. */
     private FirmEmailConfig decryptPassword(FirmEmailConfig config) {
         try {
             String decrypted = configEncryptionUtil.decrypt(config.getSmtpPassword());
 
-            // Build a NEW, unmanaged FirmEmailConfig with decrypted password
             FirmEmailConfig copy = FirmEmailConfig.builder()
                     .id(config.getId())
                     .firmId(config.getFirmId())

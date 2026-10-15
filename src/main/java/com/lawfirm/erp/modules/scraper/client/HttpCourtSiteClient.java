@@ -17,8 +17,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Optional;
 
-// Session flow (verified live): GET issues PHPSESSID + court_session + F5 cookies, POST answers
-// 302 with a flash message, then follow Location with GET. Session binds the UA, so send a
 // fixed browser-like one; polite delay between requests.
 @Slf4j
 @Component
@@ -57,7 +55,6 @@ public class HttpCourtSiteClient implements CourtSiteClient {
         HttpClient client = newClient();
         String base = properties.getBaseUrl();
         try {
-            // 1. Establish the session.
             HttpRequest get = HttpRequest.newBuilder(URI.create(base + path))
                     .timeout(Duration.ofMillis(properties.getReadTimeoutMs()))
                     .header("User-Agent", USER_AGENT)
@@ -68,7 +65,6 @@ public class HttpCourtSiteClient implements CourtSiteClient {
             }
             sleep();
 
-            // 2. POST the form.
             HttpRequest post = HttpRequest.newBuilder(URI.create(base + path))
                     .timeout(Duration.ofMillis(properties.getReadTimeoutMs()))
                     .header("User-Agent", USER_AGENT)
@@ -78,7 +74,6 @@ public class HttpCourtSiteClient implements CourtSiteClient {
             HttpResponse<String> postResp = client.send(post, textHandler());
             sleep();
 
-            // 3. Follow the 302 to the final page.
             if (postResp.statusCode() / 100 == 3) {
                 Optional<String> location = postResp.headers().firstValue("Location");
                 if (location.isPresent()) {

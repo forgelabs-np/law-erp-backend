@@ -30,18 +30,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/**
- * Statutory appeal-window engine.
- *
- * Deadlines are seeded from the procedure codes (National Civil/Criminal Procedure Code 2074):
- *   - Civil appeal from District Court: 30 days (+15 extension)
- *   - Criminal appeal, state plaintiff: 70 days (+30 extension)
- *   - Criminal appeal, private complaint: 30 days (+30 extension)
- *
- * A scheduled watcher notices when "nothing happened" — the appeal window lapsed with
- * no appeal filed and no child CourtCase — and marks the judgment final (appealLapsed),
- * nudging the matter toward DORMANT.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -62,9 +50,6 @@ public class AppealDeadlineEngine {
                 "Criminal appeal from District Court, state plaintiff");
         seed(CourtLevel.DISTRICT, MatterType.CRIMINAL, false, 30, 30, false,
                 "Criminal appeal from District Court, private complaint");
-        // High Court → Supreme Court is a leave-petition process, not an automatic
-        // appeal: the seeded days still bound the leave window, and the flag tells
-        // the UI/docs the process is materially different.
         seed(CourtLevel.HIGH, MatterType.CIVIL, false, 35, 15, true,
                 "Further appeal to Supreme Court (civil) — leave petition required");
         seed(CourtLevel.HIGH, MatterType.CRIMINAL, false, 35, 30, true,
@@ -92,10 +77,6 @@ public class AppealDeadlineEngine {
         }
     }
 
-    /**
-     * Computes the appeal deadline from a judgment date, or null when no rule applies
-     * (e.g. a writ order — no statutory appeal window in the usual sense).
-     */
     public LocalDate compute(CourtLevel courtLevelAppealedFrom, MatterType matterType,
                              boolean partyIsState, LocalDate judgmentDate) {
         if (judgmentDate == null) return null;
@@ -106,11 +87,6 @@ public class AppealDeadlineEngine {
                 .orElse(null);
     }
 
-    /**
-     * Daily watcher (03:05): DECIDED cases with an appeal deadline inside the
-     * next 3 days (T-3 through T-1) get an in-app APPEAL_DEADLINE alert to
-     * the case's advocate. Day-bucketed dedupKey keeps re-runs idempotent.
-     */
     @Scheduled(cron = "0 5 3 * * *")
     public void checkUpcomingDeadlines() {
         LocalDate today = LocalDate.now();
@@ -120,7 +96,7 @@ public class AppealDeadlineEngine {
                 .filter(cc -> cc.getStage() == CourtCaseStage.JUDGMENT_DELIVERED)
                 .filter(cc -> !cc.isAppealLapsed())
                 .filter(cc -> cc.getAppealDeadline() != null)
-                .filter(cc -> !cc.getAppealDeadline().isBefore(today)) // deadline is today..T+3
+                .filter(cc -> !cc.getAppealDeadline().isBefore(today))
                 .collect(Collectors.toList());
         if (upcoming.isEmpty()) return;
 
@@ -137,7 +113,6 @@ public class AppealDeadlineEngine {
             return;
         }
         long daysRemaining = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), deadline);
-        // Day-bucketed by deadline: re-runs within the same window dedup downstream.
         String dedupKey = "APPEAL_DEADLINE:COURT_CASE:" + cc.getId() + ":" + deadline;
 
         if (cc.getAdvocateId() != null) {
@@ -152,7 +127,6 @@ public class AppealDeadlineEngine {
                             "daysRemaining", String.valueOf(daysRemaining))
             ));
         } else {
-            // No per-case advocate recorded — the firm admins own the deadline.
             eventPublisher.publishEvent(new NotificationEvent(
                     cc.getFirmId(), null, "FIRM_ADMIN", false,
                     NotificationType.APPEAL_DEADLINE,
@@ -166,10 +140,6 @@ public class AppealDeadlineEngine {
         }
     }
 
-    /**
-     * Daily watcher (03:00): DECIDED cases whose appeal window lapsed with no child
-     * court case get appealLapsed=true (judgment final); the matter is nudged to DORMANT.
-     */
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
     public void closeLapsedAppeals() {

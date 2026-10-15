@@ -4,7 +4,6 @@ public final class TenantConstants {
 
     private TenantConstants() {}
 
-    // TenantTypeController
     public static final String CREATE_TENANT_TYPE_SUMMARY = "Create tenant type";
     public static final String CREATE_TENANT_TYPE_DESCRIPTION = "Create a new tenant type (SOLO, LAW_FIRM, etc.)";
 

@@ -67,7 +67,6 @@ public class RenewalTypeServiceImpl implements RenewalTypeService {
         renewalTypeRepository.save(type);
     }
 
-    // ─── Helpers ───────────────────────────────────────────────────────────
 
     private RenewalType findCustomType(Long typeId) {
         RenewalType type = renewalTypeRepository.findById(typeId)

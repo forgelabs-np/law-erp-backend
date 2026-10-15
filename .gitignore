@@ -38,3 +38,6 @@ build/
 ### Secrets ###
 .env
 application-local.yml
+
+### Local object storage (MinIO bind mount) ###
+/data/

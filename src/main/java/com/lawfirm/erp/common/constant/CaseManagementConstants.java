@@ -4,7 +4,6 @@ public final class CaseManagementConstants {
 
     private CaseManagementConstants() {}
 
-    // MatterController
     public static final String CREATE_MATTER_SUMMARY = "Create a matter";
     public static final String CREATE_MATTER_DESCRIPTION = "Creates the Matter + ORIGINAL CourtCase at the originating court level, with optional parties";
 
@@ -32,7 +31,6 @@ public final class CaseManagementConstants {
 
     public static final String MATCH_PARTY_SUMMARY = "Match a party against existing clients and matter parties";
 
-    // CourtEventController
     public static final String SCHEDULE_EVENT_SUMMARY = "Schedule a Tarik/Peshi event";
     public static final String SCHEDULE_EVENT_DESCRIPTION = "Conflict detection against all of the advocate's events firm-wide";
 
@@ -48,7 +46,6 @@ public final class CaseManagementConstants {
 
     public static final String CANCEL_EVENT_SUMMARY = "Cancel an event";
 
-    // DashboardController
     public static final String GET_DASHBOARD_SUMMARY = "Get dashboard";
     public static final String GET_DASHBOARD_DESCRIPTION = "Firm-wide stats for FIRM_ADMIN; assigned-matters-only for ADVOCATE/PARALEGAL. Includes total/active/stale counts, today's events, and case positioning summaries.";
 }

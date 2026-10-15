@@ -11,7 +11,6 @@ import java.util.UUID;
 
 public interface NotificationDeliveryRepository extends JpaRepository<NotificationDelivery, UUID> {
 
-    /** Rows the retry sweep may pick up now. */
     List<NotificationDelivery> findByStatusAndNextAttemptAtBefore(DeliveryStatus status, LocalDateTime cutoff);
 
     boolean existsByNotificationIdAndChannel(UUID notificationId, DeliveryChannel channel);

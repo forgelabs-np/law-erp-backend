@@ -3,11 +3,15 @@ package com.lawfirm.erp.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.lawfirm.erp.auth.security.FirmContextHolder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.UUID;
 import java.util.concurrent.Executor;
 
 @Configuration
@@ -22,15 +26,6 @@ public class BeanConfig {
         return mapper;
     }
 
-    /**
-     * Thread pool for @Async methods (audit writes, email sends).
-     *
-     * Core pool = 2 keeps resource usage low.
-     * Max pool = 5 handles burst email sends (batch operations).
-     * Queue = 100 prevents thread explosion under load.
-     * Caller-runs policy means if the queue is full, the caller thread
-     *   does the work synchronously rather than dropping the task.
-     */
     @Bean(name = "taskExecutor")
     public Executor taskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -41,6 +36,26 @@ public class BeanConfig {
         executor.setRejectedExecutionHandler(
                 new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy()
         );
+        // Carry the request's security + firm context into the worker thread, otherwise async work
+        // runs with an empty FirmContextHolder and module/tenant checks silently fail open. The
+        // context is cleared in the finally block so pooled threads never leak it to the next task.
+        executor.setTaskDecorator(runnable -> {
+            UUID firmId = FirmContextHolder.getFirmId();
+            String firmCode = FirmContextHolder.getFirmCode();
+            SecurityContext securityContext = SecurityContextHolder.getContext();
+            return () -> {
+                try {
+                    if (firmId != null) {
+                        FirmContextHolder.set(firmId, firmCode);
+                    }
+                    SecurityContextHolder.setContext(securityContext);
+                    runnable.run();
+                } finally {
+                    FirmContextHolder.clear();
+                    SecurityContextHolder.clearContext();
+                }
+            };
+        });
         executor.initialize();
         return executor;
     }

@@ -17,8 +17,10 @@ public interface RenewalRepository extends JpaRepository<Renewal, Long> {
 
     long countByProjectIdAndActive(UUID projectId, boolean active);
 
+    /** One query for a dashboard total instead of one COUNT per project (N+1). */
+    long countByProjectIdInAndActive(List<UUID> projectIds, boolean active);
+
     long countByProjectIdAndStatus(UUID projectId, RenewalStatus status);
 
-    /** Batch fetch renewals for multiple projects — avoids N+1 per project. */
     List<Renewal> findByProjectIdInAndActive(List<UUID> projectIds, boolean active);
 }

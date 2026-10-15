@@ -7,11 +7,6 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Composes notification copy per type at code level (v1) — DB-backed
- * templates are deferred until i18n needs them. Each recipient renders
- * independently so future per-recipient variables stay possible.
- */
 @Component
 public class NotificationRenderer {
 

@@ -1,9 +1,5 @@
 package com.lawfirm.erp.common.enums;
 
-/**
- * Entity types that can be audited.
- * Each name must be <= 20 chars — stored as CHAR(20) in DB.
- */
 public enum AuditEntity {
     USER,
     CLIENT,

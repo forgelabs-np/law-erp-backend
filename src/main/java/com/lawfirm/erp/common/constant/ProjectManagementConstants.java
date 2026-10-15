@@ -4,12 +4,10 @@ public final class ProjectManagementConstants {
 
     private ProjectManagementConstants() {}
 
-    // ── Module ─────────────────────────────────────────────────────────────
     public static final String MODULE_CODE = "PROJECT_MANAGEMENT";
     public static final String MODULE_NAME = "Project Management";
     public static final String MODULE_DESC = "Manage client projects, credentials, and renewal tracking";
 
-    // ── Swagger Tags ───────────────────────────────────────────────────────
     public static final String TAG_PROJECTS = "Project Management - Projects";
     public static final String TAG_CREDENTIALS = "Project Management - Credentials";
     public static final String TAG_RENEWALS = "Project Management - Renewals";
@@ -17,7 +15,6 @@ public final class ProjectManagementConstants {
     public static final String TAG_CLIENT_PORTAL = "Project Management - Client Portal";
     public static final String TAG_DASHBOARD = "Project Management - Dashboard";
 
-    // ── Swagger Summaries ──────────────────────────────────────────────────
     public static final String CREATE_PROJECT = "Create a new project";
     public static final String LIST_PROJECTS = "List projects with filters and pagination";
     public static final String GET_PROJECT = "Get project details by project code";
@@ -53,7 +50,6 @@ public final class ProjectManagementConstants {
 
     public static final String PROJECT_DASHBOARD = "Project management dashboard stats";
 
-    // ── Error Messages ─────────────────────────────────────────────────────
     public static final String PROJECT_NOT_FOUND = "Project not found";
     public static final String CREDENTIAL_NOT_FOUND = "Credential not found";
     public static final String RENEWAL_NOT_FOUND = "Renewal not found";

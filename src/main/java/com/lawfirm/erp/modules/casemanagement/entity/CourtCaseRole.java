@@ -11,10 +11,6 @@ import lombok.Setter;
 
 import java.util.UUID;
 
-/**
- * One row per (MatterParty, CourtCase) pair — the role that actually varies per instance.
- * The defendant who lost at District Court becomes the APPELLANT at High Court.
- */
 @Entity
 @Table(name = "court_case_roles", indexes = {
         @Index(name = "idx_ccr_court_case", columnList = "courtCaseId"),
@@ -43,6 +39,5 @@ public class CourtCaseRole extends ActiveAuditableEntity {
     @Column(length = 15, nullable = false)
     private PartyRepresentation representation;
 
-    /** Advocate representing this party in THIS court instance. */
     private UUID advocateId;
 }

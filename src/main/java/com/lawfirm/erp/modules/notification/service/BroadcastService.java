@@ -14,11 +14,6 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Firm-admin announcements. Sends synchronously through the orchestrator
- * (not via the async bus) so the admin sees fan-out results immediately.
- * The event always carries the caller's firmId — broadcasts never cross firms.
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -48,8 +43,6 @@ public class BroadcastService {
                             "body", request.getBody(),
                             "sentBy", senderId));
         } else if (audience.matches("[A-Z_]{2,40}")) {
-            // Validate the role actually has users in this firm — a typo'd
-            // audience must fail loudly, not silently no-op.
             List<UUID> targets = userRepository.findUserIdsByFirmIdAndRoleCode(firmId, audience);
             if (targets.isEmpty()) {
                 throw new BusinessRuleException(

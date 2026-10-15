@@ -7,10 +7,6 @@ import lombok.Data;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Lightweight user row — used in list and search endpoints.
- * Covers FIRM (firm admin), FIRM_USER (employees), and CLIENT in one response.
- */
 @Data
 @Builder
 public class UserSummaryResponse {
@@ -19,11 +15,11 @@ public class UserSummaryResponse {
     private String fullName;
     private String email;
     private String mobileNo;
-    private UserType userType;        // FIRM | FIRM_USER | CLIENT
+    private UserType userType;
     private boolean isActive;
     private UUID roleId;
     private String roleName;
     private String roleCode;
-    private Boolean portalAccessEnabled; // only meaningful for CLIENT
+    private Boolean portalAccessEnabled;
     private LocalDateTime createdAt;
 }

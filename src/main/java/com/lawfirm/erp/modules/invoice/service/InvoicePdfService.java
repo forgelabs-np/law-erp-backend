@@ -23,7 +23,6 @@ public class InvoicePdfService {
     private final TemplateEngine templateEngine;
 
     public byte[] generatePdf(Invoice invoice, List<InvoiceItem> items, Firm firm) {
-        // 1. Build Thymeleaf context
         Context context = new Context();
         context.setVariable("invoice", invoice);
         context.setVariable("items", items);
@@ -32,10 +31,8 @@ public class InvoicePdfService {
         context.setVariable("platformAddress", "Kathmandu, Nepal");
         context.setVariable("generatedAt", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
 
-        // 2. Render HTML from template
         String htmlContent = templateEngine.process("invoice-template", context);
 
-        // 3. Convert HTML to PDF
         try {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             PdfRendererBuilder builder = new PdfRendererBuilder();

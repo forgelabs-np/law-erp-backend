@@ -9,7 +9,6 @@ import lombok.Setter;
 
 import java.util.UUID;
 
-// A client case registered for tracking. ACTIVE rows drive which courts get scraped.
 @Entity
 @Table(name = "scraper_client_cases", indexes = {
         @Index(name = "idx_scc_court_status", columnList = "courtId, caseStatus"),
@@ -25,8 +24,11 @@ public class ClientCase {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // No FK — decoupled from the firm module.
     private UUID clientId;
+
+    // Owning firm. Nullable so the column can be added to tables that already hold rows; such
+    // legacy rows are only visible to system/super-admin reads, never to firm-scoped queries.
+    private UUID firmId;
 
     @Column(nullable = false)
     private Integer courtId;

@@ -32,7 +32,9 @@ import com.lawfirm.erp.rbac.repository.RolePermissionRepository;
 import com.lawfirm.erp.rbac.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -60,36 +62,7 @@ public class UserManagementServiceImpl implements UserManagementService {
 
     @Override
     public PagedResponse<UserSummaryResponse> listUsers(UserType userType, UUID roleId, Boolean isActive, int page, int size) {
-        boolean superAdmin = currentUserResolver.isSuperAdmin();
-        UUID firmId = superAdmin ? null : getRequiredFirmId();
-
-        List<User> users;
-        if (roleId != null) {
-            users = superAdmin
-                    ? userRepository.findByRoleId(roleId)
-                    : userRepository.findByFirmIdAndRoleId(firmId, roleId);
-            if (userType != null) {
-                users = users.stream().filter(u -> u.getUserType() == userType).toList();
-            }
-        } else if (userType != null) {
-            users = superAdmin
-                    ? userRepository.findByUserType(userType)
-                    : userRepository.findByFirmIdAndUserType(firmId, userType);
-        } else {
-            users = superAdmin ? userRepository.findAll() : userRepository.findByFirmId(firmId);
-        }
-
-        if (isActive != null) {
-            users = users.stream().filter(u -> u.isActive() == isActive).toList();
-        }
-
-        // Sort by createdAt descending and map to DTOs
-        List<UserSummaryResponse> summaries = users.stream()
-                .sorted(Comparator.comparing(User::getCreatedAt).reversed())
-                .map(userManagementMapper::toSummary)
-                .collect(Collectors.toList());
-
-        return paginateList(summaries, page, size);
+        return pagedSummaries(userType, roleId, isActive, null, page, size);
     }
 
     @Override
@@ -97,25 +70,26 @@ public class UserManagementServiceImpl implements UserManagementService {
         if (query == null || query.isBlank()) {
             return listUsers(null, null, null, page, size);
         }
+        return pagedSummaries(null, null, null, query.trim(), page, size);
+    }
 
-        String q = query.toLowerCase().trim();
+    /**
+     * Filtering, sorting and paging all happen in the database. The previous version loaded every
+     * user into memory (the whole table for a Super Admin) and sliced the result in Java.
+     */
+    private PagedResponse<UserSummaryResponse> pagedSummaries(UserType userType, UUID roleId,
+                                                              Boolean isActive, String search,
+                                                              int page, int size) {
+        UUID firmId = currentUserResolver.isSuperAdmin() ? null : getRequiredFirmId();
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
-        boolean superAdmin = currentUserResolver.isSuperAdmin();
-        List<User> users = superAdmin
-                ? userRepository.findAll()
-                : userRepository.findByFirmId(getRequiredFirmId());
+        Page<User> result = userRepository.searchPaged(firmId, userType, roleId, isActive, search, pageable);
 
-        List<UserSummaryResponse> filtered = users.stream()
-                .filter(u ->
-                        (u.getFullName() != null && u.getFullName().toLowerCase().contains(q)) ||
-                        (u.getEmail() != null && u.getEmail().toLowerCase().contains(q)) ||
-                        (u.getUsername() != null && u.getUsername().toLowerCase().contains(q)) ||
-                        (u.getMobileNo() != null && u.getMobileNo().contains(q))
-                )
+        List<UserSummaryResponse> content = result.getContent().stream()
                 .map(userManagementMapper::toSummary)
                 .collect(Collectors.toList());
 
-        return paginateList(filtered, page, size);
+        return PagedResponse.of(result, content);
     }
 
     @Override
@@ -143,9 +117,7 @@ public class UserManagementServiceImpl implements UserManagementService {
         LocalDateTime startOfMonth = LocalDateTime.now()
                 .withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
         long actionsThisMonth = auditLogRepository
-                .findByFirmAndUser(firmId, userId, startOfMonth, null,
-                        PageRequest.of(0, Integer.MAX_VALUE))
-                .getTotalElements();
+                .countByFirmAndUser(firmId, userId, startOfMonth, null);
 
         Role role = user.getRole();
         return UserProfileResponse.builder()
@@ -212,9 +184,6 @@ public class UserManagementServiceImpl implements UserManagementService {
         UUID firmId = getRequiredFirmId();
         User user = getValidatedUser(userId, firmId);
 
-        // The console's reset is a confirmation dialog: it sends no password. Generate one that
-        // satisfies the product's policy and hand it back to the admin to pass on, rather than
-        // refusing the action the button was built for.
         String chosen = request != null ? request.getNewPassword() : null;
         boolean generated = chosen == null || chosen.isBlank();
 
@@ -228,8 +197,6 @@ public class UserManagementServiceImpl implements UserManagementService {
         }
 
         user.setPassword(passwordEncoder.encode(chosen));
-        // An admin-issued password is a temporary credential: force the holder to pick
-        // their own on the next login, whether or not the account is brand new.
         user.setMustChangePassword(true);
         user.setLoginAttempts(0);
         user.setLockedUntil(null);
@@ -254,16 +221,11 @@ public class UserManagementServiceImpl implements UserManagementService {
         return PasswordResetResult.builder()
                 .username(user.getUsername())
                 .generated(generated)
-                // Only ever echoed for a password we generated: an admin-chosen one is theirs.
                 .temporaryPassword(generated ? chosen : null)
                 .mustChangePassword(true)
                 .build();
     }
 
-    /**
-     * A bulk selection must not be empty. Checked here rather than only on the DTO because the
-     * screens post the payload bare, which the envelope's {@code @Valid} never saw.
-     */
     private void requireUserIds(List<UUID> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             throw new BusinessRuleException("At least one user ID is required");
@@ -278,7 +240,6 @@ public class UserManagementServiceImpl implements UserManagementService {
 
         user.setMfaSecret(null);
         user.setMfaVerified(false);
-        // Keep mfaEnabled=true so user is forced to re-setup MFA on next login
         userRepository.save(user);
 
         String reason = request.getReason() != null ? request.getReason() : "No reason provided";
@@ -297,7 +258,6 @@ public class UserManagementServiceImpl implements UserManagementService {
         UUID firmId = getRequiredFirmId();
         UUID currentUserId = currentUserResolver.getCurrentUserId();
 
-        // Batch-load all users in one query (avoids N+1)
         List<User> users = userRepository.findAllById(request.getUserIds());
         Map<UUID, User> userMap = users.stream()
                 .collect(Collectors.toMap(User::getId, u -> u));
@@ -380,7 +340,6 @@ public class UserManagementServiceImpl implements UserManagementService {
         List<String> failed = new ArrayList<>();
         int succeeded = 0;
 
-        // Batch-load all users in one query (avoids N+1)
         List<User> allUsers = userRepository.findAllById(request.getUserIds());
         Map<UUID, User> userMap = allUsers.stream()
                 .collect(Collectors.toMap(User::getId, u -> u));
@@ -458,23 +417,30 @@ public class UserManagementServiceImpl implements UserManagementService {
         log.info("User deleted: {} by firm admin", user.getUsername());
     }
 
-    private <T> PagedResponse<T> paginateList(List<T> items, int page, int size) {
-        int totalElements = items.size();
-        int totalPages = (int) Math.ceil((double) totalElements / size);
-        int start = page * size;
-        int end = Math.min(start + size, totalElements);
-        List<T> content = start < totalElements ? items.subList(start, end) : List.of();
 
-        return PagedResponse.<T>builder()
-                .content(content)
-                .page(page)
-                .size(size)
-                .totalElements(totalElements)
-                .totalPages(totalPages)
-                .first(page == 0)
-                .last(page >= totalPages - 1)
-                .empty(content.isEmpty())
-                .build();
+    /**
+     * Lifts a brute-force lockout for a user of the caller's own firm, without changing the
+     * password, MFA or active state. The alternative was waiting out the lock or editing
+     * {@code users.login_attempts}/{@code locked_until} directly in the database.
+     */
+    @Override
+    @Transactional
+    public void unlockUser(UUID userId) {
+        UUID firmId = getRequiredFirmId();
+        User user = getValidatedUser(userId, firmId);
+
+        user.setLoginAttempts(0);
+        user.setLockedUntil(null);
+        userRepository.save(user);
+        userRepository.incrementPermissionVersion(userId);
+        permissionEvaluator.clearUserCache(userId);
+
+        auditService.log(AuditAction.USER_UNBLOCKED, AuditEntity.USER, userId,
+                "Lockout lifted by firm admin for: " + user.getUsername()
+                        + " (blocked=" + Boolean.TRUE.equals(user.getIsBlocked())
+                        + ", active=" + user.isActive() + ")");
+
+        log.info("Lockout lifted for: {} by firm admin", user.getUsername());
     }
 
     private UUID getRequiredFirmId() {

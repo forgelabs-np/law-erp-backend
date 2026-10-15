@@ -14,63 +14,36 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Instant;
 
-/**
- * TOTP utility — RFC 6238, compatible with Google Authenticator.
- *
- * ADD TO pom.xml:
- *   <dependency>
- *       <groupId>commons-codec</groupId>
- *       <artifactId>commons-codec</artifactId>
- *   </dependency>
- *   (version managed by Spring Boot parent)
- *
- * ADD TO application.properties:
- *   app.name=NepalCRM
- *   app.production=false    ← boot fallback only
- *
- * Production mode is DB-driven via the GLOBAL APP_PRODUCTION key; application.yml is
- * only the fallback for an unseeded database.
- */
 @Component
 public class TotpUtil {
 
     private static final int TIME_STEP_SECONDS = 30;
     private static final int CODE_DIGITS = 6;
-    private static final int CLOCK_DRIFT_WINDOWS = 1;   // ±30 seconds tolerance
+    private static final int CLOCK_DRIFT_WINDOWS = 1;
     private static final String HMAC_ALGORITHM = "HmacSHA1";
     private static final String DEV_BYPASS_CODE = "123456";
 
     private final SystemConfigService systemConfigService;
     private final String appName;
     private final boolean ymlProduction;
+    private final boolean ymlDevBypass;
 
     public TotpUtil(SystemConfigService systemConfigService,
                     @Value("${app.name:NepalCRM}") String appName,
-                    @Value("${app.production:false}") boolean ymlProduction) {
+                    @Value("${app.production:false}") boolean ymlProduction,
+                    @Value("${app.security.mfa-dev-bypass:false}") boolean ymlDevBypass) {
         this.systemConfigService = systemConfigService;
         this.appName = appName;
         this.ymlProduction = ymlProduction;
+        this.ymlDevBypass = ymlDevBypass;
     }
 
-    /**
-     * Generate a new random TOTP secret.
-     * Call once per user when MFA setup starts.
-     * Store result in User.mfaSecret.
-     */
     public String generateSecret() {
         byte[] bytes = new byte[20];
         new SecureRandom().nextBytes(bytes);
         return new Base32().encodeToString(bytes).replace("=", "");
     }
 
-    /**
-     * Build the otpauth:// URI that encodes to a QR code.
-     * Google Authenticator scans this to add the account.
-     *
-     * @param secret    the Base32 secret from User.mfaSecret
-     * @param username  the user's login username
-     * @param firmCode  the firm code for label clarity
-     */
     public String buildQrCodeUri(String secret, String username, String firmCode) {
         String label = encode(appName + ":" + username + " (" + firmCode + ")");
         String issuer = encode(appName);
@@ -80,10 +53,6 @@ public class TotpUtil {
         );
     }
 
-    /**
-     * Format a secret for manual entry (groups of 4 chars).
-     * e.g. JBSW Y3DP EHPK 3PXP
-     */
     public String formatSecretForDisplay(String secret) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < secret.length(); i++) {
@@ -93,20 +62,14 @@ public class TotpUtil {
         return sb.toString();
     }
 
-    /**
-     * Verify a TOTP code against a stored secret.
-     *
-     * DEV mode (APP_PRODUCTION / app.production off): "123456" always passes.
-     * PROD mode: validates RFC 6238 TOTP with ±30s clock drift tolerance.
-     *
-     * @param secret the Base32 secret from User.mfaSecret
-     * @param code   the 6-digit code from the user
-     */
     public boolean verify(String secret, String code) {
         if (code == null || code.isBlank()) return false;
 
-        // Dev bypass — never in production
-        if (!isProduction() && DEV_BYPASS_CODE.equals(code.trim())) {
+        // Opt-in twice over: the MFA_DEV_BYPASS system config (yml as the pre-seed fallback) must
+        // be armed AND production mode must be off. Checking production separately means a
+        // database first seeded in dev can never leave the bypass armed in production.
+        boolean bypassArmed = systemConfigService.mfaDevBypassFlag().orElse(ymlDevBypass);
+        if (bypassArmed && !isProduction() && DEV_BYPASS_CODE.equals(code.trim())) {
             return true;
         }
 
@@ -125,16 +88,10 @@ public class TotpUtil {
         return false;
     }
 
-    /** GLOBAL APP_PRODUCTION (Y/N) from the DB, with application.yml as fallback. */
     public boolean isProduction() {
         return systemConfigService.productionFlag().orElse(ymlProduction);
     }
 
-    public boolean isProductionMode() {
-        return isProduction();
-    }
-
-    // ── Private ───────────────────────────────────────────────────────────
 
     private String generateCode(String secret, long timeStep)
             throws NoSuchAlgorithmException, InvalidKeyException {
