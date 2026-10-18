@@ -30,7 +30,7 @@ StorageBootstrap      ┘                                          └─ io.min
 |---|---|---|
 | `StorageService` | `common/storage/StorageService.java` | The swappable contract: `put`, `presignDownload`, `stat`, `readHead`, `delete`, `ensureBucket`, `isConfigured`. Deliberately knows nothing about documents. |
 | `MinioStorageService` | `common/storage/MinioStorageService.java` | The only class that imports `io.minio`. Resolves the client lazily so the app/tests boot with no storage present. |
-| `StorageConfig` | `common/storage/StorageConfig.java` | Builds the `MinioClient` bean, **only when `storage.minio.endpoint` is set**. |
+| `StorageConfig` | `common/storage/StorageConfig.java` | Builds the `MinioClient` bean, **only when `storage.minio.endpoint` is non-blank**. |
 | `StorageProperties` | `common/storage/StorageProperties.java` | Connection settings (endpoint, keys, bucket, region). |
 | `DocumentServiceImpl` | `modules/document/service/DocumentServiceImpl.java` | Stores the uploaded file and returns the document `ACTIVE` in one call; presigns downloads. |
 | `StorageBootstrap` | `common/storage/StorageBootstrap.java` | At startup, creates the bucket if missing. An unreachable store is logged, **not fatal**. |
@@ -126,15 +126,35 @@ DEFAULT_STORAGE_QUOTA_BYTES=5368709120
   there is no init step. The bucket is private; nothing is served without a signed URL.
 - If storage is unreachable at boot the app still starts; document endpoints return
   **`502 Document storage is temporarily unavailable. Please try again.`**
-- ⚠️ **Verify the empty-default path.** `application-prod.yml` defaults `MINIO_ENDPOINT` to empty and
-  comments that the app stays bootable. In code, `StorageConfig` creates the `MinioClient` bean
-  whenever the `storage.minio.endpoint` property is *present* — and an empty value still counts as
-  present. Confirm a boot with `MINIO_ENDPOINT` unset before relying on it; if it fails, make the
-  condition require a non-blank value.
+- ✅ **Empty-default boot path fixed (2026-10-18).** `application-prod.yml` defaults
+  `MINIO_ENDPOINT` to empty, and `StorageConfig` used to create the `MinioClient` bean whenever the
+  property was *present* — an empty value counts as present, so `MinioClient.builder().endpoint("")`
+  threw `endpoint must be a non-empty string` and **killed startup**. The condition now requires a
+  non-blank value (`@ConditionalOnExpression`), guarded by `StorageConfigTest`. A server with no
+  storage configured boots, logs `Object storage is not configured …` from `StorageBootstrap`, and
+  document endpoints return **502** until the env vars are set.
 
 > ⚠️ **MinIO's own distribution was removed on 2026-09-11** (see §5). Plan the server on a
 > **maintained S3-compatible backend** — SeaweedFS, Garage, RustFS, or a managed S3 — since the
 > MinIO images/binaries are no longer published.
+
+### 4.1 Which backend to use on the server
+
+| Route | Good fit when | Notes |
+|---|---|---|
+| **Managed S3-compatible** (Cloudflare R2, Backblaze B2, AWS S3, DigitalOcean Spaces, Wasabi) | You want no storage ops, TLS, or disk to babysit | Zero install. Set the five `MINIO_*` vars and restart. Bucket is created on first boot by `StorageBootstrap`. R2/B2 work through the same MinIO SDK; R2 needs `MINIO_REGION=auto` and `<account-id>.r2.cloudflarestorage.com` as the endpoint. |
+| **Self-hosted S3-compatible** (SeaweedFS, Garage, RustFS) | Documents must stay on your own server | One more service to run, reverse-proxy, TLS-terminate, back up, and monitor. Do **not** ship the Bitnami legacy MinIO image to production. |
+| **No storage yet** | You only need the API up today | Leave `MINIO_ENDPOINT` unset; the app boots and every document endpoint returns 502. |
+
+Whatever you pick, the endpoint must be **HTTPS and reachable from the user's browser** —
+download links are presigned against it (`GET` only; uploads pass through the API).
+
+Verify a configured server with:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' "$MINIO_ENDPOINT"        # 200/403 is fine, timeout is not
+# then, in the app: upload a file and open the returned download URL in a browser
+```
 
 ---
 
@@ -336,6 +356,7 @@ right tool for an environment-bound connection anyway.
 
 1. **Pick a maintained S3-compatible backend for the server.** MinIO distribution is gone; don't
    carry the Bitnami legacy image to production.
-2. **Verify the empty-`MINIO_ENDPOINT` boot path** (§4).
+2. ✅ **Empty-`MINIO_ENDPOINT` boot path verified and fixed** (§4) — `StorageConfigTest` covers an
+   unset endpoint and an empty one.
 3. Optional: a runtime `isProduction`-driven local-disk backend so local dev needs no container at
    all (see §9).
